@@ -56,8 +56,8 @@ void main() async {
 
   // Uygulama (Android/iOS): Firebase Cloud Messaging ile telefon bildirimi.
   if (NativePush.supported) {
-    PushService.initNative();
     await NativePush.init();
+    PushService.initNative();
   }
   // Telefon bildiriminden açıldıysa hedef ekran (ana ekran hazır olunca).
   NotificationRouter.init();

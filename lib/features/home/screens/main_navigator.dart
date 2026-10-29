@@ -1051,7 +1051,7 @@ class _MenuDrawer extends StatelessWidget {
     );
   }
 
-  /// Alt ikon şeridi: Bildirim Ayarları (misafir), Turnuva Kodu Gir, Sorun
+  /// Alt ikon şeridi: Bildirim Ayarları (herkes), Turnuva Kodu Gir, Sorun
   /// Bildir; sağda Çıkış. İkona basınca başlığı açılır, açıkken basınca
   /// işlem yapılır.
   Widget _iconStrip(BuildContext context, Color accent) {
@@ -1068,21 +1068,20 @@ class _MenuDrawer extends StatelessWidget {
           child: _DrawerIconStrip(
             accent: accent,
             items: [
-              if (!loggedIn)
-                (
-                  Icons.notifications_active_outlined,
-                  'Bildirimler',
-                  () => closeThen(
-                    (ctx) => Navigator.of(ctx).push(
-                      MaterialPageRoute<void>(
-                        settings: const RouteSettings(
-                          name: 'NotificationSettingsScreen',
-                        ),
-                        builder: (_) => const NotificationSettingsScreen(),
+              (
+                Icons.notifications_active_outlined,
+                'Bildirimler',
+                () => closeThen(
+                  (ctx) => Navigator.of(ctx).push(
+                    MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: 'NotificationSettingsScreen',
                       ),
+                      builder: (_) => const NotificationSettingsScreen(),
                     ),
                   ),
                 ),
+              ),
               if (AppSettings.privateLeaguesEnabled.value)
                 (Icons.key_rounded, 'Kod Gir', onEnterCode),
               (
