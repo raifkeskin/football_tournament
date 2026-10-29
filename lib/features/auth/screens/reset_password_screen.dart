@@ -6,6 +6,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../home/screens/main_navigator.dart';
+import '../biometric_login.dart';
 import '../password_input.dart';
 
 /// Geçici şifreyle giriş yapan kullanıcı burada kendi şifresini belirler.
@@ -67,6 +68,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     final session = AppSession.of(context);
     try {
       await ServiceLocator.authService.changeOwnPassword(p1);
+      await BiometricLogin.passwordChanged(p1);
       await AppSessionController.setRememberMe(widget.rememberMe);
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
