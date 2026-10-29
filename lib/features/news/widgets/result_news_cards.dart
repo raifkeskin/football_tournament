@@ -1541,20 +1541,15 @@ Widget? autoNewsStrip(NewsItem item) {
   final week = (d['week'] as num?)?.toInt() ?? item.week;
 
   if (item.isMatchResult) {
+    // Golcüler Haberler'de; burada yalnız skor, arkada ilk takım fotoğrafı.
     final r = _Result(d);
-    final scorers = [...r.homeScorers, ...r.awayScorers]
-      ..sort((a, b) => b.n.compareTo(a.n));
-    final shown = scorers.take(2).map((s) => s.short).join(', ');
     return _DuelStrip(
       home: r.home,
       away: r.away,
       center: '${r.hs} – ${r.as}',
       sub: 'MAÇ BİTTİ',
-      caption: [
-        if (week != null) '$week. hafta',
-        if (shown.isNotEmpty)
-          '⚽ $shown${scorers.length > 2 ? ' +${scorers.length - 2}' : ''}',
-      ].join(' · '),
+      caption: week == null ? 'Maç Sonucu' : '$week. Hafta · Maç Sonucu',
+      photo: item.imageUrls.firstOrNull,
     );
   }
   if (item.isWeekResults) {
@@ -1659,16 +1654,34 @@ BoxDecoration _stripBand(Color home, Color away, {double tint = 1}) =>
       ),
     );
 
-extension on _Scorer {
-  /// "K. Kahya 2" (ana sayfa satırı için kısa).
-  String get short {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    final n0 = parts.length > 1
-        ? '${parts.first.characters.first}. ${parts.sublist(1).join(' ')}'
-        : name.trim();
-    return n > 1 ? '$n0 $n' : n0;
-  }
-}
+const _shadow = [Shadow(color: Colors.black87, blurRadius: 8)];
+
+/// Fotoğraflı bant: fotoğraf arkada (soluk); üstünde kenarlarda takım
+/// rengi, ortada koyu örtü, armalar ve skor okunur kalsın.
+BoxDecoration _photoBand(String url) => BoxDecoration(
+  color: _center,
+  image: DecorationImage(
+    image: NetworkImage(url),
+    fit: BoxFit.cover,
+    alignment: const Alignment(0, -0.2),
+    colorFilter: ColorFilter.mode(
+      Colors.black.withValues(alpha: 0.35),
+      BlendMode.darken,
+    ),
+  ),
+);
+
+BoxDecoration _photoOverlay(Color home, Color away) => BoxDecoration(
+  gradient: LinearGradient(
+    colors: [
+      home.withValues(alpha: 0.82),
+      _center.withValues(alpha: 0.45),
+      _center.withValues(alpha: 0.45),
+      away.withValues(alpha: 0.82),
+    ],
+    stops: const [0, 0.38, 0.62, 1],
+  ),
+);
 
 /// Tek maç: armalar, büyük harfli tam ad, ortada skor ya da saat.
 class _DuelStrip extends StatelessWidget {
@@ -1679,6 +1692,7 @@ class _DuelStrip extends StatelessWidget {
     required this.sub,
     required this.caption,
     this.highlight = false,
+    this.photo,
   });
 
   final _Team home;
@@ -1687,11 +1701,16 @@ class _DuelStrip extends StatelessWidget {
   final String sub;
   final String caption;
 
+  /// Takım fotoğrafı: bandın arkasında, üstü takım renkli koyu örtüyle.
+  final String? photo;
+
   /// Maç öncesi: ortadaki saat sarı.
   final bool highlight;
 
   @override
   Widget build(BuildContext context) {
+    final url = (photo ?? '').trim();
+    final hasPhoto = url.isNotEmpty;
     Widget team(_Team t) {
       final name = t.name.toUpperCase();
       // Ad kelime bütün kalarak alt satıra iner; sütuna sığmayacak kadar
@@ -1712,6 +1731,7 @@ class _DuelStrip extends StatelessWidget {
               fontSize: long ? 11 : 12,
               height: 1.2,
               fontWeight: FontWeight.w800,
+              shadows: hasPhoto ? _shadow : null,
             ),
           ),
         ],
@@ -1722,49 +1742,62 @@ class _DuelStrip extends StatelessWidget {
       children: [
         Container(
           height: newsStripBandHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: _stripBand(home.band, away.band),
-          child: Row(
-            children: [
-              Expanded(child: team(home)),
-              SizedBox(
-                width: 100,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        center,
-                        maxLines: 1,
-                        style: TextStyle(
-                          color: highlight
-                              ? const Color(0xFFFBBF24)
-                              : Colors.white,
-                          fontSize: highlight ? 30 : 36,
-                          height: 1,
-                          fontWeight: FontWeight.w900,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+          decoration: hasPhoto
+              ? _photoBand(url)
+              : _stripBand(home.band, away.band),
+          child: DecoratedBox(
+            decoration: hasPhoto
+                ? _photoOverlay(home.band, away.band)
+                : const BoxDecoration(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  Expanded(child: team(home)),
+                  SizedBox(
+                    width: 100,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            center,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: highlight
+                                  ? const Color(0xFFFBBF24)
+                                  : Colors.white,
+                              fontSize: highlight ? 30 : 36,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                              shadows: hasPhoto ? _shadow : null,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (sub.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            sub,
+                            style: TextStyle(
+                              color: _soft,
+                              fontSize: 10,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w700,
+                              shadows: hasPhoto ? _shadow : null,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (sub.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        sub,
-                        style: const TextStyle(
-                          color: _soft,
-                          fontSize: 10,
-                          letterSpacing: 1.2,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                  Expanded(child: team(away)),
+                ],
               ),
-              Expanded(child: team(away)),
-            ],
+            ),
           ),
         ),
         _StripCaption(caption),
