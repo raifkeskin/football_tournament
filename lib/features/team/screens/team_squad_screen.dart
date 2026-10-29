@@ -23,7 +23,6 @@ import '../../tournament/models/league.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../player/widgets/player_card.dart';
-import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/list_filter.dart';
 import '../../../core/services/image_upload_service.dart';
@@ -1870,6 +1869,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                                 canAdd: canAdd,
                                                 tournamentId:
                                                     effectiveTournamentId,
+                                                consent: _consentCache.of(
+                                                  allPlayers.map((p) => p.id),
+                                                ),
                                               ),
                                           ],
                                         ),
@@ -1991,6 +1993,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     required bool first,
     required bool canAdd,
     required String tournamentId,
+    Future<Map<String, ConsentStatus>>? consent,
   }) {
     final number = (p.number ?? '').trim();
     final age = _ageFromBirthDate(p.birthDate);
@@ -2042,6 +2045,22 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                       ),
                       VerifiedBadgeFor(playerId: p.id, size: 15, leading: 4),
                       ?_ageTag(p),
+                      // KVKK durumu yalnız yetkiliye döner (takım sorumlusu
+                      // ve üstü); oyuncuya onay vermesini hatırlatmak için.
+                      if (consent != null)
+                        FutureBuilder<Map<String, ConsentStatus>>(
+                          future: consent,
+                          builder: (context, snap) {
+                            final st = snap.data?[p.id];
+                            if (st == null || st.complete) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: ConsentChip(status: st),
+                            );
+                          },
+                        ),
                     ],
                   ),
                   if (sub.isNotEmpty) ...[
@@ -2077,8 +2096,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                   }
                 },
                 itemBuilder: (_) => [
-                  // Kişisel bilgileri yalnız bölge sorumlusu ve üstü düzenler.
-                  if (!_needsApproval)
+                  // Futbolcu bilgilerini yalnız admin düzenler (oyuncular
+                  // kendi hesaplarıyla kayıt olur).
+                  if (AppSession.of(context).value.isAdmin)
                     const PopupMenuItem(
                       value: 'edit',
                       child: _MenuRow(
@@ -3722,14 +3742,13 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     final ids = leagues.keys.toList()
       ..sort((a, b) => '${leagues[a]}'.compareTo('${leagues[b]}'));
     return [
-      if (isAdmin)
-        const ListFilterSection(
-          key: 'roster',
-          label: 'Kadro durumu',
-          options: [('in', 'Kadroda'), ('free', 'Boşta'), ('all', 'Tümü')],
-          defaultValue: 'in',
-          hint: 'Boşta: hiçbir etkin turnuva kadrosunda olmayan oyuncu.',
-        ),
+      const ListFilterSection(
+        key: 'roster',
+        label: 'Kadro durumu',
+        options: [('all', 'Tümü'), ('in', 'Kadroda'), ('free', 'Boşta')],
+        defaultValue: 'in',
+        hint: 'Boşta: hiçbir etkin turnuva kadrosunda olmayan oyuncu.',
+      ),
       if (ids.length > 1)
         ListFilterSection(
           key: 'league',
@@ -3911,9 +3930,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
               ).fab(small: true),
               const SizedBox(height: 12),
             ],
-            if (session.isAdmin ||
-                (session.hasManagementPanel &&
-                    AppSettings.manualPlayerCreateEnabled.value))
+            // Futbolcular kendi hesaplarıyla kayıt olur; elle ekleme yalnız
+            // admin.
+            if (session.isAdmin)
               AdminBarAction(
                 icon: Icons.person_add_alt_1_rounded,
                 tooltip: 'Futbolcu Ekle',
@@ -4089,13 +4108,16 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              _SmallActionButton(
-                icon: Icons.edit_outlined,
-                tooltip: 'Düzenle',
-                color: Colors.white70,
-                onTap: () => _openPlayerForm(editing: p),
-              ),
+              // Futbolcu bilgilerini yalnız admin düzenler.
+              if (AppSession.of(context).value.isAdmin) ...[
+                const SizedBox(width: 8),
+                _SmallActionButton(
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Düzenle',
+                  color: Colors.white70,
+                  onTap: () => _openPlayerForm(editing: p),
+                ),
+              ],
             ],
           ),
         ),
@@ -4560,8 +4582,8 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
   bool _loading = false;
   bool _busy = false;
   String? _error;
-  List<({PlayerModel player, String? teamId, String? teamName})> _results =
-      const [];
+  List<({PlayerModel player, String? teamId, String? teamName, bool free})>
+  _results = const [];
 
   @override
   void dispose() {
@@ -4895,7 +4917,9 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
     );
   }
 
-  Widget _buildRow(({PlayerModel player, String? teamId, String? teamName}) r) {
+  Widget _buildRow(
+    ({PlayerModel player, String? teamId, String? teamName, bool free}) r,
+  ) {
     final p = r.player;
     final inThisTeam = r.teamId == widget.teamId;
     final locked = r.teamId != null;
@@ -5013,15 +5037,25 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        p.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              p.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          if (r.free) ...[
+                            const SizedBox(width: 6),
+                            const _FreeTag(),
+                          ],
+                        ],
                       ),
                       if (subtitle.isNotEmpty) ...[
                         const SizedBox(height: 3),
@@ -5072,4 +5106,26 @@ class _PickerHint extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Boşta" etiketi: hiçbir etkin turnuva kadrosunda olmayan futbolcu.
+class _FreeTag extends StatelessWidget {
+  const _FreeTag();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: const Color(0xFF22304A),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: const Text(
+      'Boşta',
+      style: TextStyle(
+        color: Color(0xFFCBD5E1),
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 }

@@ -12,6 +12,8 @@ abstract final class ProfileField {
   static const mainPosition = 'main_position';
   static const subPosition = 'sub_position';
   static const birthDate = 'birth_date';
+  static const firstName = 'name';
+  static const lastName = 'surname';
 
   static String label(String key) => switch (key) {
     photoUrl => 'Fotoğraf',
@@ -20,6 +22,8 @@ abstract final class ProfileField {
     mainPosition => 'Mevki',
     subPosition => 'Alt mevki',
     birthDate => 'Doğum tarihi',
+    firstName => 'Ad',
+    lastName => 'Soyad',
     _ => key,
   };
 
@@ -58,6 +62,8 @@ class MyPlayer {
   const MyPlayer({
     required this.id,
     required this.name,
+    this.firstName = '',
+    this.lastName = '',
     this.photoUrl,
     this.height,
     this.weight,
@@ -68,6 +74,10 @@ class MyPlayer {
 
   final String id;
   final String name;
+
+  /// Ad ve soyad ayrı (Bilgilerim'de Türkçe harf düzeltmesi için).
+  final String firstName;
+  final String lastName;
   final String? photoUrl;
   final int? height;
   final int? weight;
@@ -94,6 +104,8 @@ class MyPlayer {
     ProfileField.mainPosition: mainPosition,
     ProfileField.subPosition: subPosition,
     ProfileField.birthDate: birthDate,
+    ProfileField.firstName: firstName,
+    ProfileField.lastName: lastName,
   };
 
   factory MyPlayer.fromMap(Map<String, dynamic> r) {
@@ -105,6 +117,8 @@ class MyPlayer {
     return MyPlayer(
       id: (r['id'] ?? '').toString(),
       name: [s('name'), s('surname')].whereType<String>().join(' '),
+      firstName: s('name') ?? '',
+      lastName: s('surname') ?? '',
       photoUrl: s('photo_url'),
       height: (r['height'] as num?)?.toInt(),
       weight: (r['weight'] as num?)?.toInt(),
@@ -304,6 +318,14 @@ class PlayerProfileService {
         .eq('id', playerId)
         .limit(1);
     return rows.isEmpty ? null : MyPlayer.fromMap(rows.first);
+  }
+
+  /// Fotoğraf yayın izni yokken bekleyen kendi fotoğrafı (yalnız ona
+  /// görünür); yoksa null.
+  Future<String?> heldPhoto() async {
+    final r = await _client.rpc('my_held_photo');
+    final s = (r ?? '').toString().trim();
+    return s.isEmpty || s == 'null' ? null : s;
   }
 
   /// Aktif kadro kayıtları, en yeni sezon önce.
@@ -513,9 +535,14 @@ class PlayerProfileService {
 
   Future<void> deletePhoto(String? url) => _uploads.deleteImageByUrl(url);
 
-  /// Talep açar; değişmeyen alanlar sunucuda atılır.
-  Future<void> submit(Map<String, dynamic> changes) async {
-    await _client.rpc('submit_profile_change', params: {'p_changes': changes});
+  /// Mevki doğrudan yazılır; diğer alanlar varsa talep açılır.
+  /// Talep açıldıysa true döner.
+  Future<bool> submit(Map<String, dynamic> changes) async {
+    final id = await _client.rpc(
+      'submit_profile_change',
+      params: {'p_changes': changes},
+    );
+    return id != null;
   }
 
   /// Bekleyen talebi geri çeker; yüklenmiş yeni fotoğrafı da siler.

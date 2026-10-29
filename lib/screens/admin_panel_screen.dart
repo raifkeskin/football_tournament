@@ -18,6 +18,8 @@ import '../features/auth/screens/admin_otp_monitor_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
 import '../features/identity/admin_identity_screen.dart';
 import '../features/tournament_request/admin_tournament_requests_screen.dart';
+import '../features/referees/admin_referees_screen.dart';
+import '../features/referees/referee_service.dart';
 
 /// Yönetim paneli. Admin tüm kartları görür; kurucu başkan ve bölge
 /// sorumlusu yalnızca yetkili oldukları kartları (veriler ekranlarda kendi
@@ -79,23 +81,26 @@ class AdminPanelWidget extends StatelessWidget {
           );
         },
       ),
-      _AdminMenuData(
-        baslik: 'Fikstür Planlama',
-        renkler: const [Color(0xFF60A5FA), Color(0xFF2563EB)],
-        ikon: Icons.calendar_month_rounded,
-        resimYolu: 'assets/images/admin_fixture.jpg',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              settings: const RouteSettings(name: 'AdminFixtureEntryScreen'),
-              builder: (_) => const AdminFixtureEntryScreen(),
-            ),
-          );
-        },
-      ),
-      // Canlı kuralar: iptal / geri alma (admin ve kurucu başkan).
-      if (isAdmin || session.isLeagueOwner)
+      // Fikstür oluşturma ve kuralar yalnız admin; diğer yöneticiler
+      // maçların yalnız tarihini (Maçı Düzenle) ve hakemini düzenler.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Fikstür Planlama',
+          renkler: const [Color(0xFF60A5FA), Color(0xFF2563EB)],
+          ikon: Icons.calendar_month_rounded,
+          resimYolu: 'assets/images/admin_fixture.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminFixtureEntryScreen'),
+                builder: (_) => const AdminFixtureEntryScreen(),
+              ),
+            );
+          },
+        ),
+      // Canlı kuralar: iptal / geri alma (yalnız admin).
+      if (isAdmin)
         _AdminMenuData(
           baslik: 'Canlı Kuralar',
           renkler: const [Color(0xFF38BDF8), Color(0xFF0369A1)],
@@ -173,6 +178,24 @@ class AdminPanelWidget extends StatelessWidget {
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'AdminMediaCreditsScreen'),
                 builder: (_) => const AdminMediaCreditsScreen(),
+              ),
+            );
+          },
+        ),
+      // Hakemler: admin ve kurucu başkan (özellik açılana dek yalnız admin).
+      if ((isAdmin || session.isLeagueOwner) &&
+          RefereeService.enabledFor(isAdmin: isAdmin))
+        _AdminMenuData(
+          baslik: 'Hakemler',
+          renkler: const [Color(0xFFFDE047), Color(0xFFCA8A04)],
+          ikon: Icons.sports_rounded,
+          resimYolu: 'assets/images/admin_tournament.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminRefereesScreen'),
+                builder: (_) => const AdminRefereesScreen(),
               ),
             );
           },

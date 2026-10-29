@@ -19,6 +19,8 @@ class AppSettings {
   static const _kIdentityRoles = 'identity_verification_roles';
   static const _kManualPlayerCreate = 'manual_player_create_enabled';
   static const _kSuspendedTab = 'suspended_tab_enabled';
+  static const _kWeeklyPicks = 'weekly_picks_enabled';
+  static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
@@ -66,6 +68,14 @@ class AppSettings {
   /// admin görür.
   static final suspendedTabEnabled = ValueNotifier<bool>(false);
 
+  /// Haftanın Seçimi (haftanın golü / oyuncusu / takımı) herkese açık mı;
+  /// kapalıyken yalnız admin seçer. Veritabanı da aynı kuralı uygular.
+  static final weeklyPicksEnabled = ValueNotifier<bool>(false);
+
+  /// Hakemler (hakem listesi, maça hakem atama, hakem girişi) herkese açık
+  /// mı; kapalıyken yalnız admin. Veritabanı da aynı kuralı uygular.
+  static final refereesEnabled = ValueNotifier<bool>(false);
+
   /// Oyuncu kartındaki "Mevki" sekmesi (asıl mevki + oynayabildiği en çok 3
   /// mevki) herkese açık mı; kapalıyken yalnız admin görür. Veritabanı da
   /// kaydı aynı anahtarla açar (`positions_tab_allowed`).
@@ -105,6 +115,10 @@ class AppSettings {
           };
         } else if (r['key'] == _kManualPlayerCreate) {
           manualPlayerCreateEnabled.value = r['value'] != false;
+        } else if (r['key'] == _kWeeklyPicks) {
+          weeklyPicksEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kReferees) {
+          refereesEnabled.value = r['value'] == true;
         } else if (r['key'] == _kSuspendedTab) {
           suspendedTabEnabled.value = r['value'] == true;
         } else if (r['key'] == _kPositionsTab) {

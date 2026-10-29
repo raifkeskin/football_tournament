@@ -6,6 +6,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/models/match.dart';
 import '../../match/widgets/match_weather.dart';
 import '../../match/screens/match_details_screen.dart';
@@ -306,7 +307,11 @@ class MatchResultNewsCard extends StatelessWidget {
     required this.likeCount,
     required this.onToggleLike,
     required this.onShare,
+    this.onOpenPhoto,
   });
+
+  /// Takım fotoğrafına dokununca tam ekran galeri.
+  final ValueChanged<int>? onOpenPhoto;
 
   final NewsItem item;
 
@@ -333,31 +338,41 @@ class MatchResultNewsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(label: 'Maç sonucu', meta: meta),
-              _Band(result: r),
-              if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _ScorerColumn(
-                          r.homeScorers,
-                          goals: r.hs,
-                          end: false,
+              // Takım fotoğrafları varsa (kazananınki önce, sunucu sıralar)
+              // skor ve golcüler fotoğrafın üstünde; kaydırınca diğer takım.
+              if (item.imageUrls.isNotEmpty)
+                _PhotoResult(
+                  result: r,
+                  urls: item.imageUrls,
+                  onOpen: onOpenPhoto,
+                )
+              else ...[
+                _Band(result: r),
+                if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _ScorerColumn(
+                            r.homeScorers,
+                            goals: r.hs,
+                            end: false,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: _ScorerColumn(
-                          r.awayScorers,
-                          goals: r.as,
-                          end: true,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: _ScorerColumn(
+                            r.awayScorers,
+                            goals: r.as,
+                            end: true,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+              ],
               const SizedBox(height: 6),
               _Actions(
                 loggedIn: loggedIn,
@@ -372,6 +387,240 @@ class MatchResultNewsCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Takım fotoğrafı tam kart: fotoğraflar kaydırılır, alttaki koyu geçişin
+/// üstünde armalar + skor ve golcüler sabit durur; sağ üstte "1/2".
+class _PhotoResult extends StatefulWidget {
+  const _PhotoResult({required this.result, required this.urls, this.onOpen});
+
+  final _Result result;
+  final List<String> urls;
+  final ValueChanged<int>? onOpen;
+
+  @override
+  State<_PhotoResult> createState() => _PhotoResultState();
+}
+
+class _PhotoResultState extends State<_PhotoResult> {
+  /// Fotoğrafların en/boy oranı (bellekte); takım fotoğrafı kırpılmadan
+  /// tam görünsün diye alan bu orana göre açılır.
+  static final Map<String, double> _aspects = {};
+
+  int _page = 0;
+  final _streams = <ImageStream, ImageStreamListener>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoResult old) {
+    super.didUpdateWidget(old);
+    if (old.urls.join() != widget.urls.join()) _resolve();
+  }
+
+  void _resolve() {
+    for (final url in widget.urls) {
+      if (_aspects.containsKey(url)) continue;
+      final stream = NetworkImage(url).resolve(const ImageConfiguration());
+      late final ImageStreamListener l;
+      l = ImageStreamListener(
+        (info, _) {
+          final w = info.image.width, h = info.image.height;
+          if (w > 0 && h > 0) _aspects[url] = w / h;
+          stream.removeListener(l);
+          _streams.remove(stream);
+          if (mounted) setState(() {});
+        },
+        onError: (_, _) {
+          stream.removeListener(l);
+          _streams.remove(stream);
+        },
+      );
+      _streams[stream] = l;
+      stream.addListener(l);
+    }
+  }
+
+  @override
+  void dispose() {
+    _streams.forEach((s, l) => s.removeListener(l));
+    super.dispose();
+  }
+
+  /// En dik fotoğrafın oranı (hepsi kırpılmadan sığar); yatay–dikey
+  /// arası sınırlı, bilinmeyen için takım fotoğraflarına uygun 4:3.
+  double get _aspect {
+    final known = [
+      for (final u in widget.urls)
+        if (_aspects[u] != null) _aspects[u]!,
+    ];
+    if (known.isEmpty) return 4 / 3;
+    final a = known.reduce((x, y) => x < y ? x : y);
+    return a.clamp(0.8, 1.9);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.result;
+    final urls = widget.urls;
+    Widget crest(_Team t) => Container(
+      width: 36,
+      height: 36,
+      padding: const EdgeInsets.all(3),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      child: ClipOval(
+        child: t.logo.isEmpty
+            ? Icon(Icons.shield_rounded, size: 22, color: t.band)
+            : WebSafeImage(url: t.logo, fit: BoxFit.contain),
+      ),
+    );
+    Widget teamName(String name, {required bool end}) => Text(
+      name,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      textAlign: end ? TextAlign.right : TextAlign.left,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 12.5,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: _aspect),
+          duration: const Duration(milliseconds: 220),
+          builder: (context, a, child) =>
+              AspectRatio(aspectRatio: a, child: child),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(
+                color: const Color(0xFF0B1220),
+                child: PageView.builder(
+                  itemCount: urls.length,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (context, i) => GestureDetector(
+                    onTap: widget.onOpen == null
+                        ? null
+                        : () => widget.onOpen!(i),
+                    // Kırpılmaz: takımın tamamı görünür.
+                    child: WebSafeImage(url: urls[i], fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+              if (urls.length > 1)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${_page + 1}/${urls.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // Skor ve golcüler fotoğrafın altında, olabildiğince dar: maç
+        // detayı başlığındaki gibi ev sahibi rengi → koyu → deplasman rengi.
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                r.home.band,
+                const Color(0xFF0B1220),
+                const Color(0xFF0B1220),
+                r.away.band,
+              ],
+              stops: const [0, 0.42, 0.58, 1],
+            ),
+          ),
+          child: Row(
+            children: [
+              crest(r.home),
+              const SizedBox(width: 8),
+              Expanded(child: teamName(r.home.name, end: false)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${r.hs} - ${r.as}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        height: 1,
+                        fontWeight: FontWeight.w900,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'MS',
+                      style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(child: teamName(r.away.name, end: true)),
+              const SizedBox(width: 8),
+              crest(r.away),
+            ],
+          ),
+        ),
+        if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
+          Container(
+            color: const Color(0xFF0B1220),
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _CompactScorers(r.homeScorers, end: true)),
+                  Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 10),
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                  Expanded(child: _CompactScorers(r.awayScorers, end: false)),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -445,6 +694,50 @@ class _Band extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Fotoğraflı sonuç kartında dar golcü listesi: ad + yeşil dakika,
+/// ortadaki çizgiye yaslı.
+class _CompactScorers extends StatelessWidget {
+  const _CompactScorers(this.scorers, {required this.end});
+
+  final List<_Scorer> scorers;
+  final bool end;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    children: [
+      for (final s in scorers)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1.5),
+          child: Text.rich(
+            TextSpan(
+              text: s.label,
+              children: [
+                if (s.minuteText.isNotEmpty)
+                  TextSpan(
+                    text: ' ${s.minuteText}',
+                    style: const TextStyle(
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: end ? TextAlign.right : TextAlign.left,
+            style: const TextStyle(
+              color: _soft,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 class _ScorerColumn extends StatelessWidget {
@@ -1482,6 +1775,459 @@ class _ListStrip extends StatelessWidget {
         ),
         _StripCaption(caption),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Haftanın Seçimi: haftanın golü / oyuncusu / takımı. Kapak: seçilen fotoğraf
+// (Önemli An, profil, Takım Fotosu ya da yüklenen); yoksa takım renginde
+// otomatik kart. Gol kesiti varsa kapaktaki ▶ ile oynar.
+// ---------------------------------------------------------------------------
+
+/// Kesit (auto_data.clip / clips öğesi).
+class _Clip {
+  _Clip(Map m)
+    : videoId = (m['video_id'] ?? '').toString(),
+      start = (m['start'] as num?)?.toInt() ?? 0,
+      end = (m['end'] as num?)?.toInt() ?? 0,
+      label = (m['label'] ?? '').toString();
+
+  final String videoId;
+  final int start;
+  final int end;
+  final String label;
+
+  bool get ok => videoId.isNotEmpty && end > start;
+
+  Future<void> play(BuildContext context, String title) => openYoutubeClip(
+    context,
+    videoId: videoId,
+    startSec: start,
+    endSec: end,
+    title: title,
+  );
+}
+
+TextStyle _cond(double size, {Color color = Colors.white}) => TextStyle(
+  fontFamily: 'BarlowCondensed',
+  fontSize: size,
+  height: 1,
+  color: color,
+  fontWeight: FontWeight.w800,
+);
+
+class WeeklyPickNewsCard extends StatelessWidget {
+  const WeeklyPickNewsCard({
+    super.key,
+    required this.item,
+    required this.meta,
+    required this.loggedIn,
+    required this.liked,
+    required this.likeCount,
+    required this.onToggleLike,
+    required this.onShare,
+  });
+
+  final NewsItem item;
+  final String meta;
+  final bool loggedIn;
+  final bool liked;
+  final int likeCount;
+  final VoidCallback onToggleLike;
+  final VoidCallback onShare;
+
+  static const _lime = Color(0xFFA3E635);
+  static const _gold = Color(0xFFFBBF24);
+  static const _sky = Color(0xFF38BDF8);
+  static const _ink = Color(0xFF0B1220);
+
+  @override
+  Widget build(BuildContext context) {
+    final d = item.autoData!;
+    final kind = item.autoKind;
+    final week = (d['week'] as num?)?.toInt() ?? item.week;
+    final home = _Team(d['home'] as Map?);
+    final away = _Team(d['away'] as Map?);
+    final team = _Team(d['team'] as Map?);
+    final player = d['player'] is Map ? d['player'] as Map : const {};
+    final playerName = (player['name'] ?? '').toString().trim();
+    final playerPhoto = (player['photo'] ?? '').toString().trim();
+    final hs = (d['hs'] as num?)?.toInt() ?? 0;
+    final as = (d['as'] as num?)?.toInt() ?? 0;
+    final score = '${home.name} $hs-$as ${away.name}';
+    final note = (d['note'] ?? '').toString().trim();
+    final matchId = (d['match_id'] ?? item.matchId ?? '').toString();
+    final clip = d['clip'] is Map ? _Clip(d['clip'] as Map) : null;
+    final clips = [
+      for (final c in (d['clips'] as List? ?? const []))
+        if (c is Map && _Clip(c).ok) _Clip(c),
+    ];
+
+    final (label, badge, badgeColor) = switch (kind) {
+      'goal_of_week' => ('Haftanın Golü', 'HAFTANIN GOLÜ', _lime),
+      'player_of_week' => ('Haftanın Oyuncusu', 'HAFTANIN OYUNCUSU', _gold),
+      _ => ('Haftanın Takımı', 'HAFTANIN TAKIMI', _sky),
+    };
+    final title = kind == 'team_of_week' ? team.name : playerName;
+    final minute = (d['minute_label'] ?? '').toString();
+    final canPlay = kind == 'goal_of_week' && clip != null && clip.ok;
+    final photo = (item.imageUrl ?? '').trim();
+    final teamColor = TeamPalette.of(team.color, null).background;
+
+    void openCover() {
+      if (canPlay) {
+        clip.play(context, '$playerName $minute');
+      } else {
+        _openMatch(context, matchId);
+      }
+    }
+
+    final cover = AspectRatio(
+      aspectRatio: kind == 'team_of_week' ? 4 / 3 : 1.05,
+      child: GestureDetector(
+        onTap: openCover,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (photo.isNotEmpty) ...[
+              WebSafeImage(url: photo, fit: BoxFit.cover),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.45, 1],
+                    colors: [Color(0x000B1220), Color(0xF20B1220)],
+                  ),
+                ),
+              ),
+            ] else
+              // Otomatik kart: takım rengi, silik dakika / MVP, oyuncu
+              // fotoğrafı ya da arma.
+              ColoredBox(
+                color: teamColor,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Positioned(
+                      left: -6,
+                      bottom: 70,
+                      child: Text(
+                        kind == 'goal_of_week'
+                            ? minute
+                            : kind == 'player_of_week'
+                            ? 'MVP'
+                            : '$hs-$as',
+                        style: _cond(
+                          150,
+                          color: Colors.black.withValues(alpha: 0.14),
+                        ),
+                      ),
+                    ),
+                    Align(
+                      alignment: const Alignment(0.75, -0.35),
+                      child: kind == 'team_of_week' || playerPhoto.isEmpty
+                          ? _Crest(team, size: 120)
+                          : Container(
+                              width: 160,
+                              height: 160,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _ink,
+                                border: Border.all(color: _ink, width: 5),
+                              ),
+                              child: WebSafeImage(
+                                url: playerPhoto,
+                                fit: BoxFit.cover,
+                                isCircle: true,
+                              ),
+                            ),
+                    ),
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 96,
+                      child: ColoredBox(color: _ink),
+                    ),
+                  ],
+                ),
+              ),
+            Positioned(
+              left: 12,
+              top: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(badge, style: _cond(16, color: _ink)),
+              ),
+            ),
+            if (canPlay)
+              Align(
+                alignment: const Alignment(0, -0.15),
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _ink.withValues(alpha: 0.72),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 38,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 14,
+              right: 14,
+              bottom: 14,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _cond(32),
+                        ),
+                      ),
+                      if (kind == 'goal_of_week' && minute.isNotEmpty) ...[
+                        const SizedBox(width: 10),
+                        Text(minute, style: _cond(26, color: _lime)),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      if (kind != 'team_of_week') ...[
+                        _Crest(team, size: 18),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          kind == 'player_of_week'
+                              ? '${team.name} · $score'
+                              : score,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFCBD5E1),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _cardDecoration(),
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(
+              label: label,
+              meta: [if (week != null) '$week. Hafta', meta].join(' · '),
+            ),
+            cover,
+            if (kind == 'player_of_week')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                child: Row(
+                  children: [
+                    _StatBox('${d['goals'] ?? 0}', 'Gol'),
+                    const SizedBox(width: 8),
+                    _StatBox('${d['assists'] ?? 0}', 'Asist'),
+                    if (d['motm'] == true) ...[
+                      const SizedBox(width: 8),
+                      const _StatBox(null, 'Maçın Adamı'),
+                    ],
+                  ],
+                ),
+              ),
+            if (kind == 'player_of_week' && clips.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final c in clips)
+                      _ClipButton(
+                        label: c.label.isEmpty ? 'Gol' : c.label,
+                        onTap: () => c.play(context, '$playerName ${c.label}'),
+                      ),
+                  ],
+                ),
+              ),
+            if (kind == 'team_of_week')
+              _TeamPickScorers(
+                scorers: [
+                  for (final m in (d['scorers'] as List? ?? const []))
+                    if (m is Map) _Scorer(m),
+                ],
+              ),
+            if (note.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                child: Text(
+                  note,
+                  style: const TextStyle(
+                    color: _soft,
+                    fontSize: 13.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            _Actions(
+              loggedIn: loggedIn,
+              liked: liked,
+              likeCount: likeCount,
+              onToggleLike: onToggleLike,
+              onShare: onShare,
+              linkText: 'Maç detayı',
+              onLink: () => _openMatch(context, matchId),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatBox extends StatelessWidget {
+  const _StatBox(this.value, this.label);
+
+  /// null: yıldız (Maçın Adamı).
+  final String? value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final star = value == null;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: star
+              ? WeeklyPickNewsCard._gold.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            if (star)
+              const Icon(
+                Icons.star_rounded,
+                color: WeeklyPickNewsCard._gold,
+                size: 28,
+              )
+            else
+              Text(value!, style: _cond(28)),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: star ? const Color(0xFFFDE68A) : _muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClipButton extends StatelessWidget {
+  const _ClipButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accent();
+    return Material(
+      color: accent.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.play_arrow_rounded, color: accent, size: 18),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamPickScorers extends StatelessWidget {
+  const _TeamPickScorers({required this.scorers});
+
+  final List<_Scorer> scorers;
+
+  @override
+  Widget build(BuildContext context) {
+    if (scorers.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        children: [
+          for (final s in scorers)
+            Text(
+              [s.label, s.minuteText].where((e) => e.isNotEmpty).join(' '),
+              style: const TextStyle(color: _soft, fontSize: 12.5),
+            ),
+        ],
+      ),
     );
   }
 }

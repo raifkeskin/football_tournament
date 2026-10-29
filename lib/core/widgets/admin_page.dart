@@ -197,6 +197,9 @@ Future<bool> showAdminConfirmDialog({
   String confirmLabel = 'SİL',
   bool destructive = true,
   IconData icon = Icons.delete_outline_rounded,
+
+  /// Verilirse onay düğmesinin solunda vazgeç düğmesi de olur.
+  String? cancelLabel,
 }) async {
   final ok = await showDialog<bool>(
     context: context,
@@ -245,24 +248,52 @@ Future<bool> showAdminConfirmDialog({
                 style: const TextStyle(color: Colors.white70, height: 1.4),
               ),
               const SizedBox(height: 22),
-              SizedBox(
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: destructive
-                        ? const Color(0xFFDC2626)
-                        : kAdminAccent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              Row(
+                children: [
+                  if (cancelLabel != null) ...[
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white24),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(
+                            cancelLabel,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: destructive
+                              ? const Color(0xFFDC2626)
+                              : kAdminAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(
+                          confirmLabel,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
                     ),
                   ),
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(
-                    confirmLabel,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
+                ],
               ),
             ],
           ),
@@ -284,21 +315,48 @@ Future<T?> showAdminPopup<T>({
     context: context,
     builder: (ctx) {
       final mq = MediaQuery.of(ctx);
+      // Klavye açıkken popup kalan alanın tamamını kullanır ve başlık
+      // gizlenir (AdminDialogHeader); alanlar daha az daralır.
+      final keyboard = mq.viewInsets.bottom > 0;
       return Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: keyboard ? 8 : 24,
+        ),
         child: Container(
           constraints: BoxConstraints(
-            maxHeight: (mq.size.height - mq.viewInsets.bottom) * 0.85,
+            maxHeight: keyboard
+                ? double.infinity
+                : (mq.size.height - mq.viewInsets.bottom) * 0.85,
           ),
-          padding: const EdgeInsets.only(top: 14),
+          padding: EdgeInsets.only(top: keyboard ? 8 : 14),
           clipBehavior: Clip.antiAlias,
           decoration: adminDialogDecoration(),
-          child: builder(ctx),
+          child: AdminPopupKeyboard(open: keyboard, child: builder(ctx)),
         ),
       );
     },
   );
+}
+
+/// [showAdminPopup] içinde klavyenin açık olup olmadığı (Dialog içinde
+/// MediaQuery klavye boşluğunu sıfırladığı için ayrıca taşınır).
+class AdminPopupKeyboard extends InheritedWidget {
+  const AdminPopupKeyboard({
+    super.key,
+    required this.open,
+    required super.child,
+  });
+
+  final bool open;
+
+  static bool isOpen(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AdminPopupKeyboard>()?.open ??
+      false;
+
+  @override
+  bool updateShouldNotify(AdminPopupKeyboard old) => old.open != open;
 }
 
 /// Fikstür ekranındaki filtre kapsülü: seçili filtrelerin özeti. Birden fazla

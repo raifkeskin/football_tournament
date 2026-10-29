@@ -655,7 +655,9 @@ class SupabaseTeamService implements ITeamService {
   /// Kadroya eklemek için futbolcu arar. Sezonda bir takıma kayıtlı olanlar
   /// listede kalır ama `teamId`/`teamName` ile döner; ekran bunları seçilemez
   /// gösterir.
-  Future<List<({PlayerModel player, String? teamId, String? teamName})>>
+  Future<
+    List<({PlayerModel player, String? teamId, String? teamName, bool free})>
+  >
   searchPlayersForSeason(String seasonId, String query) async {
     final sid = seasonId.trim();
     final words = query
@@ -703,6 +705,20 @@ class SupabaseTeamService implements ITeamService {
       if (pid.isNotEmpty && tid.isNotEmpty) teamByPlayer[pid] = tid;
     }
 
+    // Hiçbir etkin turnuva kadrosunda olmayanlar "Boşta" etiketi alır.
+    final freeIds = <String>{};
+    try {
+      final rows = await _client.rpc(
+        'players_free_ids',
+        params: {'p_ids': players.map((p) => p.id).toList()},
+      );
+      for (final r in (rows as List? ?? const [])) {
+        freeIds.add(r.toString());
+      }
+    } catch (_) {
+      // Etiket gösterilemezse arama yine çalışır.
+    }
+
     final teamNames = <String, String>{};
     if (teamByPlayer.isNotEmpty) {
       final teamsRes = await _client
@@ -721,6 +737,7 @@ class SupabaseTeamService implements ITeamService {
           player: p,
           teamId: teamByPlayer[p.id],
           teamName: teamNames[teamByPlayer[p.id]],
+          free: freeIds.contains(p.id),
         ),
     ];
   }

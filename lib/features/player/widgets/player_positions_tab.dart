@@ -191,20 +191,14 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
     setState(() {
       _other = saved.other;
       final m = saved.main;
-      if (m != null && !saved.pending) {
+      if (m != null) {
         _main = _lineOf(m);
         _sub = m == 'Kaleci' ? '' : m;
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved.pending
-              ? 'Mevkiler kaydedildi; asıl mevki değişikliği onaya gönderildi.'
-              : 'Mevkiler kaydedildi.',
-        ),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Mevkiler kaydedildi.')));
   }
 
   @override
@@ -480,14 +474,12 @@ class _PositionsPitch extends StatelessWidget {
   }
 }
 
-/// Düzenleme sonucu: [main] seçilen asıl mevki (değişmediyse null);
-/// [pending] asıl mevki onaya gittiyse true.
+/// Düzenleme sonucu: [main] seçilen asıl mevki (değişmediyse null).
 class _SavedPositions {
-  const _SavedPositions(this.other, {this.main, this.pending = false});
+  const _SavedPositions(this.other, {this.main});
 
   final List<String> other;
   final String? main;
-  final bool pending;
 }
 
 /// Mevki düzenleme penceresi: üstte "Asıl mevki" / "Oynayabildiği" seçimi,
@@ -559,26 +551,13 @@ class _PositionsEditorState extends State<_PositionsEditor> {
   Future<void> _save() async {
     setState(() => _saving = true);
     final main = _newMain;
-    var pending = false;
     try {
+      // Futbolcunun kendisi de yöneten de doğrudan değiştirir (onay yok).
       if (main != null) {
-        if (widget.manages) {
-          await _sb.rpc(
-            'set_player_main_position',
-            params: {'p_player_id': widget.playerId, 'p_position': main},
-          );
-        } else {
-          await _sb.rpc(
-            'submit_profile_change',
-            params: {
-              'p_changes': {
-                'main_position': _lineOf(main),
-                'sub_position': main == 'Kaleci' ? '' : main,
-              },
-            },
-          );
-          pending = true;
-        }
+        await _sb.rpc(
+          'set_player_main_position',
+          params: {'p_player_id': widget.playerId, 'p_position': main},
+        );
       }
       final res = await _sb.rpc(
         'set_player_other_positions',
@@ -586,15 +565,10 @@ class _PositionsEditorState extends State<_PositionsEditor> {
       );
       if (!mounted) return;
       Navigator.of(context).pop<_SavedPositions>(
-        _SavedPositions(
-          [
-            if (res is List)
-              for (final x in res)
-                if (!pending || x.toString() != main) x.toString(),
-          ],
-          main: main,
-          pending: pending,
-        ),
+        _SavedPositions([
+          if (res is List)
+            for (final x in res) x.toString(),
+        ], main: main),
       );
     } on PostgrestException catch (e) {
       if (!mounted) return;
@@ -677,9 +651,7 @@ class _PositionsEditorState extends State<_PositionsEditor> {
           const SizedBox(height: 8),
           Text(
             _mainMode
-                ? widget.manages
-                      ? 'Asıl mevkiye dokun.'
-                      : 'Asıl mevkiye dokun; değişiklik onaydan sonra geçer.'
+                ? 'Asıl mevkiye dokun.'
                 : 'Oynayabildiği diğer yerlere dokun (asıl mevki dışında en çok 3).',
             style: const TextStyle(color: _mid, fontSize: 13),
           ),

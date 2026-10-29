@@ -9,6 +9,16 @@ String normalizePhoneToRaw10(String input) {
   return d.replaceFirst(RegExp(r'^0+'), '');
 }
 
+/// E-posta biçim denetimi (adın@alan.uzantı; uzantı en az 2 harf, ardışık
+/// nokta yok). Adresin gerçekten var olduğunu doğrulamaz.
+bool isValidEmail(String input) {
+  final e = input.trim();
+  if (e.contains('..')) return false;
+  return RegExp(
+    r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$',
+  ).hasMatch(e);
+}
+
 /// 10 haneli numarayı "0 (5xx) xxx xx xx" biçiminde gösterir.
 String formatPhoneRaw10(String raw10) {
   final p = raw10.trim();

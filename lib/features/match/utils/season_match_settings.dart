@@ -8,6 +8,7 @@ class SeasonMatchSettings {
     this.tracksGoalMinutes = true,
     this.aiEsame = true,
     this.aiClips = true,
+    this.assistantReferees = true,
   });
 
   /// `seasons.match_period_duration` = TEK DEVRE süresi.
@@ -20,6 +21,9 @@ class SeasonMatchSettings {
   /// Yapay Zekâ Yönetimi: sezonda esame okuma / gol videosu yakalama açık mı.
   final bool aiEsame;
   final bool aiClips;
+
+  /// `seasons.assistant_referees_enabled`: maçta yan hakem seçilir mi.
+  final bool assistantReferees;
 
   static final Map<String, Future<SeasonMatchSettings>> _futures = {};
   static final Map<String, SeasonMatchSettings> _cache = {};
@@ -37,7 +41,8 @@ class SeasonMatchSettings {
             .from('seasons')
             .select(
               'match_period_duration, track_goal_minutes, '
-              'ai_esame_enabled, ai_clips_enabled',
+              'ai_esame_enabled, ai_clips_enabled, '
+              'assistant_referees_enabled',
             )
             .eq('id', sid)
             .limit(1);
@@ -49,6 +54,7 @@ class SeasonMatchSettings {
           tracksGoalMinutes: res.first['track_goal_minutes'] != false,
           aiEsame: res.first['ai_esame_enabled'] != false,
           aiClips: res.first['ai_clips_enabled'] != false,
+          assistantReferees: res.first['assistant_referees_enabled'] != false,
         );
       } catch (_) {
         _futures.remove(sid); // hata kalıcı önbelleğe alınmasın

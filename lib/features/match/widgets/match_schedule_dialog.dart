@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/services/app_session.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/app_date_picker.dart';
+import '../../referees/referee_service.dart';
 import '../models/match.dart';
 
 /// Maçı Düzenle penceresi: tarih, saat ve stad (Fikstür ve maç detayı).
@@ -27,6 +29,7 @@ Future<void> showMatchScheduleDialog(
       ? rawInitialTime.substring(0, 5)
       : rawInitialTime;
   final tCtrl = TextEditingController(text: initialTimeText);
+  final refCtrl = TextEditingController(text: match.refereeName ?? '');
   final dateFocus = FocusNode();
   final timeFocus = FocusNode();
 
@@ -322,6 +325,18 @@ Future<void> showMatchScheduleDialog(
                       ),
                     ),
                   ),
+                  // Hakem listesi açıkken hakem "Hakem Ata"dan seçilir.
+                  if (!RefereeService.enabledFor(
+                    isAdmin: AppSession.of(context).value.isAdmin,
+                  )) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: refCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: deco('Hakem', Icons.sports_rounded),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   SizedBox(
                     height: 50,
@@ -375,6 +390,7 @@ Future<void> showMatchScheduleDialog(
                             matchTime: timeText,
                             pitchId: selectedPitchId,
                             pitchName: selectedPitchName,
+                            refereeName: refCtrl.text,
                           );
                           if (c.mounted) Navigator.pop(c);
                           if (context.mounted) {
@@ -421,6 +437,7 @@ Future<void> showMatchScheduleDialog(
     timeFocus.dispose();
     dCtrl.dispose();
     tCtrl.dispose();
+    refCtrl.dispose();
   });
 }
 

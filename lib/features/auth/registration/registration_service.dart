@@ -188,6 +188,19 @@ class RegistrationService {
   }
 }
 
+/// Türkçe harfleri sadeleştirir (sunucudaki `_id_fold` ile aynı): "Kağan"
+/// ile çipteki "KAGAN" eşleşsin. Ad soyadda yalnız Türkçe harf düzeltmesine
+/// izin vermek için karşılaştırılır.
+String trFoldName(String s) {
+  const from = 'ÇĞİIÖŞÜÂÎÛçğıöşüâîû', to = 'CGIIOSUAIUcgiosuaiu';
+  final b = StringBuffer();
+  for (final ch in s.split('')) {
+    final i = from.indexOf(ch);
+    b.write(i >= 0 ? to[i] : ch);
+  }
+  return b.toString().toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
 /// Kimlik çipindeki büyük harfli adı Türkçe kurala göre düzeltir
 /// ("AHMET İLKER ÖZ" → "Ahmet İlker Öz").
 String trTitleCase(String s) {

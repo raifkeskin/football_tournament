@@ -83,6 +83,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   String? _verifiedId;
   String? _error;
   String? _status;
+
+  /// Çip okuma ilerlemesi (0-1); kart algılanmadan önce null.
+  double? _progress;
   bool _busy = false;
   int _count = 0;
 
@@ -184,12 +187,16 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       _card = null;
       _candidates = null;
       _status = 'Kartı telefonun arkasına yaklaştırın';
+      _progress = null;
     });
     try {
       final card = await IdCardReader.readChip(
         key,
         onStatus: (s) {
           if (mounted) setState(() => _status = s);
+        },
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
         },
       );
       if (!mounted) return;
@@ -223,6 +230,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         setState(() {
           _busy = false;
           _status = null;
+          _progress = null;
         });
       }
     }
@@ -604,18 +612,55 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          'Kartı telefonun arka ortasına düz yaslayın; okuma bitene kadar '
-          'oynatmayın (birkaç saniye).',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: kAdminMuted, fontSize: 12.5),
-        ),
+        if (_progress == null)
+          const Text(
+            'Kartı telefonun arka ortasına düz yaslayın; okuma bitene kadar '
+            'oynatmayın (birkaç saniye).',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: kAdminMuted, fontSize: 12.5),
+          )
+        else
+          const Text(
+            'Lütfen kartı oynatmayın',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: kAdminAmber,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         const SizedBox(height: 14),
-        const SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2.4, color: _blue),
-        ),
+        if (_progress == null)
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: _blue),
+          )
+        else ...[
+          Text(
+            '%${(_progress! * 100).round()}',
+            style: const TextStyle(
+              color: _blue,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: _progress!),
+              duration: const Duration(milliseconds: 400),
+              builder: (_, v, _) => LinearProgressIndicator(
+                value: v,
+                minHeight: 6,
+                color: _blue,
+                backgroundColor: Colors.white12,
+              ),
+            ),
+          ),
+        ],
       ],
     ),
   );

@@ -112,6 +112,7 @@ abstract class IMatchService {
     required String matchTime,
     String? pitchId,
     String? pitchName,
+    String? refereeName,
   });
 
   Future<void> updateMatchLineup({

@@ -35,6 +35,7 @@ class AppSessionState {
     this.managedTeams = const <ManagedTeam>[],
     this.ownedRegions = const <OwnedRegion>[],
     this.photoUrl,
+    this.refereeId,
   });
 
   static const _unset = Object();
@@ -62,6 +63,10 @@ class AppSessionState {
 
   /// Profil fotoğrafı (`app_users.photo_url`; yönetici kartında).
   final String? photoUrl;
+
+  /// Hesabın hakem kaydı (`referees`; giriş telefonu hakem telefonu).
+  final String? refereeId;
+  bool get isReferee => refereeId != null;
 
   bool get isManager => role == 'manager';
   bool get isLeagueOwner => ownedLeagueIds.isNotEmpty;
@@ -110,6 +115,7 @@ class AppSessionState {
     List<ManagedTeam>? managedTeams,
     List<OwnedRegion>? ownedRegions,
     Object? photoUrl = _unset,
+    Object? refereeId = _unset,
   }) {
     return AppSessionState(
       user: identical(user, _unset) ? this.user : user as sb.User?,
@@ -130,6 +136,9 @@ class AppSessionState {
       photoUrl: identical(photoUrl, _unset)
           ? this.photoUrl
           : photoUrl as String?,
+      refereeId: identical(refereeId, _unset)
+          ? this.refereeId
+          : refereeId as String?,
     );
   }
 }
@@ -358,6 +367,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         managedTeams: const <ManagedTeam>[],
         ownedRegions: const <OwnedRegion>[],
         photoUrl: null,
+        refereeId: null,
       );
       return;
     }
@@ -468,6 +478,11 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     final ownedLeagueIds = await _loadOwnedLeagues(user.id);
     final managedTeams = await _loadManagedTeams(user.id);
     final ownedRegions = await _loadOwnedRegions(user.id);
+    String? refereeId;
+    try {
+      final r = (await _supabase.rpc('my_referee_id') ?? '').toString();
+      if (r.isNotEmpty && r != 'null') refereeId = r;
+    } catch (_) {}
 
     try {
       final res = await _supabase
@@ -514,9 +529,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           (r['surname'] ?? '').toString().trim(),
         ].where((e) => e.isNotEmpty).join(' ');
         if ((name ?? '').isEmpty && full.isNotEmpty) name = full;
-        // Hesapta fotoğraf yoksa futbolcu kaydındaki (menüdeki profil kartı).
+        // Futbolcu kaydı olan hesapta tek fotoğraf: futbolcu fotoğrafı
+        // (Futbolcu ve Yönetim kartı aynı fotoğrafı gösterir).
         final pp = (r['photo_url'] ?? '').toString().trim();
-        if ((photoUrl ?? '').isEmpty && pp.isNotEmpty) photoUrl = pp;
+        if (pp.isNotEmpty) photoUrl = pp;
       }
     } catch (_) {}
 
@@ -546,6 +562,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       managedTeams: managedTeams,
       ownedRegions: ownedRegions,
       photoUrl: photoUrl,
+      refereeId: refereeId,
       isLoading: false,
     );
     await _loadLeagueScope(isAdmin);

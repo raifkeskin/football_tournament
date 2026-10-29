@@ -44,8 +44,9 @@ class NewsItem {
 
   /// Sistemin oluşturduğu haber: 'match_result' (tek maç skor kartı),
   /// 'week_results' (haftanın sonuçları), 'match_preview' / 'day_preview'
-  /// (maç günü kartı ve günün programı) veya 'instagram' (turnuvanın
-  /// Instagram gönderisi). null: elle yazılmış haber.
+  /// (maç günü kartı ve günün programı), 'instagram' (turnuvanın
+  /// Instagram gönderisi) veya 'goal_of_week' / 'player_of_week' /
+  /// 'team_of_week' (Haftanın Seçimi). null: elle yazılmış haber.
   final String? autoKind;
   final String? matchId;
   final int? week;
@@ -59,6 +60,14 @@ class NewsItem {
   /// Maç günü haberleri: tek maç kartı ve günün programı.
   bool get isMatchPreview => autoKind == 'match_preview' && autoData != null;
   bool get isDayPreview => autoKind == 'day_preview' && autoData != null;
+
+  /// Haftanın Seçimi: kurucu başkan / bölge sorumlusunun seçtiği haftanın
+  /// golü, oyuncusu ya da takımı.
+  bool get isWeeklyPick =>
+      autoData != null &&
+      (autoKind == 'goal_of_week' ||
+          autoKind == 'player_of_week' ||
+          autoKind == 'team_of_week');
 
   /// Turnuvanın Instagram hesabından aktarılan gönderi (instagram-sync).
   bool get isInstagram => autoKind == 'instagram';

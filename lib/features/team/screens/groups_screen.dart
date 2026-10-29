@@ -449,9 +449,9 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 },
               );
 
-              // Kenarlardan boşluklu, yuvarlak köşeli kart.
+              // Kenara yakın (4 px, oyuncu kartı sekmeleri gibi), yuvarlak köşeli kart.
               final table = Container(
-                margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                margin: const EdgeInsets.fromLTRB(4, 10, 4, 0),
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.45),
@@ -771,7 +771,7 @@ class _IfNowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      margin: const EdgeInsets.fromLTRB(4, 10, 4, 0),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),

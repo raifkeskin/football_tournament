@@ -955,6 +955,7 @@ class SupabaseMatchService implements IMatchService {
     required String matchTime,
     String? pitchId,
     String? pitchName,
+    String? refereeName,
   }) {
     final id = matchId.trim();
     if (id.isEmpty) return Future.value();
@@ -967,6 +968,9 @@ class SupabaseMatchService implements IMatchService {
           'pitch_name': (pitchName ?? '').trim().isEmpty
               ? null
               : pitchName!.trim(),
+          'referee_name': (refereeName ?? '').trim().isEmpty
+              ? null
+              : refereeName!.trim(),
         };
         AppConfig.sqlLogStart(
           table: 'matches',

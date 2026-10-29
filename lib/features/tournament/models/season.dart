@@ -22,6 +22,7 @@ class Season {
     this.numberOfPlayerChanges = 3,
     this.isDoubleRound = false,
     this.trackGoalMinutes = true,
+    this.assistantReferees = true,
     this.requireVerifiedId = false,
     this.goalkeeperAddAnytime = false,
   });
@@ -53,6 +54,9 @@ class Season {
   /// Gol/kart dakikası tutuluyor mu? Halısahada çoğunlukla false: dakika
   /// alanı gizlenir, maç detayında golcüler takım altında listelenir.
   final bool trackGoalMinutes;
+
+  /// Maçlarda yan (yardımcı) hakem seçilir mi? Halısahada tek hakem: kapalı.
+  final bool assistantReferees;
 
   /// Onaylı kimlik zorunlu mu? Açıksa kimliği çipten doğrulanmamış oyuncu
   /// esameye eklenemez (sunucu da engeller).
@@ -128,6 +132,10 @@ class Season {
         v('trackGoalMinutes', 'track_goal_minutes'),
         fallback: true,
       ),
+      assistantReferees: boolFrom(
+        v('assistantReferees', 'assistant_referees_enabled'),
+        fallback: true,
+      ),
       requireVerifiedId: boolFrom(
         v('requireVerifiedId', 'require_verified_id'),
         fallback: false,
@@ -182,6 +190,7 @@ class Season {
       'number_of_player_changes': numberOfPlayerChanges,
       'is_double_round': isDoubleRound,
       'track_goal_minutes': trackGoalMinutes,
+      'assistant_referees_enabled': assistantReferees,
       'require_verified_id': requireVerifiedId,
       'goalkeeper_add_anytime': goalkeeperAddAnytime,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
@@ -220,6 +229,7 @@ class Season {
         'numberOfPlayerChanges': numberOfPlayerChanges,
         'isDoubleRound': isDoubleRound,
         'trackGoalMinutes': trackGoalMinutes,
+        'assistantReferees': assistantReferees,
         'requireVerifiedId': requireVerifiedId,
         'goalkeeperAddAnytime': goalkeeperAddAnytime,
         'teamsPerGroup': teamsPerGroup,
