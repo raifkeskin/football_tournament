@@ -76,6 +76,7 @@ abstract class ILeagueService {
     bool isPublished = true,
     DateTime? publishUntil,
     String? regionId,
+    String? linkUrl,
   });
 
   Future<void> setNewsPublished({
@@ -91,6 +92,7 @@ abstract class ILeagueService {
     List<String> imageUrls = const [],
     DateTime? publishUntil,
     String? regionId,
+    String? linkUrl,
   });
 
   Future<void> deleteNews({required String newsId});

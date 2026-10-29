@@ -37,7 +37,20 @@ class NewsItem {
     this.matchId,
     this.week,
     this.autoData,
+    this.linkUrl,
   });
+
+  /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
+  final String? linkUrl;
+
+  /// Haberden açılan dış bağlantı: aktarılan Instagram gönderisi ya da
+  /// haberin bağlantısı.
+  String? get externalLink => isInstagram ? igPermalink : linkUrl;
+
+  /// Bağlantı Instagram'a mı ("Instagram'da aç" yazılır).
+  bool get externalIsInstagram =>
+      isInstagram ||
+      (Uri.tryParse(linkUrl ?? '')?.host ?? '').contains('instagram.com');
 
   /// Canlı kura haberi ise kuranın kimliği (kart kura görünümüyle çizilir).
   final String? liveDrawId;
