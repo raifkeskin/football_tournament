@@ -109,6 +109,16 @@ class PushService {
   /// Uygulama açılışında: belirteç yenilenince kayıt güncellensin.
   static void initNative() {
     NativePush.onTokenRefresh = _saveNative;
+    // Girişte (ve açılışta oturum varsa) kayıt yenilenir: çıkışta silinen
+    // ya da sunucuda kaybolan abonelik, cihazda açık göründüğü için bir daha
+    // kaydedilmiyordu.
+    _sb.auth.onAuthStateChange.listen((s) {
+      if (s.session?.user == null) return;
+      if (s.event == AuthChangeEvent.signedIn ||
+          s.event == AuthChangeEvent.initialSession) {
+        resync();
+      }
+    });
   }
 
   /// Bu cihazda bildirimleri kapatır.

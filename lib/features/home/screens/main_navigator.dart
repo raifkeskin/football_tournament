@@ -24,6 +24,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
 import '../../identity/identity_access.dart';
+import '../../team/screens/roster_add_screen.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
@@ -604,6 +605,7 @@ class _MenuDrawer extends StatelessWidget {
         LeagueSwitchScope.genericTab,
         AppSettings.tournamentRequestsEnabled,
         IdentityAccess.changes,
+        RosterAddAccess.changes,
       ]),
       builder: (context, _) {
         final theme = ActiveTournament.theme.value;
@@ -666,6 +668,8 @@ class _MenuDrawer extends StatelessWidget {
                               !kIsWeb &&
                               IdentityAccess.visible(session))
                             _identityTile(context, accent),
+                          if (loggedIn && RosterAddAccess.visible(session))
+                            _rosterAddTile(context),
                         ],
                       ),
                     ),
@@ -897,6 +901,64 @@ class _MenuDrawer extends StatelessWidget {
     );
   }
 
+  /// Takım sorumlusu kısayolu: menü düğmelerinin altında, belirgin.
+  Widget _rosterAddTile(BuildContext context) {
+    const ink = Color(0xFF04221A);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: Material(
+        color: kAdminAccent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            final nav = Navigator.of(context);
+            final ctx = nav.context;
+            nav.pop(); // çekmeceyi kapat
+            RosterAddFlow.start(ctx);
+          },
+          child: const SizedBox(
+            height: 60,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.person_add_alt_1_rounded, color: ink, size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Kadroya Futbolcu Ekle',
+                          style: TextStyle(
+                            color: ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'Boştaki futbolculardan seç',
+                          style: TextStyle(
+                            color: Color(0xBF04221A),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: ink),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Kimlik Doğrulama: admin, kurucu başkan ve bölge sorumlusu her zaman
   /// görür (başkalarının kimliğini okutur); diğerleri yalnız kendi profili
   /// onaylı değilken (kendisi ya da yönetici onaylayınca kaybolur).
@@ -1051,7 +1113,7 @@ class _MenuDrawer extends StatelessWidget {
     );
   }
 
-  /// Alt ikon şeridi: Bildirim Ayarları (misafir), Turnuva Kodu Gir, Sorun
+  /// Alt ikon şeridi: Bildirim Ayarları (herkes), Turnuva Kodu Gir, Sorun
   /// Bildir; sağda Çıkış. İkona basınca başlığı açılır, açıkken basınca
   /// işlem yapılır.
   Widget _iconStrip(BuildContext context, Color accent) {
@@ -1068,21 +1130,20 @@ class _MenuDrawer extends StatelessWidget {
           child: _DrawerIconStrip(
             accent: accent,
             items: [
-              if (!loggedIn)
-                (
-                  Icons.notifications_active_outlined,
-                  'Bildirimler',
-                  () => closeThen(
-                    (ctx) => Navigator.of(ctx).push(
-                      MaterialPageRoute<void>(
-                        settings: const RouteSettings(
-                          name: 'NotificationSettingsScreen',
-                        ),
-                        builder: (_) => const NotificationSettingsScreen(),
+              (
+                Icons.notifications_active_outlined,
+                'Bildirimler',
+                () => closeThen(
+                  (ctx) => Navigator.of(ctx).push(
+                    MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: 'NotificationSettingsScreen',
                       ),
+                      builder: (_) => const NotificationSettingsScreen(),
                     ),
                   ),
                 ),
+              ),
               if (AppSettings.privateLeaguesEnabled.value)
                 (Icons.key_rounded, 'Kod Gir', onEnterCode),
               (

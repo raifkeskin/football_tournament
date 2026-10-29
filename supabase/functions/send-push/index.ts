@@ -76,7 +76,7 @@ function soundFor(p: { title: string; tag?: string }): string | null {
   if (tag.startsWith("goal-") && p.title === "GOL!") return "lm_gol";
   if (tag.startsWith("live-") && p.title === "Maç başladı") return "lm_mac_basladi";
   if (tag.startsWith("result-")) return "lm_mac_sonu";
-  if (tag.startsWith("live-") && p.title === "İlk yarı sonucu") return "lm_mac_sonu";
+  if (tag.startsWith("live-") && p.title === "İlk yarı sonucu") return "lm_ilk_yari";
   return null;
 }
 

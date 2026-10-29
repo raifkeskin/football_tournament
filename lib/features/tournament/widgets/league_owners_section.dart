@@ -237,21 +237,82 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
   }
 }
 
-/// Ad soyad + telefon girişi; iptalde null.
+/// Önce telefon: numara sistemde kayıtlıysa ad soyad dolu gelir
+/// (`person_name_by_phone`), değilse elle yazılır. İptalde null.
 Future<({String name, String phone})?> _showAddOwnerDialog(
   BuildContext context, {
   bool region = false,
 }) async {
   final nameCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
+  final nameFocus = FocusNode();
+  var looked = ''; // son sorgulanan numara
+  var lookup = 'idle'; // idle | busy | found | account | none
+  var autoName = ''; // sorgudan gelen ad (elle değiştirilmediyse yenilenir)
   final result = await showDialog<({String name, String phone})>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
         final digits = phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
-        final valid =
-            nameCtrl.text.trim().length >= 3 &&
-            RegExp(r'^0?5\d{9}$').hasMatch(digits);
+        final raw = digits.startsWith('0') ? digits.substring(1) : digits;
+        final phoneOk = RegExp(r'^5\d{9}$').hasMatch(raw);
+        final valid = nameCtrl.text.trim().length >= 3 && phoneOk;
+
+        // Numara onChanged'den verilir (bu kapanıştaki [raw] bir önceki
+        // çizimden kalır).
+        Future<void> find(String raw) async {
+          if (raw == looked) return;
+          looked = raw;
+          setState(() => lookup = 'busy');
+          Map<String, dynamic>? r;
+          try {
+            final res = await Supabase.instance.client.rpc(
+              'person_name_by_phone',
+              params: {'p_phone': raw},
+            );
+            if (res is Map) r = Map<String, dynamic>.from(res);
+          } catch (_) {}
+          if (!ctx.mounted || looked != raw) return;
+          final name = (r?['name'] ?? '').toString().trim();
+          setState(() {
+            if (name.isNotEmpty &&
+                (nameCtrl.text.trim().isEmpty ||
+                    nameCtrl.text.trim() == autoName)) {
+              nameCtrl.text = name;
+              autoName = name;
+            }
+            lookup = r == null
+                ? 'none'
+                : (r['has_account'] == true ? 'account' : 'found');
+          });
+          if (name.isEmpty) nameFocus.requestFocus();
+        }
+
+        if (!phoneOk && looked.isNotEmpty) {
+          looked = '';
+          lookup = 'idle';
+        }
+
+        final (hintIcon, hintText, hintColor) = switch (lookup) {
+          'busy' => (Icons.search_rounded, 'Kayıt aranıyor…', Colors.white54),
+          'account' => (
+            Icons.verified_user_outlined,
+            'Uygulamada hesabı var.',
+            kAdminAccent,
+          ),
+          'found' => (
+            Icons.person_search_rounded,
+            'Sistemde kayıtlı; henüz hesabı yok.',
+            const Color(0xFFFCD34D),
+          ),
+          'none' => (
+            Icons.edit_outlined,
+            'Kayıt bulunamadı; ad soyadı yazın.',
+            Colors.white54,
+          ),
+          _ => (null, '', Colors.white54),
+        };
+
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -278,11 +339,35 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
                   AdminFieldGroup(
                     children: [
                       AdminFieldRow(
+                        icon: Icons.phone_iphone_rounded,
+                        label: 'Cep Telefonu',
+                        child: TextField(
+                          controller: phoneCtrl,
+                          autofocus: true,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [PhoneMaskFormatter()],
+                          onChanged: (v) {
+                            setState(() {});
+                            final d = v.replaceAll(RegExp(r'\D'), '');
+                            final r = d.startsWith('0') ? d.substring(1) : d;
+                            if (RegExp(r'^5\d{9}$').hasMatch(r)) find(r);
+                          },
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: adminInlineInputDecoration(
+                            hint: '(5XX) XXX XX XX',
+                          ),
+                        ),
+                      ),
+                      AdminFieldRow(
                         icon: Icons.person_outline_rounded,
                         label: 'Ad Soyad',
                         child: TextField(
                           controller: nameCtrl,
-                          autofocus: true,
+                          focusNode: nameFocus,
                           textCapitalization: TextCapitalization.words,
                           onChanged: (_) => setState(() {}),
                           style: const TextStyle(
@@ -295,26 +380,23 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
                           ),
                         ),
                       ),
-                      AdminFieldRow(
-                        icon: Icons.phone_iphone_rounded,
-                        label: 'Cep Telefonu',
-                        child: TextField(
-                          controller: phoneCtrl,
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [PhoneMaskFormatter()],
-                          onChanged: (_) => setState(() {}),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          decoration: adminInlineInputDecoration(
-                            hint: '(5XX) XXX XX XX',
-                          ),
-                        ),
-                      ),
                     ],
                   ),
+                  if (hintIcon != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(hintIcon, size: 16, color: hintColor),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            hintText,
+                            style: TextStyle(color: hintColor, fontSize: 12.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   AdminPrimaryButton(
                     label: 'EKLE',
@@ -336,6 +418,7 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
   Future<void>.delayed(const Duration(milliseconds: 600), () {
     nameCtrl.dispose();
     phoneCtrl.dispose();
+    nameFocus.dispose();
   });
   return result;
 }

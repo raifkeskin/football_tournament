@@ -920,6 +920,45 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   /// Turnuvada "YouTube canlı yayın" açık mı (menüde "Yayını Bul" için).
   bool _youtubeLive = false;
 
+  /// Medya sekmesinde çoklu silme: null kapalı, aksi hâlde seçili medya id'leri.
+  final _photoSelection = ValueNotifier<Set<String>?>(null);
+
+  /// Seçili fotoğrafları onayla siler.
+  Future<void> _deleteSelectedPhotos() async {
+    final ids = _photoSelection.value ?? const <String>{};
+    if (ids.isEmpty) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Fotoğrafları Sil',
+      message: ids.length == 1
+          ? 'Seçili fotoğraf kalıcı olarak silinecek. Emin misiniz?'
+          : 'Seçili ${ids.length} fotoğraf kalıcı olarak silinecek. '
+                'Emin misiniz?',
+      confirmLabel: 'ONAYLA',
+      cancelLabel: 'VAZGEÇ',
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    var deleted = 0;
+    try {
+      for (final id in ids) {
+        await ServiceLocator.matchService.deleteMatchMedia(id);
+        deleted++;
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            deleted == 1 ? 'Fotoğraf silindi.' : '$deleted fotoğraf silindi.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Silinemedi: $e')));
+    }
+    _photoSelection.value = null;
+    _triggerRefresh();
+  }
+
   /// Medya sekmesindeki menüde "Canlı Yayını Kaldır" için.
   late final Stream<List<MatchMediaModel>> _fabMediaStream = ServiceLocator
       .matchService
@@ -953,6 +992,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   @override
   void dispose() {
     LeagueSwitchScope.setBandHidden(_bandRoute, false);
+    _photoSelection.dispose();
     _controlOpenTimer?.cancel();
     _tabController.dispose();
     super.dispose();
@@ -1277,42 +1317,86 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
 
     if (tabIndex == 2) {
-      return StreamBuilder<List<MatchMediaModel>>(
-        stream: _fabMediaStream,
-        builder: (context, snap) {
-          final links = [
-            for (final m in snap.data ?? const <MatchMediaModel>[])
-              if (m.mediaType == 'Maç Yayın Linki') m,
-          ];
-          return _SpeedDialFab(
-            key: const ValueKey('fab_highlights'),
-            actions: [
-              _SpeedDialAction(
-                label: 'Medya Ekle',
-                icon: Icons.perm_media_rounded,
-                onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
+      return ValueListenableBuilder<Set<String>?>(
+        valueListenable: _photoSelection,
+        builder: (context, selected, _) => selected != null
+            ? _selectionFab(selected.length)
+            : StreamBuilder<List<MatchMediaModel>>(
+                stream: _fabMediaStream,
+                builder: (context, snap) {
+                  final all = snap.data ?? const <MatchMediaModel>[];
+                  final links = [
+                    for (final m in all)
+                      if (m.mediaType == kMediaLiveLink) m,
+                  ];
+                  final hasPhotos = all.any((m) => m.isPhoto);
+                  final dial = _SpeedDialFab(
+                    key: const ValueKey('fab_highlights'),
+                    actions: [
+                      _SpeedDialAction(
+                        label: 'Medya Ekle',
+                        icon: Icons.perm_media_rounded,
+                        onTap: () =>
+                            _openHighlightMediaAdder(match, _triggerRefresh),
+                      ),
+                      if (links.isEmpty)
+                        _SpeedDialAction(
+                          label: 'Yayın Linki Ekle',
+                          icon: Icons.live_tv_rounded,
+                          onTap: () => _openHighlightMediaAdder(
+                            match,
+                            _triggerRefresh,
+                            type: kMediaLiveLink,
+                          ),
+                        ),
+                      if (links.isEmpty && _youtubeLive)
+                        _SpeedDialAction(
+                          label: 'YouTube\'da Yayını Bul',
+                          icon: Icons.travel_explore_rounded,
+                          onTap: () => showYoutubeFindSheet(
+                            context: context,
+                            matchId: match.id,
+                            onAttached: _triggerRefresh,
+                            onManual: () => _openHighlightMediaAdder(
+                              match,
+                              _triggerRefresh,
+                              type: kMediaLiveLink,
+                            ),
+                          ),
+                        ),
+                      if (links.isNotEmpty)
+                        _SpeedDialAction(
+                          label: 'Canlı Yayını Kaldır',
+                          icon: Icons.tv_off_rounded,
+                          onTap: () => _removeLiveStream(links),
+                        ),
+                    ],
+                  );
+                  // Silme yetkisi (bölge sorumlusu hariç) ve fotoğraf varsa çöp kutusu.
+                  if (scheduleOnly || !hasPhotos) return dial;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4, right: 10),
+                        child: FloatingActionButton(
+                          heroTag: 'media_delete',
+                          tooltip: 'Fotoğraf sil',
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          onPressed: () {
+                            _mediaSectionByMatch[match.id] = 1;
+                            _photoSelection.value = <String>{};
+                          },
+                          child: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ),
+                      Flexible(child: dial),
+                    ],
+                  );
+                },
               ),
-              if (links.isEmpty && _youtubeLive)
-                _SpeedDialAction(
-                  label: 'YouTube\'da Yayını Bul',
-                  icon: Icons.travel_explore_rounded,
-                  onTap: () => showYoutubeFindSheet(
-                    context: context,
-                    matchId: match.id,
-                    onAttached: _triggerRefresh,
-                    onManual: () =>
-                        _openHighlightMediaAdder(match, _triggerRefresh),
-                  ),
-                ),
-              if (links.isNotEmpty)
-                _SpeedDialAction(
-                  label: 'Canlı Yayını Kaldır',
-                  icon: Icons.tv_off_rounded,
-                  onTap: () => _removeLiveStream(links),
-                ),
-            ],
-          );
-        },
       );
     }
 
@@ -1876,6 +1960,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     _HighlightsTab(
                                       key: ValueKey(_refreshKey),
                                       match: m,
+                                      selection: _photoSelection,
                                       isSuperAdmin: isSuperAdmin,
                                       onDataChanged: _triggerRefresh,
                                       homeName: homeName,
@@ -1998,28 +2083,73 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   Future<void> _openHighlightMediaAdder(
     MatchModel matchModel,
-    VoidCallback onSuccess,
-  ) async {
+    VoidCallback onSuccess, {
+    String? type,
+  }) async {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (c) =>
-          _MediaAdderDialog(match: matchModel, onSuccess: onSuccess),
+      builder: (c) => _MediaAdderDialog(
+        match: matchModel,
+        onSuccess: onSuccess,
+        liveLinkOnly: type == kMediaLiveLink,
+      ),
     );
   }
+
+  /// Seçim modunda: Vazgeç + "Sil (n)".
+  Widget _selectionFab(int count) => Padding(
+    padding: const EdgeInsets.only(right: 4, bottom: 4),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FloatingActionButton.extended(
+          heroTag: 'media_select_cancel',
+          backgroundColor: const Color(0xFF334155),
+          foregroundColor: Colors.white,
+          onPressed: () => _photoSelection.value = null,
+          icon: const Icon(Icons.close_rounded),
+          label: const Text('Vazgeç'),
+        ),
+        const SizedBox(width: 10),
+        FloatingActionButton.extended(
+          heroTag: 'media_select_delete',
+          backgroundColor: count == 0
+              ? const Color(0xFF7F1D1D)
+              : const Color(0xFFDC2626),
+          foregroundColor: Colors.white,
+          onPressed: count == 0 ? null : _deleteSelectedPhotos,
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: Text(count == 0 ? 'Seçin' : 'Sil ($count)'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _MediaAdderDialog extends StatefulWidget {
   final MatchModel match;
   final VoidCallback onSuccess;
-  const _MediaAdderDialog({required this.match, required this.onSuccess});
+
+  /// Menüdeki "Yayın Linki Ekle": yalnız YouTube yayın linki girilir.
+  final bool liveLinkOnly;
+  const _MediaAdderDialog({
+    required this.match,
+    required this.onSuccess,
+    this.liveLinkOnly = false,
+  });
 
   @override
   State<_MediaAdderDialog> createState() => _MediaAdderDialogState();
 }
 
 class _MediaAdderDialogState extends State<_MediaAdderDialog> {
-  String _selectedType = 'Maç Yayın Linki';
+  late String _selectedType = widget.liveLinkOnly
+      ? kMediaLiveLink
+      : 'Takım Fotosu';
+
+  /// Maçta "Maçın Adamı" fotoğrafı var mı (tek olur; varsa listede yok).
+  bool _hasManOfMatch = false;
   final _urlCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
 
@@ -2139,14 +2269,12 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
       _selectedType == kMediaAlbumLink ||
       _selectedType == kMediaVideoLink;
 
-  final List<String> _types = [
-    kMediaLiveLink,
-    kMediaVideoLink,
-    kMediaAlbumLink,
+  /// Seçilebilen türler; yayın linki menüdeki ayrı düğmeden eklenir.
+  List<String> get _types => [
     'Takım Fotosu',
     'Önemli An',
-    'Maçın Adamı',
-    'Diğer',
+    if (!_hasManOfMatch) 'Maçın Adamı',
+    kMediaVideoLink,
   ];
 
   static IconData _typeIcon(String t) => switch (t) {
@@ -2188,7 +2316,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
 
   /// "Fotoğraflar 7 / 20" göstergesi; sınır dolunca kırmızı.
   Widget _photoCounter(int count, int limit) {
-    final full = count >= limit;
+    final full = limit > 0 && count >= limit;
     final color = full ? const Color(0xFFF87171) : const Color(0xFF10B981);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -2214,7 +2342,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                 ),
               ),
               Text(
-                '$count / $limit',
+                limit == 0 ? '$count · sınırsız' : '$count / $limit',
                 style: TextStyle(
                   color: color,
                   fontSize: 15,
@@ -2224,21 +2352,22 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: limit == 0 ? 1 : (count / limit).clamp(0, 1).toDouble(),
-              minHeight: 5,
-              color: color,
-              backgroundColor: Colors.white.withValues(alpha: 0.08),
+          if (limit > 0) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: limit == 0 ? 1 : (count / limit).clamp(0, 1).toDouble(),
+                minHeight: 5,
+                color: color,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+              ),
             ),
-          ),
+          ],
           if (full && !_isUrlType) ...[
             const SizedBox(height: 8),
             const Text(
-              'Fotoğraf sınırı doldu. Yeni fotoğraf için önce birini silin '
-              'ya da tüm fotoğrafları "Fotoğraf Albümü" linkiyle paylaşın.',
+              'Fotoğraf sınırı doldu. Yeni fotoğraf için önce birini silin.',
               style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 12.5),
             ),
           ],
@@ -2252,9 +2381,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     return StreamBuilder<List<MatchMediaModel>>(
       stream: _mediaStream,
       builder: (context, snap) {
-        _photoCount = (snap.data ?? const <MatchMediaModel>[])
-            .where((m) => m.isPhoto)
-            .length;
+        final all = snap.data ?? const <MatchMediaModel>[];
+        _photoCount = all.where((m) => m.isPhoto).length;
+        _hasManOfMatch = all.any((m) => m.mediaType == 'Maçın Adamı');
         return _buildDialog(context);
       },
     );
@@ -2265,7 +2394,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     final isAlbum = _selectedType == kMediaAlbumLink;
     final isVideo = _selectedType == kMediaVideoLink;
     final limit = AppSettings.matchPhotoLimit.value;
-    final full = !isLink && _photoCount >= limit;
+    final full = !isLink && limit > 0 && _photoCount >= limit;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -2279,38 +2408,45 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const AdminDialogHeader(
-                  icon: Icons.perm_media_outlined,
-                  title: 'Medya Ekle',
+                AdminDialogHeader(
+                  icon: widget.liveLinkOnly
+                      ? Icons.live_tv_rounded
+                      : Icons.perm_media_outlined,
+                  title: widget.liveLinkOnly
+                      ? 'Yayın Linki Ekle'
+                      : 'Medya Ekle',
                 ),
                 const SizedBox(height: 18),
-                _photoCounter(_photoCount, limit),
-                const SizedBox(height: 12),
+                if (!widget.liveLinkOnly) ...[
+                  _photoCounter(_photoCount, limit),
+                  const SizedBox(height: 12),
+                ],
                 AdminFieldGroup(
                   children: [
-                    AdminSelectRow(
-                      icon: _typeIcon(_selectedType),
-                      label: 'Medya Türü',
-                      value: _selectedType,
-                      placeholder: 'Seçin',
-                      onTap: _isUploading
-                          ? null
-                          : () async {
-                              final v = await showAdminOptionPicker<String>(
-                                context: context,
-                                title: 'Medya Türü',
-                                items: _types,
-                                labelBuilder: (t) => t,
-                                selected: _selectedType,
-                              );
-                              if (v != null && mounted) {
-                                setState(() {
-                                  _selectedType = v;
-                                  _pickedFiles = const [];
-                                });
-                              }
-                            },
-                    ),
+                    if (!widget.liveLinkOnly)
+                      AdminSelectRow(
+                        icon: _typeIcon(_selectedType),
+                        label: 'Medya Türü',
+                        value: mediaTypeLabel(_selectedType),
+                        placeholder: 'Seçin',
+                        onTap: _isUploading
+                            ? null
+                            : () async {
+                                final v = await showAdminOptionPicker<String>(
+                                  context: context,
+                                  title: 'Medya Türü',
+                                  items: _types,
+                                  labelBuilder: mediaTypeLabel,
+                                  selected: _selectedType,
+                                );
+                                if (v != null && mounted) {
+                                  setState(() {
+                                    _selectedType = v;
+                                    _pickedFiles = const [];
+                                  });
+                                }
+                              },
+                      ),
                     if (isLink)
                       _inputRow(
                         icon: Icons.link_rounded,
@@ -2334,14 +2470,29 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         onTap: _isUploading
                             ? null
                             : () async {
-                                final room = limit - _photoCount;
+                                // Sınırsızda (0) üst sınır yok.
+                                final room = limit == 0
+                                    ? 1000
+                                    : limit - _photoCount;
                                 if (room <= 0) return;
                                 final messenger = ScaffoldMessenger.of(context);
+                                // Maçın Adamı tek fotoğraf.
+                                if (_selectedType == 'Maçın Adamı') {
+                                  final one = await ImagePicker().pickImage(
+                                    source: ImageSource.gallery,
+                                    imageQuality: 85,
+                                  );
+                                  if (one == null || !mounted) return;
+                                  setState(() => _pickedFiles = [one]);
+                                  return;
+                                }
                                 // Çoklu seçim; sınırı aşanlar alınmaz.
                                 final picked = await ImagePicker()
                                     .pickMultiImage(
                                       imageQuality: 85,
-                                      limit: room > 1 ? room : null,
+                                      limit: room > 1 && limit > 0
+                                          ? room
+                                          : null,
                                     );
                                 if (picked.isEmpty || !mounted) return;
                                 setState(
@@ -2365,7 +2516,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         ),
                         child: Text(
                           _pickedFiles.isEmpty
-                              ? 'Galeriden seçin (birden çok seçilebilir)'
+                              ? (_selectedType == 'Maçın Adamı'
+                                    ? 'Galeriden bir fotoğraf seçin'
+                                    : 'Galeriden seçin (birden çok seçilebilir)')
                               : '${_pickedFiles.length} fotoğraf seçildi',
                           style: TextStyle(
                             color: _pickedFiles.isEmpty
@@ -2546,7 +2699,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     }
 
     final limit = AppSettings.matchPhotoLimit.value;
-    if (_photoCount >= limit) {
+    if (limit > 0 && _photoCount >= limit) {
       snack('Bu maç için fotoğraf sınırı ($limit) doldu.');
       return;
     }
@@ -2728,6 +2881,7 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
 
 class _HighlightsTab extends StatefulWidget {
   final MatchModel match;
+  final ValueNotifier<Set<String>?> selection;
   final bool isSuperAdmin;
   final VoidCallback onDataChanged;
   final String homeName;
@@ -2735,6 +2889,7 @@ class _HighlightsTab extends StatefulWidget {
   const _HighlightsTab({
     super.key,
     required this.match,
+    required this.selection,
     required this.isSuperAdmin,
     required this.onDataChanged,
     required this.homeName,
@@ -2759,6 +2914,7 @@ class _HighlightsTabState extends State<_HighlightsTab>
     super.build(context);
     return _HighlightsTabView(
       match: widget.match,
+      selection: widget.selection,
       isSuperAdmin: widget.isSuperAdmin,
       onDataChanged: widget.onDataChanged,
       mediaStream: _mediaStream,
@@ -2773,6 +2929,9 @@ class _HighlightsTabState extends State<_HighlightsTab>
 /// Yayın linki burada listelenmez; skorun altında gösterilir.
 class _HighlightsTabView extends StatefulWidget {
   final MatchModel match;
+
+  /// Çoklu silme seçimi (null: kapalı); menüdeki çöp kutusu açar.
+  final ValueNotifier<Set<String>?> selection;
   final bool isSuperAdmin;
   final VoidCallback onDataChanged;
   final Stream<List<MatchMediaModel>> mediaStream;
@@ -2780,6 +2939,7 @@ class _HighlightsTabView extends StatefulWidget {
   final String awayName;
   const _HighlightsTabView({
     required this.match,
+    required this.selection,
     required this.isSuperAdmin,
     required this.onDataChanged,
     required this.mediaStream,
@@ -2798,6 +2958,30 @@ final Map<String, int> _mediaSectionByMatch = {};
 class _HighlightsTabViewState extends State<_HighlightsTabView> {
   /// null: tümü; aksi hâlde takım id'si.
   String? _teamFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.selection.addListener(_onSelection);
+  }
+
+  @override
+  void dispose() {
+    widget.selection.removeListener(_onSelection);
+    super.dispose();
+  }
+
+  void _onSelection() {
+    if (mounted) setState(() {});
+  }
+
+  void _toggleSelect(String id) {
+    final cur = widget.selection.value;
+    if (cur == null) return;
+    final next = {...cur};
+    if (!next.remove(id)) next.add(id);
+    widget.selection.value = next;
+  }
 
   /// Alt sekme: 0 Gol Videoları, 1 Fotoğraflar (null: içeriğe göre).
   int? get _section => _mediaSectionByMatch[widget.match.id];
@@ -2959,8 +3143,10 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Fotoğraflar ${photos.length} / '
-                    '${AppSettings.matchPhotoLimit.value}',
+                    AppSettings.matchPhotosUnlimited
+                        ? 'Fotoğraflar ${photos.length}'
+                        : 'Fotoğraflar ${photos.length} / '
+                              '${AppSettings.matchPhotoLimit.value}',
                     style: const TextStyle(
                       color: Colors.white60,
                       fontSize: 12.5,
@@ -3222,14 +3408,19 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
   Widget _tile(BuildContext context, List<MatchMediaModel> list, int i) {
     final media = list[i];
     final badge = _badgeIcon(media.mediaType);
+    final selection = widget.selection.value;
+    final selected = selection?.contains(media.id) ?? false;
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          settings: const RouteSettings(name: 'PhotoGalleryScreen'),
-          builder: (_) => _PhotoGalleryScreen(photos: list, initialIndex: i),
-        ),
-      ),
-      onLongPress: widget.isSuperAdmin
+      onTap: selection != null
+          ? () => _toggleSelect(media.id)
+          : () => Navigator.of(context).push(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'PhotoGalleryScreen'),
+                builder: (_) =>
+                    _PhotoGalleryScreen(photos: list, initialIndex: i),
+              ),
+            ),
+      onLongPress: widget.isSuperAdmin && selection == null
           ? () => _confirmDelete(context, media)
           : null,
       child: Stack(
@@ -3258,6 +3449,32 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                 child: Icon(badge, size: 13, color: const Color(0xFFFBBF24)),
               ),
             ),
+          if (selection != null) ...[
+            if (selected)
+              ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
+            Positioned(
+              right: 6,
+              top: 6,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected
+                      ? const Color(0xFFDC2626)
+                      : Colors.black.withValues(alpha: 0.35),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: selected
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 15,
+                        color: Colors.white,
+                      )
+                    : null,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3359,7 +3576,7 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
   Widget build(BuildContext context) {
     final current = widget.photos[_index];
     final caption = [
-      if (current.mediaType != 'Diğer') current.mediaType,
+      if (current.mediaType != 'Diğer') mediaTypeLabel(current.mediaType),
       if ((current.description ?? '').isNotEmpty) current.description!,
     ].join(' · ');
     return Scaffold(

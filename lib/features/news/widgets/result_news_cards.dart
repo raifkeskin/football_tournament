@@ -1,8 +1,12 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/instagram_share.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -64,11 +68,12 @@ class _Scorer {
   final List<int> minutes;
   final List<String> labels;
 
-  /// "Ali Can (2)", "Mehmet Ak (K.K.)"; penaltı ayrıca yazılmaz.
+  /// "Ali Can (2)", "Mehmet Ak (K.K.)"; penaltı ayrıca yazılmaz. Dakikalar
+  /// yazılıysa gol sayısı zaten görünür, "(2)" eklenmez.
   String get label {
     final b = StringBuffer(name);
     if (og) b.write(' (K.K.)');
-    if (n > 1) b.write(' ($n)');
+    if (n > 1 && minuteText.isEmpty) b.write(' ($n)');
     return b.toString();
   }
 
@@ -139,28 +144,19 @@ class _Crest extends StatelessWidget {
   final _Team team;
   final double size;
 
+  /// Arma beyaz daire olmadan, kendi şekliyle.
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.85),
-          width: 2,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
       child: team.logo.isEmpty
-          ? Icon(Icons.shield_rounded, size: size * 0.6, color: team.band)
+          ? Icon(Icons.shield_rounded, size: size * 0.8, color: _soft)
           : WebSafeImage(
               url: team.logo,
               width: size,
               height: size,
               fit: BoxFit.contain,
-              isCircle: true,
             ),
     );
   }
@@ -221,6 +217,7 @@ class _Actions extends StatelessWidget {
     required this.onShare,
     this.linkText,
     this.onLink,
+    this.onInstagram,
   });
 
   final bool loggedIn;
@@ -230,6 +227,9 @@ class _Actions extends StatelessWidget {
   final VoidCallback onShare;
   final String? linkText;
   final VoidCallback? onLink;
+
+  /// Varsa (Android, Instagram yüklü) kart görseli Instagram'da açılır.
+  final VoidCallback? onInstagram;
 
   @override
   Widget build(BuildContext context) {
@@ -271,6 +271,22 @@ class _Actions extends StatelessWidget {
               size: 20,
             ),
           ),
+          if (onInstagram != null)
+            IconButton(
+              tooltip: 'Instagram\'da paylaş',
+              onPressed: onInstagram,
+              icon: ShaderMask(
+                blendMode: BlendMode.srcIn,
+                shaderCallback: (b) => const LinearGradient(
+                  colors: [
+                    Color(0xFFF58529),
+                    Color(0xFFDD2A7B),
+                    Color(0xFF8134AF),
+                  ],
+                ).createShader(b),
+                child: const Icon(Icons.camera_alt_outlined, size: 21),
+              ),
+            ),
           const Spacer(),
           if (linkText != null)
             TextButton(
@@ -297,7 +313,7 @@ BoxDecoration _cardDecoration() => BoxDecoration(
 );
 
 /// A: maç bitince oluşan skor kartı. Takım renkli bant + iki sütun golcüler.
-class MatchResultNewsCard extends StatelessWidget {
+class MatchResultNewsCard extends StatefulWidget {
   const MatchResultNewsCard({
     super.key,
     required this.item,
@@ -324,7 +340,107 @@ class MatchResultNewsCard extends StatelessWidget {
   final VoidCallback onShare;
 
   @override
+  State<MatchResultNewsCard> createState() => _MatchResultNewsCardState();
+}
+
+class _MatchResultNewsCardState extends State<MatchResultNewsCard> {
+  /// Instagram'a giden görsel: fotoğraf (o an görünen) + skor + golcüler.
+  final _shotKey = GlobalKey();
+  late final Future<bool> _instagram = InstagramShare.isAvailable();
+  bool _busy = false;
+
+  Future<void> _shareInstagram() async {
+    if (_busy) return;
+    final story = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: _card,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text(
+                'Instagram\'da paylaş',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Instagram\'da o an açık olan hesaptan paylaşılır.',
+                style: TextStyle(color: _muted, fontSize: 12.5),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_on_rounded, color: Colors.white),
+              title: const Text(
+                'Gönderi',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Açıklama yazarak',
+                style: TextStyle(color: _muted),
+              ),
+              onTap: () => Navigator.pop(ctx, false),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.amp_stories_outlined,
+                color: Colors.white,
+              ),
+              title: const Text(
+                'Hikâye',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Müzik, çıkartma ekleyerek',
+                style: TextStyle(color: _muted),
+              ),
+              onTap: () => Navigator.pop(ctx, true),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (story == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      final boundary =
+          _shotKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      // 1080 piksel genişlik.
+      final image = await boundary.toImage(
+        pixelRatio: 1080 / boundary.size.width,
+      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw Exception('Görsel oluşturulamadı.');
+      final ok = await InstagramShare.share(
+        data.buffer.asUint8List(),
+        story: story,
+      );
+      if (!ok) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Instagram\'a aktarılamadı: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final r = _Result(item.autoData!);
     final matchId = r.matchId.isEmpty ? (item.matchId ?? '') : r.matchId;
     return Container(
@@ -337,51 +453,69 @@ class MatchResultNewsCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(label: 'Maç sonucu', meta: meta),
+              _Header(label: 'Maç sonucu', meta: widget.meta),
               // Takım fotoğrafları varsa (kazananınki önce, sunucu sıralar)
-              // skor ve golcüler fotoğrafın üstünde; kaydırınca diğer takım.
-              if (item.imageUrls.isNotEmpty)
-                _PhotoResult(
-                  result: r,
-                  urls: item.imageUrls,
-                  onOpen: onOpenPhoto,
-                )
-              else ...[
-                _Band(result: r),
-                if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _ScorerColumn(
-                            r.homeScorers,
-                            goals: r.hs,
-                            end: false,
+              // skor ve golcüler fotoğrafın altında; kaydırınca diğer takım.
+              RepaintBoundary(
+                key: _shotKey,
+                child: ColoredBox(
+                  color: _card,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (item.imageUrls.isNotEmpty)
+                        _PhotoResult(
+                          result: r,
+                          urls: item.imageUrls,
+                          onOpen: widget.onOpenPhoto,
+                        )
+                      else ...[
+                        _Band(result: r),
+                        if (r.homeScorers.isNotEmpty ||
+                            r.awayScorers.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _ScorerColumn(
+                                    r.homeScorers,
+                                    goals: r.hs,
+                                    end: false,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: _ScorerColumn(
+                                    r.awayScorers,
+                                    goals: r.as,
+                                    end: true,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: _ScorerColumn(
-                            r.awayScorers,
-                            goals: r.as,
-                            end: true,
-                          ),
-                        ),
                       ],
-                    ),
+                    ],
                   ),
-              ],
+                ),
+              ),
               const SizedBox(height: 6),
-              _Actions(
-                loggedIn: loggedIn,
-                liked: liked,
-                likeCount: likeCount,
-                onToggleLike: onToggleLike,
-                onShare: onShare,
-                linkText: 'Maç detayı',
-                onLink: () => _openMatch(context, matchId),
+              FutureBuilder<bool>(
+                future: _instagram,
+                builder: (context, snap) => _Actions(
+                  loggedIn: widget.loggedIn,
+                  liked: widget.liked,
+                  likeCount: widget.likeCount,
+                  onToggleLike: widget.onToggleLike,
+                  onShare: widget.onShare,
+                  linkText: 'Maç detayı',
+                  onLink: () => _openMatch(context, matchId),
+                  onInstagram: snap.data == true && !_busy
+                      ? _shareInstagram
+                      : null,
+                ),
               ),
             ],
           ),
@@ -469,20 +603,7 @@ class _PhotoResultState extends State<_PhotoResult> {
   Widget build(BuildContext context) {
     final r = widget.result;
     final urls = widget.urls;
-    Widget crest(_Team t) => Container(
-      width: 36,
-      height: 36,
-      padding: const EdgeInsets.all(3),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-      ),
-      child: ClipOval(
-        child: t.logo.isEmpty
-            ? Icon(Icons.shield_rounded, size: 22, color: t.band)
-            : WebSafeImage(url: t.logo, fit: BoxFit.contain),
-      ),
-    );
+    Widget crest(_Team t) => _Crest(t, size: 38);
     Widget teamName(String name, {required bool end}) => Text(
       name,
       maxLines: 2,
@@ -726,8 +847,6 @@ class _CompactScorers extends StatelessWidget {
                   ),
               ],
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             textAlign: end ? TextAlign.right : TextAlign.left,
             style: const TextStyle(
               color: _soft,
@@ -837,7 +956,7 @@ class WeekResultsNewsCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
             child: Text(
-              week == null ? 'Haftanın sonuçları' : '$week. Hafta sonuçları',
+              week == null ? 'Haftanın Sonuçları' : '$week. Hafta Sonuçları',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 19,
@@ -879,12 +998,11 @@ class _WeekRow extends StatelessWidget {
           Flexible(
             child: Text(
               t.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               textAlign: end ? TextAlign.right : TextAlign.left,
               style: TextStyle(
                 color: win ? Colors.white : _muted,
                 fontSize: 12.5,
+                height: 1.2,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -893,12 +1011,6 @@ class _WeekRow extends StatelessWidget {
         ],
       ),
     );
-    final goals = [
-      if (r.homeScorers.isNotEmpty)
-        r.homeScorers.map((s) => s.label).join(', '),
-      if (r.awayScorers.isNotEmpty)
-        r.awayScorers.map((s) => s.label).join(', '),
-    ].join(' · ');
     return InkWell(
       onTap: () => _openMatch(context, r.matchId),
       child: Container(
@@ -929,17 +1041,6 @@ class _WeekRow extends StatelessWidget {
                 name(r.away, awayWin, true),
               ],
             ),
-            if (goals.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                goals,
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 11.5,
-                  height: 1.4,
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -1445,20 +1546,15 @@ Widget? autoNewsStrip(NewsItem item) {
   final week = (d['week'] as num?)?.toInt() ?? item.week;
 
   if (item.isMatchResult) {
+    // Golcüler Haberler'de; burada yalnız skor, arkada ilk takım fotoğrafı.
     final r = _Result(d);
-    final scorers = [...r.homeScorers, ...r.awayScorers]
-      ..sort((a, b) => b.n.compareTo(a.n));
-    final shown = scorers.take(2).map((s) => s.short).join(', ');
     return _DuelStrip(
       home: r.home,
       away: r.away,
       center: '${r.hs} – ${r.as}',
       sub: 'MAÇ BİTTİ',
-      caption: [
-        if (week != null) '$week. hafta',
-        if (shown.isNotEmpty)
-          '⚽ $shown${scorers.length > 2 ? ' +${scorers.length - 2}' : ''}',
-      ].join(' · '),
+      caption: week == null ? 'Maç Sonucu' : '$week. Hafta · Maç Sonucu',
+      photo: item.imageUrls.firstOrNull,
     );
   }
   if (item.isWeekResults) {
@@ -1471,7 +1567,7 @@ Widget? autoNewsStrip(NewsItem item) {
     return _ListStrip(
       rows: [for (final r in results) (r.home, '${r.hs} – ${r.as}', r.away)],
       caption: [
-        week == null ? 'Hafta sonuçları' : '$week. hafta sonuçları',
+        week == null ? 'Hafta Sonuçları' : '$week. Hafta Sonuçları',
         '$goals gol',
       ].join(' · '),
     );
@@ -1516,9 +1612,9 @@ Widget? autoNewsStrip(NewsItem item) {
           ),
       ],
       caption: switch (day) {
-        'BUGÜN' => 'Bugünün maçları',
-        'YARIN' => 'Yarının maçları',
-        _ => 'Günün maçları',
+        'BUGÜN' => 'Bugünün Maçları',
+        'YARIN' => 'Yarının Maçları',
+        _ => 'Günün Maçları',
       },
     );
   }
@@ -1563,16 +1659,34 @@ BoxDecoration _stripBand(Color home, Color away, {double tint = 1}) =>
       ),
     );
 
-extension on _Scorer {
-  /// "K. Kahya 2" (ana sayfa satırı için kısa).
-  String get short {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    final n0 = parts.length > 1
-        ? '${parts.first.characters.first}. ${parts.sublist(1).join(' ')}'
-        : name.trim();
-    return n > 1 ? '$n0 $n' : n0;
-  }
-}
+const _shadow = [Shadow(color: Colors.black87, blurRadius: 8)];
+
+/// Fotoğraflı bant: fotoğraf arkada (soluk); üstünde kenarlarda takım
+/// rengi, ortada koyu örtü, armalar ve skor okunur kalsın.
+BoxDecoration _photoBand(String url) => BoxDecoration(
+  color: _center,
+  image: DecorationImage(
+    image: NetworkImage(url),
+    fit: BoxFit.cover,
+    alignment: const Alignment(0, -0.2),
+    colorFilter: ColorFilter.mode(
+      Colors.black.withValues(alpha: 0.35),
+      BlendMode.darken,
+    ),
+  ),
+);
+
+BoxDecoration _photoOverlay(Color home, Color away) => BoxDecoration(
+  gradient: LinearGradient(
+    colors: [
+      home.withValues(alpha: 0.82),
+      _center.withValues(alpha: 0.45),
+      _center.withValues(alpha: 0.45),
+      away.withValues(alpha: 0.82),
+    ],
+    stops: const [0, 0.38, 0.62, 1],
+  ),
+);
 
 /// Tek maç: armalar, büyük harfli tam ad, ortada skor ya da saat.
 class _DuelStrip extends StatelessWidget {
@@ -1583,6 +1697,7 @@ class _DuelStrip extends StatelessWidget {
     required this.sub,
     required this.caption,
     this.highlight = false,
+    this.photo,
   });
 
   final _Team home;
@@ -1591,11 +1706,16 @@ class _DuelStrip extends StatelessWidget {
   final String sub;
   final String caption;
 
+  /// Takım fotoğrafı: bandın arkasında, üstü takım renkli koyu örtüyle.
+  final String? photo;
+
   /// Maç öncesi: ortadaki saat sarı.
   final bool highlight;
 
   @override
   Widget build(BuildContext context) {
+    final url = (photo ?? '').trim();
+    final hasPhoto = url.isNotEmpty;
     Widget team(_Team t) {
       final name = t.name.toUpperCase();
       // Ad kelime bütün kalarak alt satıra iner; sütuna sığmayacak kadar
@@ -1616,6 +1736,7 @@ class _DuelStrip extends StatelessWidget {
               fontSize: long ? 11 : 12,
               height: 1.2,
               fontWeight: FontWeight.w800,
+              shadows: hasPhoto ? _shadow : null,
             ),
           ),
         ],
@@ -1626,49 +1747,62 @@ class _DuelStrip extends StatelessWidget {
       children: [
         Container(
           height: newsStripBandHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: _stripBand(home.band, away.band),
-          child: Row(
-            children: [
-              Expanded(child: team(home)),
-              SizedBox(
-                width: 100,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        center,
-                        maxLines: 1,
-                        style: TextStyle(
-                          color: highlight
-                              ? const Color(0xFFFBBF24)
-                              : Colors.white,
-                          fontSize: highlight ? 30 : 36,
-                          height: 1,
-                          fontWeight: FontWeight.w900,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+          decoration: hasPhoto
+              ? _photoBand(url)
+              : _stripBand(home.band, away.band),
+          child: DecoratedBox(
+            decoration: hasPhoto
+                ? _photoOverlay(home.band, away.band)
+                : const BoxDecoration(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  Expanded(child: team(home)),
+                  SizedBox(
+                    width: 100,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            center,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: highlight
+                                  ? const Color(0xFFFBBF24)
+                                  : Colors.white,
+                              fontSize: highlight ? 30 : 36,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                              shadows: hasPhoto ? _shadow : null,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (sub.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            sub,
+                            style: TextStyle(
+                              color: _soft,
+                              fontSize: 10,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w700,
+                              shadows: hasPhoto ? _shadow : null,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (sub.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        sub,
-                        style: const TextStyle(
-                          color: _soft,
-                          fontSize: 10,
-                          letterSpacing: 1.2,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                  Expanded(child: team(away)),
+                ],
               ),
-              Expanded(child: team(away)),
-            ],
+            ),
           ),
         ),
         _StripCaption(caption),

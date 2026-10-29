@@ -22,6 +22,8 @@ class AppSettings {
   static const _kWeeklyPicks = 'weekly_picks_enabled';
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
+  static const _kRosterAdd = 'roster_add_shortcut_enabled';
+  static const _kRosterAddUsers = 'roster_add_shortcut_users';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -42,6 +44,9 @@ class AppSettings {
   /// Bir maça eklenebilecek en fazla fotoğraf (yayın ve albüm linki hariç).
   /// Veritabanı da aynı sınırı uygular (match_media tetikleyicisi).
   static final matchPhotoLimit = ValueNotifier<int>(20);
+
+  /// Maç başına fotoğraf sınırı yok mu (ayar 0).
+  static bool get matchPhotosUnlimited => matchPhotoLimit.value == 0;
 
   /// "Turnuvanı Kur" girişleri herkese açık mı (admin her zaman görür).
   static final tournamentRequestsEnabled = ValueNotifier<bool>(false);
@@ -75,6 +80,11 @@ class AppSettings {
   /// Hakemler (hakem listesi, maça hakem atama, hakem girişi) herkese açık
   /// mı; kapalıyken yalnız admin. Veritabanı da aynı kuralı uygular.
   static final refereesEnabled = ValueNotifier<bool>(false);
+
+  /// Takım sorumlusu menüsünde "Kadroya Futbolcu Ekle" kısayolu herkese açık
+  /// mı; kapalıyken yalnız admin ve [rosterAddShortcutUsers] görür.
+  static final rosterAddShortcutEnabled = ValueNotifier<bool>(false);
+  static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Oyuncu kartındaki "Mevki" sekmesi (asıl mevki + oynayabildiği en çok 3
   /// mevki) herkese açık mı; kapalıyken yalnız admin görür. Veritabanı da
@@ -119,13 +129,22 @@ class AppSettings {
           weeklyPicksEnabled.value = r['value'] == true;
         } else if (r['key'] == _kReferees) {
           refereesEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kRosterAdd) {
+          rosterAddShortcutEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kRosterAddUsers) {
+          final v = r['value'];
+          rosterAddShortcutUsers.value = {
+            if (v is List)
+              for (final x in v) x.toString(),
+          };
         } else if (r['key'] == _kSuspendedTab) {
           suspendedTabEnabled.value = r['value'] == true;
         } else if (r['key'] == _kPositionsTab) {
           positionsTabEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMatchPhotoLimit) {
           final v = r['value'];
-          if (v is num && v > 0) matchPhotoLimit.value = v.toInt();
+          // 0: sınırsız.
+          if (v is num && v >= 0) matchPhotoLimit.value = v.toInt();
         }
       }
     } catch (e) {
