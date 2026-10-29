@@ -14,6 +14,12 @@ const kMediaAlbumLink = 'Fotoğraf Albümü';
 /// (YouTube uygulamada oynar, diğerleri uygulama içi tarayıcıda açılır).
 const kMediaVideoLink = 'Video Linki';
 
+/// Ekranda görünen tür adı; kayıtlı değer aynı kalır (eski sürümler).
+String mediaTypeLabel(String type) => switch (type) {
+  'Önemli An' => 'Maçtan Fotoğraflar',
+  _ => type,
+};
+
 class MatchMediaModel {
   final String id;
   final String matchId;
