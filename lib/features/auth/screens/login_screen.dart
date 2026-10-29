@@ -91,6 +91,24 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _loadLastPhone();
+  }
+
+  /// Son girişin telefonu (çıkış yapılsa da) alana yazılır.
+  Future<void> _loadLastPhone() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(AppSessionController.lastLoginPhoneKey) ?? '';
+      if (!mounted || raw.length != 10 || _phoneController.text.isNotEmpty) {
+        return;
+      }
+      _phoneController.text = PhoneMaskFormatter.formatFromRaw(raw);
+    } catch (_) {}
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _syncBand(TickerMode.valuesOf(context).enabled);
