@@ -9,7 +9,9 @@
 // gelmez.
 //
 // Önce drive_folder_seasons'taki sezonların eksik klasörleri açılır:
-// <kök> / <Turnuva Yıl> / <N. Hafta> / <Ev - Dep | #LM…> (drive_folders).
+// <kök> / <Turnuva Yıl> / <N. Hafta> / <Ev - Dep | #LM…> / <Takım> Takım
+// Fotosu (her iki takım için; drive_folders). Takım klasöründeki fotoğraf o
+// takımın "Takım Fotosu" olur, maç klasöründeki diğerleri "Önemli An".
 //
 // Gizli ayar: GOOGLE_DRIVE_SA_JSON (servis hesabı anahtarı).
 // JWT doğrulaması kapalı yayınlanır (`--no-verify-jwt`); çağrı
@@ -158,7 +160,11 @@ async function ensureFolders(token: string, root: string, seasonIds: string[]): 
       .order("week")
       .order("match_date");
     const list = matches ?? [];
-    const missing = list.filter((m) => !folders.has(`match:${m.id}`));
+    const missing = list.filter((m) =>
+      !folders.has(`match:${m.id}`) ||
+      !folders.has(`team:${m.id}:${m.home_team_id}`) ||
+      !folders.has(`team:${m.id}:${m.away_team_id}`)
+    );
     if (!missing.length) continue;
     const teamIds = [...new Set(missing.flatMap((m) => [m.home_team_id, m.away_team_id]))];
     const { data: teams } = await admin.from("teams").select("id, name").in("id", teamIds);
@@ -171,7 +177,10 @@ async function ensureFolders(token: string, root: string, seasonIds: string[]): 
       const name = `${teamName.get(m.home_team_id) ?? "Ev Sahibi"} - ${
         teamName.get(m.away_team_id) ?? "Deplasman"
       } | #LM${code}`;
-      await ensure(`match:${m.id}`, parent, name);
+      const matchDir = await ensure(`match:${m.id}`, parent, name);
+      for (const t of [m.home_team_id, m.away_team_id]) {
+        await ensure(`team:${m.id}:${t}`, matchDir, `${teamName.get(t) ?? "Takım"} Takım Fotosu`);
+      }
     }
   }
   return created;
@@ -181,16 +190,31 @@ function codeOf(name: string): string | undefined {
   return name.match(/#LM([0-9a-f]{6})\b/i)?.[1]?.toLowerCase();
 }
 
-/// Klasörün (ve alt klasörlerinin) fotoğrafları.
-async function imagesUnder(token: string, folderId: string, depth = 0): Promise<DriveFile[]> {
+const fold = (s: string) =>
+  s.toLocaleLowerCase("tr").replace(/ı/g, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ").trim();
+
+type Found = { file: DriveFile; teamId?: string };
+
+/// Klasörün (ve alt klasörlerinin) fotoğrafları. Takım klasörü (açtığımız
+/// ya da adı "<Takım> Takım Fotosu" olan) altındakiler o takıma bağlanır.
+async function imagesUnder(
+  token: string,
+  folderId: string,
+  teamOf: (folder: DriveFile) => string | undefined,
+  depth = 0,
+  teamId?: string,
+): Promise<Found[]> {
   const items = await children(token, folderId);
-  const images = items.filter((f) => f.mimeType.startsWith("image/"));
+  const found: Found[] = items
+    .filter((f) => f.mimeType.startsWith("image/"))
+    .map((file) => ({ file, teamId }));
   if (depth < 2) {
     for (const f of items.filter((f) => f.mimeType === FOLDER)) {
-      images.push(...await imagesUnder(token, f.id, depth + 1));
+      found.push(...await imagesUnder(token, f.id, teamOf, depth + 1, teamId ?? teamOf(f)));
     }
   }
-  return images;
+  return found;
 }
 
 /// 1600 piksel JPEG: Drive'ın küçük resmi (dönüş düzeltilmiş); yoksa orijinal.
@@ -248,6 +272,9 @@ Deno.serve(async (req) => {
     }
     report.folders = matchFolders.length;
 
+    const { data: teamKeys } = await admin.from("drive_folders").select("key, folder_id").like("key", "team:%");
+    const teamFolders = new Map((teamKeys ?? []).map((r) => [r.key as string, r.folder_id as string]));
+
     let budget = MAX_FILES;
     for (const folder of matchFolders) {
       if (budget <= 0) break;
@@ -256,14 +283,31 @@ Deno.serve(async (req) => {
         report.skipped.push(`${folder.name}: maç bulunamadı`);
         continue;
       }
-      const images = await imagesUnder(token, folder.id);
-      if (!images.length) continue;
+      const { data: match } = await admin
+        .from("matches")
+        .select("home_team_id, away_team_id")
+        .eq("id", matchId)
+        .single();
+      const sides = [match?.home_team_id, match?.away_team_id].filter(Boolean) as string[];
+      const { data: teamRows } = await admin.from("teams").select("id, name").in("id", sides);
+      const teamFolder = new Map(
+        sides.map((t) => [teamFolders.get(`team:${matchId}:${t}`), t] as const).filter(([f]) => f),
+      );
+      const teamOf = (f: DriveFile) => {
+        const known = teamFolder.get(f.id);
+        if (known) return known;
+        const n = fold(f.name);
+        if (!n.includes("takim foto")) return undefined;
+        return (teamRows ?? []).find((t) => n.startsWith(fold(String(t.name ?? ""))))?.id;
+      };
+      const found = await imagesUnder(token, folder.id, teamOf);
+      if (!found.length) continue;
       const { data: seenRows } = await admin
         .from("drive_media_seen")
         .select("file_id")
-        .in("file_id", images.map((f) => f.id));
+        .in("file_id", found.map((x) => x.file.id));
       const seen = new Set((seenRows ?? []).map((r) => r.file_id));
-      for (const f of images) {
+      for (const { file: f, teamId } of found) {
         if (budget <= 0) break;
         if (seen.has(f.id)) continue;
         budget--;
@@ -285,7 +329,12 @@ Deno.serve(async (req) => {
           const url = admin.storage.from("media").getPublicUrl(path).data.publicUrl;
           const { data: media, error } = await admin
             .from("match_media")
-            .insert({ match_id: matchId, media_type: MEDIA_TYPE, url })
+            .insert({
+              match_id: matchId,
+              media_type: teamId ? "Takım Fotosu" : MEDIA_TYPE,
+              team_id: teamId ?? null,
+              url,
+            })
             .select("id")
             .single();
           if (error) {
