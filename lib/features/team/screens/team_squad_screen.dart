@@ -1118,7 +1118,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
   /// Açılış seçimi: içinde bulunulan yılın sezonu (takım o yıl oynamıyorsa
   /// gelinen sezonun yılı, o da yoksa en yeni yıl); turnuva olarak gelinen
-  /// turnuva, yoksa varsayılan, yoksa ilk.
+  /// turnuva, yoksa adı alfabetik ilk olan.
   TeamSeasonOption _defaultSeasonPick(
     List<TeamSeasonOption> options,
     String widgetSeasonId,
@@ -1134,8 +1134,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final inYear = options.where((o) => o.year == year).toList();
     return inYear.firstWhere(
       (o) => o.id == widgetSeasonId,
-      orElse: () =>
-          inYear.firstWhere((o) => o.isDefault, orElse: () => inYear.first),
+      orElse: () => inYear.first,
     );
   }
 
@@ -1166,9 +1165,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (picked == null || picked == year || !mounted) return;
     final inYear = _seasonOptions.where((o) => o.year == picked).toList();
     if (inYear.isEmpty) return;
-    await _selectSeason(
-      inYear.firstWhere((o) => o.isDefault, orElse: () => inYear.first).id,
-    );
+    await _selectSeason(inYear.first.id);
   }
 
   Future<void> _pickTournamentOfYear() async {
