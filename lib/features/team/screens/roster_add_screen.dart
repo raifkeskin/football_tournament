@@ -464,13 +464,65 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
     };
   }
 
-  /// Forma numarası seçimi; vazgeçilirse null, numarasız ise ''.
+  /// Forma numarası: önce seçim yapılmadan devam edilebilir (numarasız ya
+  /// da ilk boş numara otomatik); "Numara seç" denirse numara ızgarası açılır.
+  /// Vazgeçilirse null, numarasız ise ''.
   Future<String?> _askJersey(String name) async {
     Set<int> taken = const {};
     try {
       taken = await _takenNumbers();
     } catch (_) {}
     if (!mounted) return null;
+    final auto = [
+      for (var n = 1; n <= 99; n++) n,
+    ].firstWhere((n) => !taken.contains(n), orElse: () => 0);
+    final choice = await showAdminPopup<String>(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AdminDialogHeader(
+            icon: Icons.checkroom_rounded,
+            title: 'Forma numarası',
+            subtitle: name,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _jerseyChoice(
+                  ctx,
+                  'pick',
+                  Icons.dialpad_rounded,
+                  'Numara seç',
+                  'Boş numaralardan seç',
+                ),
+                if (auto > 0)
+                  _jerseyChoice(
+                    ctx,
+                    'auto',
+                    Icons.auto_awesome_rounded,
+                    'Otomatik ata',
+                    'İlk boş numara: $auto',
+                  ),
+                _jerseyChoice(
+                  ctx,
+                  'none',
+                  Icons.arrow_forward_rounded,
+                  'Numarasız devam et',
+                  'Numara sonra verilebilir',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return null;
+    if (choice == 'auto') return '$auto';
+    if (choice == 'none') return '';
     return showSquadJerseyPicker(
       context: context,
       playerName: name,
@@ -479,6 +531,63 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
       palette: _target.palette,
     );
   }
+
+  Widget _jerseyChoice(
+    BuildContext ctx,
+    String value,
+    IconData icon,
+    String title,
+    String sub,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Material(
+      color: const Color(0xFF0F172A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.pop(ctx, value),
+        child: SizedBox(
+          height: 58,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Icon(icon, color: kAdminAccent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        sub,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   bool _checkOpen() {
     if (_target.addOpen || _isAdmin) return true;
