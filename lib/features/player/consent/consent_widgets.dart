@@ -63,11 +63,12 @@ class ConsentSummaryBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '$missingCount oyuncudan KVKK / sağlık onayı alınmadı'
-              '${noAccount > 0 ? ' ($noAccount oyuncunun hesabı yok)' : ''}.',
+              '• $missingCount oyuncudan KVKK / sağlık onayı alınmadı.'
+              '${noAccount > 0 ? '\n• $noAccount oyuncunun hesabı yok.' : ''}',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 13,
+                height: 1.4,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -99,7 +100,7 @@ class ConsentChip extends StatelessWidget {
         style: const TextStyle(
           color: kAdminAmber,
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

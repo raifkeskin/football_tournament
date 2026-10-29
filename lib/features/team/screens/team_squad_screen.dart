@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:excel/excel.dart' hide Border;
+import 'package:excel/excel.dart' hide Border, TextSpan;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -642,7 +642,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           index: _tab,
           filled: true,
           onChanged: (i) => setState(() => _tab = i),
-          labels: const ['Kadro', 'Fikstür', 'İstatistik', 'Uyarılar'],
+          labels: const ['Kadro', 'Fikstür', 'İstatistik', ''],
           icons: [
             null,
             null,
@@ -654,7 +654,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                   )
                 : const Icon(
                     Icons.check_circle_rounded,
-                    size: 17,
+                    size: 21,
                     color: Color(0xFF6EE7B7),
                   ),
           ],
@@ -688,7 +688,37 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     );
   }
 
-  Widget _infoBox(String text, {Color color = _squadAccent}) {
+  Widget _infoBox(
+    String text, {
+    Color color = _squadAccent,
+    List<String> bold = const [],
+  }) {
+    // [bold] içindeki ifadeler kalın yazılır.
+    final spans = <TextSpan>[];
+    var rest = text;
+    while (rest.isNotEmpty) {
+      var at = -1;
+      var hit = '';
+      for (final b in bold) {
+        final i = rest.indexOf(b);
+        if (i >= 0 && (at < 0 || i < at)) {
+          at = i;
+          hit = b;
+        }
+      }
+      if (at < 0) {
+        spans.add(TextSpan(text: rest));
+        break;
+      }
+      if (at > 0) spans.add(TextSpan(text: rest.substring(0, at)));
+      spans.add(
+        TextSpan(
+          text: hit,
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+      );
+      rest = rest.substring(at + hit.length);
+    }
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
@@ -696,8 +726,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: Text(
-        text,
+      child: Text.rich(
+        TextSpan(children: spans),
         style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.35),
       ),
     );
@@ -799,12 +829,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             if (st[p.id] != null && !st[p.id]!.complete) p,
         ];
         final usage = _ageRules.isEmpty ? null : _ageUsage(players);
-        final quotaOver = usage == null
-            ? false
-            : [
-                for (var i = 0; i < _ageRules.quotas.length; i++)
-                  usage.quota[i].length > _ageRules.quotas[i].max,
-              ].any((x) => x);
         final rules = _ruleLines();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -820,9 +844,10 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 _infoBox(
                   'Hesap yok: oyuncu uygulamaya kayıt olmamış; kayıt olup '
                   'izinleri vermeli.\nOnay yok: hesabı var ama Profil › '
-                  'İzinlerim ekranından onay vermemiş.\nİleride izni '
-                  'olmayan oyuncular esameye yazılamayacak.',
+                  'İzinlerim ekranından onay vermemiş.\nİzni olmayan '
+                  'oyuncular esameye yazılamayacak.',
                   color: const Color(0xFF60A5FA),
+                  bold: const ['Hesap yok', 'Onay yok'],
                 ),
                 _SquadSection(
                   title: 'İzni eksik',
@@ -835,35 +860,22 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
               ],
             ],
             if (usage != null) ...[
-              _warnHeader(
-                'KONTENJAN',
-                ok: !quotaOver && usage.violations.isEmpty,
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (var i = 0; i < _ageRules.quotas.length; i++)
-                    _quotaTile(
-                      'Kontenjan ${_ageRules.quotas[i].label}',
-                      '${usage.quota[i].length} / ${_ageRules.quotas[i].max}',
-                      usage.quota[i].length > _ageRules.quotas[i].max
-                          ? const Color(0xFFF87171)
-                          : const Color(0xFFFBBF24),
-                    ),
-                  if (usage.violations.isNotEmpty)
-                    _quotaTile(
-                      'Kural dışı',
-                      '${usage.violations.length}',
-                      const Color(0xFFF87171),
-                    ),
-                ],
-              ),
               for (var i = 0; i < _ageRules.quotas.length; i++)
                 if (usage.quota[i].isNotEmpty)
                   _SquadSection(
                     title: 'Kontenjan ${_ageRules.quotas[i].label}',
                     count: usage.quota[i].length,
+                    // Kullanım "2 / 4": sınır aşılırsa kırmızı.
+                    trailing: Text(
+                      '${usage.quota[i].length} / ${_ageRules.quotas[i].max}',
+                      style: TextStyle(
+                        color: usage.quota[i].length > _ageRules.quotas[i].max
+                            ? const Color(0xFFF87171)
+                            : const Color(0xFFFBBF24),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     children: [
                       for (final p in usage.quota[i])
                         _playerLine(
@@ -877,6 +889,14 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 _SquadSection(
                   title: 'Kural dışı',
                   count: usage.violations.length,
+                  trailing: Text(
+                    '${usage.violations.length}',
+                    style: const TextStyle(
+                      color: Color(0xFFF87171),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   children: [
                     for (final p in usage.violations)
                       _playerLine(
@@ -940,30 +960,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       },
     );
   }
-
-  Widget _quotaTile(String label, String value, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1E293B),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: color.withValues(alpha: 0.35)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: const TextStyle(color: _squadMuted, fontSize: 11)),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    ),
-  );
 
   /// Satırdaki etiket: kontenjan oyuncusu "K", kurala uymayan "KURAL DIŞI".
   Widget? _ageTag(PlayerModel p) {
@@ -2422,53 +2418,56 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     );
   }
 
+  /// Mevki süzgeci: seçim yoksa hepsi görünür; seçili mevkiye yeniden
+  /// dokununca seçim kalkar.
   Widget _positionFilter(List<PlayerModel> players) {
     final sections = _positionSections(players);
     return SizedBox(
-      height: 38,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: sections.length + 1,
-        separatorBuilder: (_, _) => const SizedBox(width: 7),
-        itemBuilder: (context, index) {
-          final all = index == 0;
-          final section = all ? null : sections[index - 1];
-          final selected = all
-              ? _selectedPosition == null
-              : _selectedPosition == section!.key;
-          final label = all
-              ? 'Tümü (${players.length})'
-              : '${section!.key} (${section.value.length})';
-          return InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () =>
-                setState(() => _selectedPosition = all ? null : section!.key),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected
-                    ? _squadAccent.withValues(alpha: 0.18)
-                    : _squadCard.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: selected
-                      ? _squadAccent.withValues(alpha: 0.72)
-                      : Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: selected ? const Color(0xFF9BF3CE) : _squadMuted,
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                ),
-              ),
+      height: 36,
+      child: Row(
+        children: [
+          for (var i = 0; i < sections.length; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(child: _positionChip(sections[i])),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _positionChip(MapEntry<String, List<PlayerModel>> section) {
+    final selected = _selectedPosition == section.key;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () =>
+          setState(() => _selectedPosition = selected ? null : section.key),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? _squadAccent.withValues(alpha: 0.18)
+              : _squadCard.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? _squadAccent.withValues(alpha: 0.72)
+                : Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '${section.key} (${section.value.length})',
+            maxLines: 1,
+            style: TextStyle(
+              color: selected ? const Color(0xFF9BF3CE) : _squadMuted,
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -4687,12 +4686,16 @@ class _SquadSection extends StatelessWidget {
     required this.count,
     required this.children,
     this.countLabel = 'oyuncu',
+    this.trailing,
   });
 
   final String title;
   final int count;
   final List<Widget> children;
   final String countLabel;
+
+  /// Sağdaki sayı yerine gösterilir (ör. kontenjan "2 / 4").
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -4719,10 +4722,11 @@ class _SquadSection extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
-                  '$count $countLabel',
-                  style: const TextStyle(color: _squadMuted, fontSize: 12),
-                ),
+                trailing ??
+                    Text(
+                      '$count $countLabel',
+                      style: const TextStyle(color: _squadMuted, fontSize: 12),
+                    ),
               ],
             ),
           ),
@@ -4884,7 +4888,7 @@ class _SquadSummaryCard extends StatelessWidget {
             // Tek satır: solda sezon, ortada oyuncu · logo · yaş, sağda
             // paylaş (bant dar kalsın).
             Padding(
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+              padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
               child: Row(
                 children: [
                   SizedBox(
@@ -4928,13 +4932,13 @@ class _SquadSummaryCard extends StatelessWidget {
                         _stat('${players.length}', 'Oyuncu'),
                         const SizedBox(width: 8),
                         SizedBox(
-                          width: 46,
-                          height: 46,
+                          width: 60,
+                          height: 60,
                           child: logoUrl.trim().isNotEmpty
                               ? WebSafeImage(
                                   url: logoUrl,
-                                  width: 46,
-                                  height: 46,
+                                  width: 60,
+                                  height: 60,
                                   fit: BoxFit.contain,
                                 )
                               : Center(
@@ -4974,7 +4978,7 @@ class _SquadSummaryCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
               child: Column(
                 children: [
                   Text(
@@ -5694,7 +5698,7 @@ class _BlinkingIconState extends State<_BlinkingIcon>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: Tween<double>(begin: 0.25, end: 1).animate(_c),
-      child: Icon(widget.icon, size: 17, color: widget.color),
+      child: Icon(widget.icon, size: 21, color: widget.color),
     );
   }
 }
