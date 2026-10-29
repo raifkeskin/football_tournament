@@ -265,6 +265,20 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     // Geçici şifreyle girişte "Beni Hatırla", kullanıcı kendi şifresini
     // belirleyince uygulanır (ResetPasswordScreen).
     await setRememberMe(rememberMe && !mustChangePassword);
+    await _saveLastLoginPhone(raw);
+  }
+
+  /// Son başarılı girişin telefonu: çıkış yapılsa da cihazda kalır, giriş
+  /// ekranında telefon alanı dolu gelir.
+  static const lastLoginPhoneKey = 'last_login_phone';
+
+  static Future<void> _saveLastLoginPhone(String input) async {
+    final d = input.replaceAll(RegExp(r'\D'), '');
+    if (d.length < 10) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(lastLoginPhoneKey, d.substring(d.length - 10));
+    } catch (_) {}
   }
 
   /// Girişten sonra: kişinin profili (rol, oyuncu kaydı) yüklenene kadar
