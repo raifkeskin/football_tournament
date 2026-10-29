@@ -660,7 +660,7 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data';
+      'auto_kind, match_id, week, auto_data, link_url';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -763,6 +763,9 @@ class SupabaseLeagueService implements ILeagueService {
       autoData: r['auto_data'] is Map
           ? Map<String, dynamic>.from(r['auto_data'] as Map)
           : null,
+      linkUrl: (r['link_url'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['link_url'].toString().trim(),
       // RLS yalnızca kullanıcının kendi beğenisini döndürür.
       likedByMe:
           r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
@@ -852,6 +855,7 @@ class SupabaseLeagueService implements ILeagueService {
       'season_id',
       'live_draw_id',
       'auto_data',
+      'link_url',
     ];
     for (final k in watched) {
       if (!next.containsKey(k)) continue;
@@ -1011,6 +1015,7 @@ class SupabaseLeagueService implements ILeagueService {
     bool isPublished = true,
     DateTime? publishUntil,
     String? regionId,
+    String? linkUrl,
   }) async {
     final tId = tournamentId.trim();
     final text = content.trim();
@@ -1038,6 +1043,7 @@ class SupabaseLeagueService implements ILeagueService {
         'image_urls': imgs,
         'publish_until': publishUntil?.toUtc().toIso8601String(),
         'region_id': regionId,
+        'link_url': ?linkUrl,
       });
       AppConfig.sqlLogResult(table: 'news', operation: 'INSERT', count: 1);
     } catch (e) {
@@ -1077,6 +1083,7 @@ class SupabaseLeagueService implements ILeagueService {
     List<String> imageUrls = const [],
     DateTime? publishUntil,
     String? regionId,
+    String? linkUrl,
   }) async {
     final id = newsId.trim();
     if (id.isEmpty) return;
@@ -1095,6 +1102,7 @@ class SupabaseLeagueService implements ILeagueService {
             'image_urls': imgs,
             'publish_until': publishUntil?.toUtc().toIso8601String(),
             'region_id': regionId,
+            'link_url': linkUrl,
           })
           .eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);

@@ -153,6 +153,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   Future<void> _openNewsForm({NewsItem? item}) async {
     final isEdit = item != null;
     final controller = TextEditingController(text: item?.content ?? '');
+    final linkController = TextEditingController(text: item?.linkUrl ?? '');
     // Fotoğraflar (en fazla 5): kayıtlı adresler ve yeni seçilen dosyalar,
     // gösterim sırasıyla. İlki kapak olur.
     const maxPhotos = 5;
@@ -259,6 +260,16 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         _snack('Lütfen bölge seçin.');
         return;
       }
+      var link = linkController.text.trim();
+      if (link.isNotEmpty && !link.contains('://')) link = 'https://$link';
+      final linkUri = Uri.tryParse(link);
+      if (link.isNotEmpty &&
+          (linkUri == null ||
+              !(linkUri.scheme == 'http' || linkUri.scheme == 'https') ||
+              linkUri.host.isEmpty)) {
+        _snack('Bağlantı geçerli değil (https://… olmalı).');
+        return;
+      }
       setLocal(() => saving = true);
       if (isEdit) setState(() => _busyIds.add(item.id));
       try {
@@ -285,6 +296,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             imageUrls: urls,
             publishUntil: publishUntil,
             regionId: formRegionId,
+            linkUrl: link.isEmpty ? null : link,
           );
         } else {
           await _leagueService.addNews(
@@ -294,6 +306,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             isPublished: publishNow,
             publishUntil: publishUntil,
             regionId: formRegionId,
+            linkUrl: link.isEmpty ? null : link,
           );
         }
         // Formdan kaldırılan eski fotoğraflar depodan da silinir.
@@ -556,6 +569,28 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                                 ),
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          AdminFieldGroup(
+                            children: [
+                              AdminFieldRow(
+                                icon: Icons.link_rounded,
+                                label: 'Instagram / bağlantı (isteğe bağlı)',
+                                child: TextField(
+                                  controller: linkController,
+                                  enabled: !saving,
+                                  keyboardType: TextInputType.url,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  decoration: adminInlineInputDecoration(
+                                    hint: 'https://instagram.com/p/…',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 16),
                           AdminFieldGroup(

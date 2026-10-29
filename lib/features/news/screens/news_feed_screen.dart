@@ -124,7 +124,7 @@ class _NewsViewState extends State<NewsView> {
   Future<void> _share(NewsItem n) async {
     final title = n.leagueName.isEmpty ? '' : '${n.leagueName}\n\n';
     // Instagram haberinde görseller yerine gönderinin kendisi paylaşılır.
-    final link = n.isInstagram ? n.igPermalink : null;
+    final link = n.externalLink;
     final images = link != null
         ? '\n\n$link'
         : n.imageUrls.isEmpty
@@ -136,13 +136,13 @@ class _NewsViewState extends State<NewsView> {
   }
 
   Future<void> _openInstagram(NewsItem n) async {
-    final link = n.igPermalink;
+    final link = n.externalLink;
     if (link == null) return;
     final ok = await launchUrl(
       Uri.parse(link),
       mode: LaunchMode.externalApplication,
     );
-    if (!ok) _snack('Instagram açılamadı.');
+    if (!ok) _snack('Bağlantı açılamadı.');
   }
 
   void _openGallery(List<String> urls, int index) {
@@ -532,7 +532,7 @@ class _NewsTile extends StatelessWidget {
               ),
             ),
           const Spacer(),
-          if (item.isInstagram && item.igPermalink != null)
+          if (item.externalLink != null)
             TextButton.icon(
               onPressed: onOpenInstagram,
               icon: const Icon(
@@ -540,8 +540,8 @@ class _NewsTile extends StatelessWidget {
                 color: Colors.white,
                 size: 18,
               ),
-              label: const Text(
-                'Instagram\'da aç',
+              label: Text(
+                item.externalIsInstagram ? 'Instagram\'da aç' : 'Bağlantıyı aç',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 13,
