@@ -31,7 +31,7 @@ const _kPrefScorers = 'poster_scorers';
 /// Afişi önizleme popup'ında gösterir. Pencerede boyut (hikâye / gönderi),
 /// zemin (fotoğraf / sade) ve maç sonucunda gol atanlar seçilir; "Paylaş"
 /// PNG'yi telefonun paylaşım menüsüne, "Instagram" seçili boyuta göre
-/// Instagram'ın hikâye ya da gönderi ekranına (yalnız Android, Instagram
+/// Instagram'ın hikâye ya da gönderi ekranına (Android ve iOS, Instagram
 /// yüklüyse), "Telefona indir" galeriye (web'de dosya olarak) kaydeder.
 /// Seçimler cihazda hatırlanır.
 ///

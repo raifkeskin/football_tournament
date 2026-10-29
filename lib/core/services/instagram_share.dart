@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 
 /// Görseli telefondaki Instagram uygulamasında açar: hikâye düzenleyicisi
 /// (müzik, çıkartma) ya da gönderi ekranı (açıklama). Paylaşım Instagram'da o
-/// an açık olan hesaptan yapılır. Şimdilik yalnız Android (MainActivity.kt);
-/// web ve iOS'ta [isAvailable] false döner.
+/// an açık olan hesaptan yapılır. Android (MainActivity.kt) ve iOS
+/// (AppDelegate.swift); web'de [isAvailable] false döner. iOS'ta hikâye için
+/// Facebook App ID gerekir, yoksa gönderi yolu açılır.
 class InstagramShare {
   InstagramShare._();
 
@@ -16,9 +17,11 @@ class InstagramShare {
 
   static Future<bool>? _available;
 
-  /// Android'de Instagram yüklü mü (bir kez sorulur).
+  /// Instagram yüklü mü (bir kez sorulur).
   static Future<bool> isAvailable() {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
       return Future.value(false);
     }
     return _available ??= _channel
