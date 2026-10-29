@@ -8,6 +8,7 @@ import 'league_scope.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     as sb; // Supabase çakışmasını önlemek için alias
 import '../push/push_service.dart';
+import 'error_reporter.dart';
 
 const _kRememberMeKey = 'auth_remember_me';
 
@@ -382,6 +383,22 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     _loadProfile(user, isAdmin, keepOnError: sameUser);
   }
 
+  /// Yetki düşüşü bir kez yeniden okundu mu (tekrar döngüye girmesin).
+  bool _downgradeRechecked = false;
+
+  /// Yeni yetkiler mevcuttan dar mı (adminlik, turnuva, bölge ya da takım
+  /// sorumluluğu kalktı mı)?
+  bool _isDowngrade(
+    bool isAdmin,
+    Set<String> leagues,
+    List<OwnedRegion> regions,
+    List<ManagedTeam> teams,
+  ) =>
+      (value.isAdmin && !isAdmin) ||
+      !leagues.containsAll(value.ownedLeagueIds) ||
+      regions.length < value.ownedRegions.length ||
+      teams.length < value.managedTeams.length;
+
   /// Yetki sorgularından biri hata verdi mi (son yüklemede).
   bool _roleLoadFailed = false;
 
@@ -496,6 +513,34 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     final managedTeams = await _loadManagedTeams(user.id);
     final ownedRegions = await _loadOwnedRegions(user.id);
     if (keepOnError && _roleLoadFailed) return;
+    // Aynı kişide yetki birden düştüyse (arka plandan dönüşte oturum
+    // yenilenirken sorgu bir an yetkisiz çalışıp boş dönebilir) hemen
+    // uygulanmaz: kısa bir beklemeden sonra bir kez daha okunur. Aksi halde
+    // admin bir an misafir gibi görünür ve açık listeler boşalır.
+    if (keepOnError &&
+        !_downgradeRechecked &&
+        _isDowngrade(isAdmin, ownedLeagueIds, ownedRegions, managedTeams)) {
+      _downgradeRechecked = true;
+      try {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (_supabase.auth.currentUser?.id != user.id) return;
+        await _onAuthChanged(user);
+      } finally {
+        _downgradeRechecked = false;
+      }
+      return;
+    }
+    if (keepOnError &&
+        _isDowngrade(isAdmin, ownedLeagueIds, ownedRegions, managedTeams)) {
+      ErrorReporter.report(
+        StateError(
+          'Oturum yetkisi düştü (${value.role} → '
+          '${isAdmin ? 'admin' : ownedLeagueIds.isNotEmpty ? 'owner' : ownedRegions.isNotEmpty ? 'region' : managedTeams.isNotEmpty ? 'manager' : 'player'})',
+        ),
+        StackTrace.current,
+        context: 'session',
+      );
+    }
     String? refereeId;
     try {
       final r = (await _supabase.rpc('my_referee_id') ?? '').toString();
