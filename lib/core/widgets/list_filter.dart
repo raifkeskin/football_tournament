@@ -86,7 +86,11 @@ class ListFilterBar extends StatelessWidget {
     required this.counts,
     this.title = 'Filtrele',
     this.unit = 'kayıt',
+    this.trailing = const [],
   });
+
+  /// Satırın sağına hizalanan düğmeler (ör. ara, ekle).
+  final List<Widget> trailing;
 
   /// Bölümler seçime göre kurulur (ör. sezon listesi seçilen turnuvaya göre).
   final List<ListFilterSection> Function(Map<String, String> values) sections;
@@ -183,6 +187,7 @@ class ListFilterBar extends StatelessWidget {
               '$total $unit',
               style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
             ),
+            if (trailing.isNotEmpty) ...[const Spacer(), ...trailing],
           ],
         ),
         if (changed.isNotEmpty) ...[

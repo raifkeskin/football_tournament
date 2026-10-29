@@ -372,9 +372,18 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       return;
     }
 
+    // Aynı kişide (token yenileme, uzun beklemeden dönüş) yetki sorgusu
+    // geçici bir bağlantı hatasına düşerse mevcut yetkiler korunur; yoksa
+    // admin bir an misafir gibi görünür ve listeler boşalır.
+    final sameUser = value.user?.id == user.id && !value.isLoading;
+    _roleLoadFailed = false;
     final isAdmin = await _checkAdmin(user);
-    _loadProfile(user, isAdmin);
+    if (sameUser && _roleLoadFailed) return;
+    _loadProfile(user, isAdmin, keepOnError: sameUser);
   }
+
+  /// Yetki sorgularından biri hata verdi mi (son yüklemede).
+  bool _roleLoadFailed = false;
 
   /// Yetkinin tek kaynağı veritabanı: `admins.user_id`. Veritabanı kuralları
   /// (RLS) da aynı tabloya baktığı için arayüz ile yetki birbirini tutar.
@@ -387,6 +396,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           .limit(1);
       return res.isNotEmpty;
     } catch (_) {
+      _roleLoadFailed = true;
       return false;
     }
   }
@@ -402,6 +412,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           .where((id) => id.isNotEmpty)
           .toSet();
     } catch (_) {
+      _roleLoadFailed = true;
       return const <String>{};
     }
   }
@@ -427,6 +438,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
             ),
       ];
     } catch (_) {
+      _roleLoadFailed = true;
       return const <OwnedRegion>[];
     }
   }
@@ -446,6 +458,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           )
           .toList();
     } catch (_) {
+      _roleLoadFailed = true;
       return const <ManagedTeam>[];
     }
   }
@@ -460,7 +473,11 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
 
   /// Profil bilgisi: önce `app_users` (auth_uid), sonra telefonla `players`.
   /// (Önceden var olmayan `users` tablosu dinleniyordu; isim/rol hep boştu.)
-  Future<void> _loadProfile(sb.User user, bool isAdmin) async {
+  Future<void> _loadProfile(
+    sb.User user,
+    bool isAdmin, {
+    bool keepOnError = false,
+  }) async {
     _profileSub?.cancel();
 
     // Giriş e-postası "5xxxxxxxxx@masterclass.com" biçiminde.
@@ -478,6 +495,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     final ownedLeagueIds = await _loadOwnedLeagues(user.id);
     final managedTeams = await _loadManagedTeams(user.id);
     final ownedRegions = await _loadOwnedRegions(user.id);
+    if (keepOnError && _roleLoadFailed) return;
     String? refereeId;
     try {
       final r = (await _supabase.rpc('my_referee_id') ?? '').toString();
