@@ -21,6 +21,8 @@ class TeamPageTabBar extends StatelessWidget {
     required this.onChanged,
     this.labels = const ['Kadro', 'Fikstür', 'İstatistik'],
     this.indicatorColor = _accent,
+    this.filled = false,
+    this.icons = const [],
   });
 
   final int index;
@@ -30,8 +32,15 @@ class TeamPageTabBar extends StatelessWidget {
   /// Seçili sekmenin alt çizgisi (oyuncu kartında turnuva rengi).
   final Color indicatorColor;
 
+  /// true: seçili sekmenin zemini tamamen renklenir (alt çizgi yerine).
+  final bool filled;
+
+  /// Sekme adının önündeki simgeler (sırayla; null = simge yok).
+  final List<Widget?> icons;
+
   @override
   Widget build(BuildContext context) {
+    if (filled) return _buildFilled();
     return Container(
       decoration: BoxDecoration(
         border: Border(
@@ -77,6 +86,63 @@ class TeamPageTabBar extends StatelessWidget {
   }
 }
 
+extension on TeamPageTabBar {
+  Widget _buildFilled() {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: _card.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            // Yazısız (yalnız simgeli) sekme dar kalır.
+            Expanded(
+              flex: labels[i].isEmpty ? 2 : 3,
+              child: Material(
+                color: i == index ? indicatorColor : Colors.transparent,
+                borderRadius: BorderRadius.circular(11),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(11),
+                  onTap: () => onChanged(i),
+                  child: Container(
+                    height: 38,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (i < icons.length && icons[i] != null) ...[
+                            icons[i]!,
+                            if (labels[i].isNotEmpty) const SizedBox(width: 5),
+                          ],
+                          if (labels[i].isNotEmpty)
+                            Text(
+                              labels[i],
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: i == index ? Colors.white : _muted,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Takımın sezondaki maçları: yaklaşanlar önce, sonra oynananlar (yeniden
 /// eskiye). Satıra dokununca maç detayı açılır.
 class TeamFixtureTab extends StatefulWidget {
@@ -107,6 +173,14 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(TeamFixtureTab old) {
+    super.didUpdateWidget(old);
+    if (old.seasonId != widget.seasonId || old.teamId != widget.teamId) {
+      _future = _load();
+    }
   }
 
   Future<List<TeamMatch>> _load() => _cache.putIfAbsent(

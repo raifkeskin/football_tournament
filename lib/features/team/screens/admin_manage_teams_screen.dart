@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
@@ -281,9 +282,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     return s;
   }
 
-  /// Takımın kadro ekranı. Kadro sezona bağlıdır: takım tek sezondaysa
-  /// doğrudan açılır; birden fazla sezondaysa üstte sezon yılı, altta o yılın
-  /// turnuvaları seçilir (aynı yıl iki turnuvada oynayan takımlar için).
+  /// Takımın kadro ekranı (sezona bağlı); sezon sorulmadan açılır.
   Future<void> _openSquad(
     BuildContext ctx, {
     required String teamId,
@@ -354,10 +353,18 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       );
       return;
     }
-    final season = seasons.length == 1
-        ? seasons.first
-        : await _pickSquadSeason(ctx, teamName: teamName, seasons: seasons);
-    if (season == null || !ctx.mounted) return;
+    // Seçim sorulmaz: içinde bulunulan yılın sezonu (yoksa en yeni yıl),
+    // o yılın turnuvalarından adı alfabetik ilk olan. Kadro ekranında sezon
+    // ve turnuva değiştirilebilir.
+    final years = {for (final s in seasons) s.year};
+    final now = DateTime.now().year;
+    final year = years.contains(now) ? now : years.reduce(max);
+    final inYear = seasons.where((s) => s.year == year).toList()
+      ..sort(
+        (a, b) => a.league.toLowerCase().compareTo(b.league.toLowerCase()),
+      );
+    final season = inYear.first;
+    if (!ctx.mounted) return;
     await Navigator.of(ctx).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: 'TeamSquadScreen'),
@@ -371,99 +378,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     );
   }
 
-  /// Kadro için sezon seçimi: üstte yıllar (tek seçim), altta seçili yılın
-  /// turnuvaları. Turnuvaya dokununca o sezon döner.
-  Future<_SquadSeason?> _pickSquadSeason(
-    BuildContext ctx, {
-    required String teamName,
-    required List<_SquadSeason> seasons,
-  }) {
-    final years = {for (final s in seasons) s.year}.toList()
-      ..sort((a, b) => b.compareTo(a));
-    var year = years.first;
-    return showDialog<_SquadSeason>(
-      context: ctx,
-      builder: (dctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: AdminDialogCloseOverlay(
-          onClose: () => Navigator.pop(dctx),
-          child: StatefulBuilder(
-            builder: (dctx, setDState) {
-              final list = seasons.where((s) => s.year == year).toList()
-                ..sort((a, b) => _trCompare(a.league, b.league));
-              return Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(dctx).size.height * 0.8,
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 22, 16, 16),
-                decoration: adminDialogDecoration(),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AdminDialogHeader(
-                        icon: Icons.groups_outlined,
-                        title: 'Kadro',
-                        subtitle: teamName,
-                      ),
-                      AdminFormSection(
-                        title: 'Sezonlar',
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final y in years)
-                              _YearChip(
-                                label: y == 0 ? 'Diğer' : '$y',
-                                selected: y == year,
-                                onTap: () => setDState(() => year = y),
-                              ),
-                          ],
-                        ),
-                      ),
-                      AdminFormSection(
-                        title: 'Turnuvalar',
-                        child: AdminFieldGroup(
-                          children: [
-                            for (final s in list)
-                              AdminFieldRow(
-                                icon: Icons.emoji_events_outlined,
-                                label: s.name,
-                                onTap: () => Navigator.pop(dctx, s),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: Colors.white54,
-                                ),
-                                child: Text(
-                                  s.league.isEmpty ? s.name : s.league,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Takım sorumlusu: önce telefon yazılır. Telefon bir futbolcuya ya da
-  /// hesaba kayıtlıysa ad soyad kendiliğinden gelir ve değiştirilemez;
-  /// kayıtlı değilse elle yazılır. İptalde null.
   Future<({String phone, String name})?> _editManager({
     required String phone,
     required String name,
@@ -1420,8 +1334,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     return InkWell(
       onTap: openEdit,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 68),
-        padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.fromLTRB(10, 6, 2, 6),
         decoration: BoxDecoration(
           border: first
               ? null
@@ -1431,8 +1345,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         ),
         child: Row(
           children: [
-            TeamCrest(name: teamName, logoUrl: logoUrl, size: 44),
-            const SizedBox(width: 12),
+            TeamCrest(name: teamName, logoUrl: logoUrl, size: 38),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1443,11 +1357,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Row(
                     children: [
                       Icon(
@@ -1515,12 +1429,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
   Widget _letterSection(String letter, List<Map<String, dynamic>> teams) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
             child: Row(
               children: [
                 Expanded(
@@ -1584,24 +1498,35 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         ),
       );
     }
+    // Ara ve Takım Ekle filtre satırının sağında (liste için yer açılır).
+    final topActions = <Widget>[
+      if (!_searchOpen)
+        IconButton(
+          tooltip: 'Takım ara',
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFF1E293B),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+            fixedSize: const Size(42, 42),
+          ),
+          onPressed: () {
+            setState(() => _searchOpen = true);
+            revealSearchField(_searchFocus);
+          },
+          icon: const Icon(Icons.search_rounded, color: Colors.white),
+        ),
+      const SizedBox(width: 8),
+      IconButton(
+        tooltip: 'Takım Ekle',
+        style: IconButton.styleFrom(
+          backgroundColor: kAdminAccent,
+          fixedSize: const Size(42, 42),
+        ),
+        onPressed: () => _openTeamFormSheet(),
+        icon: const Icon(Icons.group_add_rounded, color: Colors.white),
+      ),
+    ];
     return AdminPageScaffold(
       title: 'Takım Yönetimi',
-      actions: [
-        if (!_searchOpen)
-          AdminBarAction(
-            icon: Icons.search_rounded,
-            tooltip: 'Takım ara',
-            onPressed: () {
-              setState(() => _searchOpen = true);
-              revealSearchField(_searchFocus);
-            },
-          ),
-        AdminBarAction(
-          icon: Icons.group_add_rounded,
-          tooltip: 'Takım Ekle',
-          onPressed: () => _openTeamFormSheet(),
-        ),
-      ],
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _teamsFuture,
         builder: (context, snapshot) {
@@ -1635,9 +1560,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               .where((t) => _matchesFilter(isAdminUser, t, _filter))
               .toList();
           final teams = all.where(_matchesTeamSearch).toList();
-          final noManager = all
-              .where((d) => (d['manager_name'] ?? '').toString().isEmpty)
-              .length;
 
           final Widget content;
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1677,12 +1599,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               color: kAdminAccent,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  4,
-                  16,
-                  kAdminFabClearance + kAdminFabStep,
-                ),
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 24),
                 children: [
                   for (final e in sections.entries)
                     _letterSection(e.key, e.value),
@@ -1695,7 +1612,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             children: [
               if (_searchOpen)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
                   child: TextField(
                     controller: _searchController,
                     focusNode: _searchFocus,
@@ -1730,10 +1647,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 ),
               if (snapshot.hasData && _mem != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
                   child: ListFilterBar(
                     title: 'Takımları filtrele',
                     unit: 'takım',
+                    trailing: topActions,
                     sections: (v) => _sections(isAdminUser, scoped, v),
                     values: _filter,
                     onChanged: (v) => setState(() => _filter = v),
@@ -1748,33 +1666,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     ),
                   ),
                 ),
-              if (snapshot.hasData)
+              // Liste yüklenemezse de ekleme düğmesi kalsın.
+              if (!(snapshot.hasData && _mem != null))
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
                   child: Row(
-                    children: [
-                      Expanded(
-                        child: _SummaryBox(
-                          value: '${all.length}',
-                          label: 'Toplam takım',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _SummaryBox(
-                          value: '${all.length - noManager}',
-                          label: 'Sorumlusu olan',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _SummaryBox(
-                          value: '$noManager',
-                          label: 'Sorumlu yok',
-                          color: noManager == 0 ? null : kAdminAmber,
-                        ),
-                      ),
-                    ],
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: topActions,
                   ),
                 ),
               Expanded(child: content),
@@ -1800,49 +1698,6 @@ class _SquadSeason {
   final String name;
   final int year;
   final String league;
-}
-
-/// Tek seçimli yıl kapsülü.
-class _YearChip extends StatelessWidget {
-  const _YearChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? kAdminAccent.withValues(alpha: 0.18)
-          : const Color(0xFF1E293B).withValues(alpha: 0.94),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(999),
-        side: BorderSide(
-          color: selected ? kAdminAccent : Colors.white.withValues(alpha: 0.08),
-        ),
-      ),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? kAdminAccent : Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _Pill extends StatelessWidget {
@@ -1872,46 +1727,6 @@ class _Pill extends StatelessWidget {
 }
 
 /// Liste üstündeki küçük sayı kutusu.
-class _SummaryBox extends StatelessWidget {
-  const _SummaryBox({required this.value, required this.label, this.color});
-
-  final String value;
-  final String label;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: color ?? Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: kAdminMuted, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class ArchiveDecoder {
   ArchiveDecoder(this.bytes);
   final List<int> bytes;

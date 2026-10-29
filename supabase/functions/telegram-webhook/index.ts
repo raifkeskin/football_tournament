@@ -81,8 +81,11 @@ Deno.serve(async (req) => {
   if (action === "acc_ok" && approved) {
     const phone = String(result.phone ?? "");
     const password = String(result.password ?? "");
+    const intro = result.kind === "reset"
+      ? `Lig Masası şifreniz yenilendi. Geçici şifreniz: ${password}\n\n`
+      : `Lig Masası hesabınız açıldı. Geçici şifreniz: ${password}\n\n`;
     const text =
-      `Lig Masası uygulamasına giriş için geçici şifreniz: ${password}\n\n` +
+      intro +
       `Giriş: ${LOGIN_URL}\n` +
       "İlk girişte kendi şifrenizi belirlemeniz istenecek.";
     footer += `\nGeçici şifre: ${password}`;
