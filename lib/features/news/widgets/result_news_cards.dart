@@ -409,7 +409,6 @@ class _PhotoResultState extends State<_PhotoResult> {
   /// tam görünsün diye alan bu orana göre açılır.
   static final Map<String, double> _aspects = {};
 
-  int _page = 0;
   final _streams = <ImageStream, ImageStreamListener>{};
 
   @override
@@ -510,7 +509,6 @@ class _PhotoResultState extends State<_PhotoResult> {
                 color: const Color(0xFF0B1220),
                 child: PageView.builder(
                   itemCount: urls.length,
-                  onPageChanged: (i) => setState(() => _page = i),
                   itemBuilder: (context, i) => GestureDetector(
                     onTap: widget.onOpen == null
                         ? null
@@ -520,31 +518,6 @@ class _PhotoResultState extends State<_PhotoResult> {
                   ),
                 ),
               ),
-              if (urls.length > 1)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: IgnorePointer(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${_page + 1}/${urls.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
@@ -726,8 +699,6 @@ class _CompactScorers extends StatelessWidget {
                   ),
               ],
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             textAlign: end ? TextAlign.right : TextAlign.left,
             style: const TextStyle(
               color: _soft,
@@ -837,7 +808,7 @@ class WeekResultsNewsCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
             child: Text(
-              week == null ? 'Haftanın sonuçları' : '$week. Hafta sonuçları',
+              week == null ? 'Haftanın Sonuçları' : '$week. Hafta Sonuçları',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 19,
@@ -879,12 +850,11 @@ class _WeekRow extends StatelessWidget {
           Flexible(
             child: Text(
               t.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               textAlign: end ? TextAlign.right : TextAlign.left,
               style: TextStyle(
                 color: win ? Colors.white : _muted,
                 fontSize: 12.5,
+                height: 1.2,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -893,12 +863,6 @@ class _WeekRow extends StatelessWidget {
         ],
       ),
     );
-    final goals = [
-      if (r.homeScorers.isNotEmpty)
-        r.homeScorers.map((s) => s.label).join(', '),
-      if (r.awayScorers.isNotEmpty)
-        r.awayScorers.map((s) => s.label).join(', '),
-    ].join(' · ');
     return InkWell(
       onTap: () => _openMatch(context, r.matchId),
       child: Container(
@@ -929,17 +893,6 @@ class _WeekRow extends StatelessWidget {
                 name(r.away, awayWin, true),
               ],
             ),
-            if (goals.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                goals,
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 11.5,
-                  height: 1.4,
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -1471,7 +1424,7 @@ Widget? autoNewsStrip(NewsItem item) {
     return _ListStrip(
       rows: [for (final r in results) (r.home, '${r.hs} – ${r.as}', r.away)],
       caption: [
-        week == null ? 'Hafta sonuçları' : '$week. hafta sonuçları',
+        week == null ? 'Hafta Sonuçları' : '$week. Hafta Sonuçları',
         '$goals gol',
       ].join(' · '),
     );
@@ -1516,9 +1469,9 @@ Widget? autoNewsStrip(NewsItem item) {
           ),
       ],
       caption: switch (day) {
-        'BUGÜN' => 'Bugünün maçları',
-        'YARIN' => 'Yarının maçları',
-        _ => 'Günün maçları',
+        'BUGÜN' => 'Bugünün Maçları',
+        'YARIN' => 'Yarının Maçları',
+        _ => 'Günün Maçları',
       },
     );
   }
