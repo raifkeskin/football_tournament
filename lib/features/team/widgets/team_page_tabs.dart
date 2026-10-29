@@ -175,6 +175,14 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
     _future = _load();
   }
 
+  @override
+  void didUpdateWidget(TeamFixtureTab old) {
+    super.didUpdateWidget(old);
+    if (old.seasonId != widget.seasonId || old.teamId != widget.teamId) {
+      _future = _load();
+    }
+  }
+
   Future<List<TeamMatch>> _load() => _cache.putIfAbsent(
     _key,
     () => PlayerProfileService().loadTeamMatches(
