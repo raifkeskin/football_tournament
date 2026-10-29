@@ -263,6 +263,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     try {
       final r = await IdentityService.addToRoster(
         matchId: t.matchId,
+        seasonId: t.seasonId,
         teamId: t.teamId,
         card: card,
         playerId: c?.playerId,

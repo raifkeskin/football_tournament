@@ -19,18 +19,21 @@ class RosterAddResult {
   final String name;
 }
 
-/// Esamede "Kadroda yok" satırı için hedef: kimliği okunan oyuncu bu maçın
-/// bu takımına eklenir.
+/// Kimliği okunan oyuncunun ekleneceği kadro: esamede "Kadroda yok" satırı
+/// ([matchId]; onaylanınca maçın esamesine de yazılır) ya da Kadroya
+/// Futbolcu Ekle kısayolu ([seasonId]; yalnız sezon kadrosu).
 class RosterTarget {
   const RosterTarget({
-    required this.matchId,
+    this.matchId,
+    this.seasonId,
     required this.teamId,
     required this.teamName,
     this.jersey,
     this.readName,
-  });
+  }) : assert(matchId != null || seasonId != null);
 
-  final String matchId;
+  final String? matchId;
+  final String? seasonId;
   final String teamId;
   final String teamName;
 
@@ -196,7 +199,8 @@ class IdentityService {
   /// ve bölge sorumlusunda doğrudan eklenir ('added'); takım sorumlusunda
   /// kadro talebi açılır ('pending'), onaylanınca maçın esamesine yazılır.
   static Future<RosterAddResult> addToRoster({
-    required String matchId,
+    String? matchId,
+    String? seasonId,
     required String teamId,
     required IdCardData card,
     String? playerId,
@@ -204,9 +208,11 @@ class IdentityService {
     String? display,
   }) async {
     final r = await _sb.rpc(
-      'identity_add_to_roster',
+      matchId != null
+          ? 'identity_add_to_roster'
+          : 'identity_add_to_season_roster',
       params: {
-        'p_match_id': matchId,
+        if (matchId != null) 'p_match_id': matchId else 'p_season_id': seasonId,
         'p_team_id': teamId,
         'p_first': card.firstName,
         'p_last': card.lastName,
