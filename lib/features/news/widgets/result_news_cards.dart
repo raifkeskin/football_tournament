@@ -162,43 +162,68 @@ class _Crest extends StatelessWidget {
   }
 }
 
-/// Kartın üst satırı: "Maç sonucu" etiketi, hafta, zaman.
+/// Kartın üst bandı: dolu etiket, kalın hafta, sağda zaman (Skor Tabelası).
 class _Header extends StatelessWidget {
   const _Header({required this.label, required this.meta});
 
   final String label;
   final String meta;
 
+  static final _week = RegExp(r'^\d+\. Hafta$');
+
   @override
   Widget build(BuildContext context) {
     final accent = _accent();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+    final parts = meta.split(' · ');
+    final week = parts.isNotEmpty && _week.hasMatch(parts.first)
+        ? parts.removeAt(0)
+        : null;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [accent.withValues(alpha: 0.18), accent.withValues(alpha: 0)],
+          stops: const [0, 0.7],
+        ),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 3),
             decoration: BoxDecoration(
+              color: accent,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: accent.withValues(alpha: 0.45)),
             ),
             child: Text(
               label.toUpperCase(),
-              style: TextStyle(
-                color: accent,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.6,
-              ),
+              style: _cond(
+                13,
+                color: _onAccent(accent),
+              ).copyWith(letterSpacing: 1),
             ),
           ),
-          const SizedBox(width: 8),
+          if (week != null) ...[
+            const SizedBox(width: 10),
+            Text(
+              week.toUpperCase(),
+              style: _cond(15, color: _soft).copyWith(letterSpacing: 0.4),
+            ),
+          ],
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              meta,
+              parts.join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: _muted, fontSize: 12),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -207,7 +232,12 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Beğeni / paylaş / sağda bağlantı.
+/// Dolu vurgu renginin üstünde okunur yazı rengi.
+Color _onAccent(Color c) =>
+    c.computeLuminance() > 0.35 ? const Color(0xFF04241A) : Colors.white;
+
+/// Alt bant: eşit bölmeler (beğeni, paylaş, Instagram) ve aralarında ince
+/// çizgi; bağlantı en sağda daha geniş bölmede.
 class _Actions extends StatelessWidget {
   const _Actions({
     required this.loggedIn,
@@ -234,73 +264,91 @@ class _Actions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = _accent();
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+    final line = Colors.white.withValues(alpha: 0.08);
+    Widget cell(
+      Widget child, {
+      required String tooltip,
+      VoidCallback? onTap,
+      int flex = 2,
+    }) => Expanded(
+      flex: flex,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(height: 48, child: Center(child: child)),
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(4, 0, 6, 0),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: loggedIn
-                ? (liked ? 'Beğeniyi geri al' : 'Beğen')
-                : 'Beğenmek için giriş yap',
-            onPressed: loggedIn ? onToggleLike : null,
-            icon: Icon(
+    );
+    final cells = <Widget>[
+      cell(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
               liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               color: liked ? _heart : Colors.white,
               size: 22,
             ),
+            const SizedBox(width: 7),
+            Text(
+              '$likeCount',
+              style: const TextStyle(
+                color: _soft,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        tooltip: loggedIn
+            ? (liked ? 'Beğeniyi geri al' : 'Beğen')
+            : 'Beğenmek için giriş yap',
+        onTap: loggedIn ? onToggleLike : null,
+      ),
+      cell(
+        const Icon(Icons.send_outlined, color: Colors.white, size: 21),
+        tooltip: 'Paylaş',
+        onTap: onShare,
+      ),
+      if (onInstagram != null)
+        cell(
+          ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (b) => const LinearGradient(
+              colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+            ).createShader(b),
+            child: const Icon(Icons.camera_alt_outlined, size: 22),
           ),
+          tooltip: 'Instagram\'da paylaş',
+          onTap: onInstagram,
+        ),
+      if (linkText != null)
+        cell(
           Text(
-            '$likeCount',
-            style: const TextStyle(
-              color: _soft,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
+            '${linkText!.toUpperCase()} →',
+            maxLines: 1,
+            style: _cond(16, color: accent).copyWith(letterSpacing: 0.4),
           ),
-          IconButton(
-            tooltip: 'Paylaş',
-            onPressed: onShare,
-            icon: const Icon(
-              Icons.send_outlined,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          if (onInstagram != null)
-            IconButton(
-              tooltip: 'Instagram\'da paylaş',
-              onPressed: onInstagram,
-              icon: ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: (b) => const LinearGradient(
-                  colors: [
-                    Color(0xFFF58529),
-                    Color(0xFFDD2A7B),
-                    Color(0xFF8134AF),
-                  ],
-                ).createShader(b),
-                child: const Icon(Icons.camera_alt_outlined, size: 21),
-              ),
-            ),
-          const Spacer(),
-          if (linkText != null)
-            TextButton(
-              onPressed: onLink,
-              child: Text(
-                '$linkText →',
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-        ],
+          tooltip: linkText!,
+          onTap: onLink,
+          flex: 3,
+        ),
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: line)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < cells.length; i++) ...[
+              if (i > 0) VerticalDivider(width: 1, thickness: 1, color: line),
+              cells[i],
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -308,8 +356,11 @@ class _Actions extends StatelessWidget {
 
 BoxDecoration _cardDecoration() => BoxDecoration(
   color: _card,
-  borderRadius: BorderRadius.circular(16),
-  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+  borderRadius: BorderRadius.circular(18),
+  border: Border.all(color: _accent().withValues(alpha: 0.22)),
+  boxShadow: const [
+    BoxShadow(color: Color(0x59000000), blurRadius: 30, offset: Offset(0, 10)),
+  ],
 );
 
 /// A: maç bitince oluşan skor kartı. Takım renkli bant + iki sütun golcüler.
@@ -609,12 +660,9 @@ class _PhotoResultState extends State<_PhotoResult> {
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       textAlign: end ? TextAlign.right : TextAlign.left,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 12.5,
-        height: 1.15,
-        fontWeight: FontWeight.w800,
-      ),
+      style: _cond(
+        name.length > 14 ? 15 : 18,
+      ).copyWith(height: 1.05, letterSpacing: 0.4),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -672,7 +720,7 @@ class _PhotoResultState extends State<_PhotoResult> {
         // Skor ve golcüler fotoğrafın altında, olabildiğince dar: maç
         // detayı başlığındaki gibi ev sahibi rengi → koyu → deplasman rengi.
         Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
@@ -691,29 +739,10 @@ class _PhotoResultState extends State<_PhotoResult> {
               Expanded(child: teamName(r.home.name, end: false)),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${r.hs} - ${r.as}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        height: 1,
-                        fontWeight: FontWeight.w900,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'MS',
-                      style: TextStyle(
-                        color: Color(0xFF10B981),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+                child: _ScoreBoard(
+                  text: '${r.hs} – ${r.as}',
+                  caption: 'MS',
+                  size: 34,
                 ),
               ),
               Expanded(child: teamName(r.away.name, end: true)),
@@ -724,8 +753,8 @@ class _PhotoResultState extends State<_PhotoResult> {
         ),
         if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
           Container(
-            color: const Color(0xFF0B1220),
-            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+            color: const Color(0xFF162033),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -733,8 +762,8 @@ class _PhotoResultState extends State<_PhotoResult> {
                   Expanded(child: _CompactScorers(r.homeScorers, end: true)),
                   Container(
                     width: 1,
-                    margin: const EdgeInsets.symmetric(horizontal: 10),
-                    color: Colors.white.withValues(alpha: 0.14),
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    color: Colors.white.withValues(alpha: 0.10),
                   ),
                   Expanded(child: _CompactScorers(r.awayScorers, end: false)),
                 ],
@@ -744,6 +773,46 @@ class _PhotoResultState extends State<_PhotoResult> {
       ],
     );
   }
+}
+
+/// Siyah tabela kutusunda iri dar skor ve altında küçük yazı.
+class _ScoreBoard extends StatelessWidget {
+  const _ScoreBoard({
+    required this.text,
+    required this.caption,
+    required this.size,
+  });
+
+  final String text;
+  final String caption;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 5, 12, 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFF060B16),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          text,
+          style: _cond(size).copyWith(
+            letterSpacing: 1,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          caption,
+          style: _cond(11, color: _accent()).copyWith(letterSpacing: 1.6),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Band extends StatelessWidget {
@@ -763,12 +832,7 @@ class _Band extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            height: 1.2,
-            fontWeight: FontWeight.w800,
-          ),
+          style: _cond(15).copyWith(height: 1.1, letterSpacing: 0.4),
         ),
       ],
     );
@@ -785,29 +849,10 @@ class _Band extends StatelessWidget {
           Expanded(child: team(r.home)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Column(
-              children: [
-                Text(
-                  '${r.hs} - ${r.as}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 38,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'MAÇ BİTTİ',
-                  style: TextStyle(
-                    color: _soft,
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+            child: _ScoreBoard(
+              text: '${r.hs} – ${r.as}',
+              caption: 'MAÇ BİTTİ',
+              size: 40,
             ),
           ),
           Expanded(child: team(r.away)),
@@ -831,26 +876,23 @@ class _CompactScorers extends StatelessWidget {
     children: [
       for (final s in scorers)
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 2),
           child: Text.rich(
             TextSpan(
               text: s.label,
               children: [
                 if (s.minuteText.isNotEmpty)
                   TextSpan(
-                    text: ' ${s.minuteText}',
-                    style: const TextStyle(
-                      color: Color(0xFF10B981),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11.5,
-                    ),
+                    text: '  ${s.minuteText}',
+                    style: _cond(15, color: _accent()),
                   ),
               ],
             ),
             textAlign: end ? TextAlign.right : TextAlign.left,
             style: const TextStyle(
               color: _soft,
-              fontSize: 12,
+              fontSize: 14,
+              height: 1.35,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -899,12 +941,16 @@ class _ScorerColumn extends StatelessWidget {
                         if (s.minuteText.isNotEmpty)
                           TextSpan(
                             text: '  ${s.minuteText}',
-                            style: const TextStyle(color: _muted, fontSize: 11),
+                            style: _cond(15, color: _accent()),
                           ),
                       ],
                     ),
                     textAlign: end ? TextAlign.right : TextAlign.left,
-                    style: const TextStyle(color: _soft, fontSize: 12.5),
+                    style: const TextStyle(
+                      color: _soft,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (end) ...[const SizedBox(width: 6), ball],
@@ -1211,12 +1257,7 @@ class MatchPreviewNewsCard extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            height: 1.2,
-            fontWeight: FontWeight.w800,
-          ),
+          style: _cond(15).copyWith(height: 1.1, letterSpacing: 0.4),
         ),
         if (t.standing.isNotEmpty) ...[
           const SizedBox(height: 2),
