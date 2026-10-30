@@ -488,13 +488,17 @@ class MatchInfoLine extends StatelessWidget {
 /// kare içinde beyaz logo.
 class _BrandIcon extends StatelessWidget {
   const _BrandIcon({
-    required this.icon,
+    this.icon,
+    this.brand,
     this.color,
     this.gradient,
     this.size = 22,
   });
 
-  final IconData icon;
+  final IconData? icon;
+
+  /// Uygulama logosu (Font Awesome); [icon] yerine.
+  final FaIconData? brand;
   final Color? color;
   final Gradient? gradient;
 
@@ -511,7 +515,7 @@ class _BrandIcon extends StatelessWidget {
     ),
   );
   static const whatsapp = _BrandIcon(
-    icon: FontAwesomeIcons.whatsapp,
+    brand: FontAwesomeIcons.whatsapp,
     color: Color(0xFF25D366),
   );
   static const mail = _BrandIcon(
@@ -519,7 +523,7 @@ class _BrandIcon extends StatelessWidget {
     color: Color(0xFF1E88E5),
   );
   static const instagram = _BrandIcon(
-    icon: FontAwesomeIcons.instagram,
+    brand: FontAwesomeIcons.instagram,
     gradient: RadialGradient(
       center: Alignment(-0.6, 1.2),
       radius: 1.5,
@@ -545,7 +549,9 @@ class _BrandIcon extends StatelessWidget {
         gradient: gradient,
         borderRadius: BorderRadius.circular(11),
       ),
-      child: FaIcon(icon, color: Colors.white, size: size),
+      child: brand != null
+          ? FaIcon(brand, color: Colors.white, size: size)
+          : Icon(icon, color: Colors.white, size: size),
     );
   }
 }

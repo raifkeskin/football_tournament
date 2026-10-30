@@ -72,7 +72,7 @@ dependencies:
   app_links: ^7.2.2
   local_auth: ^3.0.2
   flutter_secure_storage: ^11.2.0
-  font_awesome_flutter: 10.8.0
+  font_awesome_flutter: ^11.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
