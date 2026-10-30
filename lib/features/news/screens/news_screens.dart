@@ -11,6 +11,7 @@ import '../../../core/services/instagram_share.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/app_logo.dart';
+import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
@@ -184,7 +185,7 @@ class NewsVisual extends StatelessWidget {
       final week = item.week ?? (d['week'] as num?)?.toInt();
       final leagueLogo = (item.leagueLogoUrl ?? '').trim();
       final title = [
-        if (item.leagueName.isNotEmpty) item.leagueName.toUpperCase(),
+        if (item.leagueName.isNotEmpty) item.leagueName.trUpper,
         if (week != null) '$week. HAFTA',
       ].join(' · ');
       return DecoratedBox(
@@ -413,64 +414,58 @@ class _NewsListScreenState extends State<NewsListScreen> {
   @override
   Widget build(BuildContext context) {
     final accent = _accent();
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D1729),
-        foregroundColor: Colors.white,
-        titleSpacing: 0,
-        title: Text(
-          widget.pending ? 'ONAY BEKLEYEN HABERLER' : 'HABERLER',
-          style: _cond(
-            20,
-          ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.6),
-        ),
-      ),
-      body: StreamBuilder<List<NewsItem>>(
-        stream: _stream,
-        builder: (context, snap) {
-          if (snap.hasError && !snap.hasData) {
-            return const _Empty('Haberler yüklenemedi.');
-          }
-          if (!snap.hasData) {
-            return Center(child: CircularProgressIndicator(color: accent));
-          }
-          final all = snap.data!
-              .where(
-                (n) =>
-                    n.liveDrawId == null &&
-                    LeagueScope.allows(n.tournamentId) &&
-                    n.tournamentId == widget.leagueId &&
-                    (widget.regionId == null ||
-                        n.regionId == null ||
-                        n.regionId == widget.regionId),
-              )
-              .toList();
-          final items = all;
-          return CustomScrollView(
-            slivers: [
-              if (items.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _Empty(
-                    widget.pending
-                        ? 'Onay bekleyen haber yok.'
-                        : 'Henüz haber yok.',
-                  ),
+    // Üst bantta turnuva adı, altında küçük puntoyla "Haberler".
+    return BandBackPage(
+      theme: ActiveTournament.theme.value,
+      subtitle: widget.pending ? 'Onay Bekleyen Haberler' : 'Haberler',
+      child: Scaffold(
+        backgroundColor: _bg,
+        body: StreamBuilder<List<NewsItem>>(
+          stream: _stream,
+          builder: (context, snap) {
+            if (snap.hasError && !snap.hasData) {
+              return const _Empty('Haberler yüklenemedi.');
+            }
+            if (!snap.hasData) {
+              return Center(child: CircularProgressIndicator(color: accent));
+            }
+            final all = snap.data!
+                .where(
+                  (n) =>
+                      n.liveDrawId == null &&
+                      LeagueScope.allows(n.tournamentId) &&
+                      n.tournamentId == widget.leagueId &&
+                      (widget.regionId == null ||
+                          n.regionId == null ||
+                          n.regionId == widget.regionId),
                 )
-              else if (widget.pending) ...[
-                const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                SliverList.list(
-                  children: [for (final n in items) _Row(item: n)],
-                ),
-              ] else ...[
-                SliverToBoxAdapter(child: _Featured(item: items.first)),
-                SliverList.list(children: _rows(items.skip(1).toList())),
-                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                .toList();
+            final items = all;
+            return CustomScrollView(
+              slivers: [
+                if (items.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _Empty(
+                      widget.pending
+                          ? 'Onay bekleyen haber yok.'
+                          : 'Henüz haber yok.',
+                    ),
+                  )
+                else if (widget.pending) ...[
+                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                  SliverList.list(
+                    children: [for (final n in items) _Row(item: n)],
+                  ),
+                ] else ...[
+                  SliverToBoxAdapter(child: _Featured(item: items.first)),
+                  SliverList.list(children: _rows(items.skip(1).toList())),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                ],
               ],
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -825,50 +820,40 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         n.autoKind != null &&
         session.canManageRegion(n.tournamentId, n.regionId);
     final top = MediaQuery.paddingOf(context).top;
-    return Scaffold(
-      backgroundColor: _bg,
-      body: Stack(
-        children: [
-          ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              if (article == null) ...[
-                SizedBox(height: top + 56),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                  child: _ownCard(n, loggedIn),
-                ),
-              ] else ...[
-                _hero(n, top),
-                Transform.translate(
-                  offset: const Offset(0, -34),
-                  child: _Clipping(
-                    item: n,
-                    article: article,
-                    onEdit: canEdit ? () => _editHeadline(article) : null,
+    return BandBackPage(
+      theme: ActiveTournament.theme.value,
+      subtitle: 'Haberler',
+      child: Scaffold(
+        backgroundColor: _bg,
+        body: Stack(
+          children: [
+            ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                if (article == null) ...[
+                  SizedBox(height: top + 56),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                    child: _ownCard(n, loggedIn),
                   ),
-                ),
+                ] else ...[
+                  _hero(n, top),
+                  Transform.translate(
+                    offset: const Offset(0, -34),
+                    child: _Clipping(
+                      item: n,
+                      article: article,
+                      onEdit: canEdit ? () => _editHeadline(article) : null,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 90),
               ],
-              const SizedBox(height: 90),
-            ],
-          ),
-          // Geri.
-          Positioned(
-            left: 10,
-            top: top + 8,
-            child: Material(
-              color: Colors.black.withValues(alpha: 0.55),
-              shape: const CircleBorder(),
-              child: IconButton(
-                tooltip: 'Geri',
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-              ),
             ),
-          ),
-          if (article != null)
-            Positioned(left: 0, right: 0, bottom: 0, child: _bar(loggedIn)),
-        ],
+            if (article != null)
+              Positioned(left: 0, right: 0, bottom: 0, child: _bar(loggedIn)),
+          ],
+        ),
       ),
     );
   }

@@ -537,9 +537,17 @@ class PageBand {
 /// sayfalar için): [child] açıkken bant solunda geri, ortada kişinin
 /// turnuvası.
 class BandBackPage extends StatefulWidget {
-  const BandBackPage({super.key, required this.child, this.subtitle});
+  const BandBackPage({
+    super.key,
+    required this.child,
+    this.subtitle,
+    this.theme,
+  });
 
   final Widget child;
+
+  /// Verilirse bantta bu turnuvanın logosu ve adı (yoksa uygulama bandı).
+  final TournamentTheme? theme;
 
   /// Bantta uygulama adının altında küçük puntoyla sayfa adı.
   final String? subtitle;
@@ -560,6 +568,7 @@ class _BandBackPageState extends State<BandBackPage> {
     LeagueSwitchScope.setPageBand(
       route,
       PageBand(
+        theme: widget.theme,
         subtitle: widget.subtitle,
         onBack: () => Navigator.of(context).maybePop(),
       ),
