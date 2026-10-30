@@ -71,6 +71,9 @@ class ErrorReporter {
           error.toString().contains("'Null' is not a subtype")) {
         return true;
       }
+      // Cihazın bağlantısı yok (ör. oturum yenilemede DNS çözülemedi):
+      // uygulama kusuru değil; bağlantı gelince kendini toparlar.
+      if (_isTransientNetwork(error)) return true;
       report(error, stack, context: 'async');
       return true;
     };

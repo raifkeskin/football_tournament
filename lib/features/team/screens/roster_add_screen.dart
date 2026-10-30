@@ -125,7 +125,65 @@ class RosterAddFlow {
     );
   }
 
+  /// Birden çok turnuva varsa önce turnuva, sonra o turnuvanın takımları
+  /// seçilir (uzun tek listede takım aranmaz).
   static Future<RosterAddTarget?> pickTarget(
+    BuildContext context,
+    List<RosterAddTarget> targets,
+    RosterAddTarget? current,
+  ) async {
+    final bySeason = <String, List<RosterAddTarget>>{};
+    for (final t in targets) {
+      bySeason.putIfAbsent(t.seasonId, () => []).add(t);
+    }
+    var list = targets;
+    if (bySeason.length > 1) {
+      final sid = await _pickSeason(context, bySeason, current?.seasonId);
+      if (sid == null || !context.mounted) return null;
+      list = bySeason[sid]!;
+      if (list.length == 1) return list.first;
+    }
+    return _pickTeam(context, list, current);
+  }
+
+  static Future<String?> _pickSeason(
+    BuildContext context,
+    Map<String, List<RosterAddTarget>> bySeason,
+    String? currentSeasonId,
+  ) => showAdminPopup<String>(
+    context: context,
+    builder: (ctx) => Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const AdminDialogHeader(
+          icon: Icons.emoji_events_rounded,
+          title: 'Hangi turnuva?',
+          subtitle: 'Birden fazla turnuvada takım sorumlususun.',
+        ),
+        Flexible(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+            children: [
+              for (final e in bySeason.entries)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SeasonTile(
+                    label: e.value.first.tournamentLabel,
+                    teamCount: e.value.length,
+                    selected: e.key == currentSeasonId,
+                    onTap: () => Navigator.pop(ctx, e.key),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  static Future<RosterAddTarget?> _pickTeam(
     BuildContext context,
     List<RosterAddTarget> targets,
     RosterAddTarget? current,
@@ -135,10 +193,10 @@ class RosterAddFlow {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const AdminDialogHeader(
+        AdminDialogHeader(
           icon: Icons.group_add_rounded,
           title: 'Hangi kadroya ekleyeceksin?',
-          subtitle: 'Birden fazla turnuvada takım sorumlususun.',
+          subtitle: targets.first.tournamentLabel,
         ),
         Flexible(
           child: ListView(
@@ -163,6 +221,81 @@ class RosterAddFlow {
       ],
     ),
   );
+}
+
+/// Turnuva seçimi satırı: turnuva adı · sezon ve takım sayısı.
+class _SeasonTile extends StatelessWidget {
+  const _SeasonTile({
+    required this.label,
+    required this.teamCount,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final String label;
+  final int teamCount;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? kAdminAccent.withValues(alpha: 0.10)
+          : const Color(0xFF0F172A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: selected
+              ? kAdminAccent.withValues(alpha: 0.6)
+              : Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.emoji_events_rounded,
+                size: 26,
+                color: Color(0xFFFCD34D),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$teamCount takım',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _TargetTile extends StatelessWidget {
