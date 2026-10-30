@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../../core/utils/string_utils.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/instagram_share.dart';
@@ -310,16 +311,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
   late final Stream<List<NewsItem>> _stream = ServiceLocator.leagueService
       .watchNewsFeed(leagueId: widget.leagueId, pending: widget.pending);
 
-  NewsKind? _filter;
-
-  static const _filters = <(NewsKind?, String)>[
-    (null, 'Tümü'),
-    (NewsKind.result, 'Sonuçlar'),
-    (NewsKind.preview, 'Maç günü'),
-    (NewsKind.pick, 'Haftanın seçimi'),
-    (NewsKind.announcement, 'Duyurular'),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final accent = _accent();
@@ -356,39 +347,16 @@ class _NewsListScreenState extends State<NewsListScreen> {
                         n.regionId == widget.regionId),
               )
               .toList();
-          final items = _filter == null
-              ? all
-              : all.where((n) => n.kind == _filter).toList();
+          final items = all;
           return CustomScrollView(
             slivers: [
-              if (!widget.pending)
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 52,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                      children: [
-                        for (final (k, label) in _filters)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: _Chip(
-                              label: label,
-                              on: _filter == k,
-                              onTap: () => setState(() => _filter = k),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
               if (items.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: _Empty(
                     widget.pending
                         ? 'Onay bekleyen haber yok.'
-                        : 'Bu türde haber yok.',
+                        : 'Henüz haber yok.',
                   ),
                 )
               else if (widget.pending) ...[
@@ -453,42 +421,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.on, required this.onTap});
-
-  final String label;
-  final bool on;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = _accent();
-    return Material(
-      color: on ? accent : Colors.white.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: on
-                  ? (accent.computeLuminance() > 0.35
-                        ? const Color(0xFF04241A)
-                        : Colors.white)
-                  : _muted,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _Featured extends StatelessWidget {
   const _Featured({required this.item});
 
@@ -524,7 +456,7 @@ class _Featured extends StatelessWidget {
                     NewsTag(item.tag),
                     const SizedBox(height: 6),
                     Text(
-                      NewsArticle.headlineOf(item).toUpperCase(),
+                      NewsArticle.headlineOf(item).trUpper,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: _cond(22).copyWith(letterSpacing: 0.3),
@@ -587,7 +519,7 @@ class _Row extends StatelessWidget {
                       NewsTag(item.tag, small: true),
                       const SizedBox(height: 4),
                       Text(
-                        NewsArticle.headlineOf(item).toUpperCase(),
+                        NewsArticle.headlineOf(item).trUpper,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: _cond(16.5).copyWith(letterSpacing: 0.2),
@@ -1351,7 +1283,7 @@ class _ScoreBox extends StatelessWidget {
           if (!end) const SizedBox(width: 8),
           Flexible(
             child: Text(
-              t.name.toUpperCase(),
+              t.name.trUpper,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: end ? TextAlign.right : TextAlign.left,
@@ -1838,7 +1770,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 ],
                 Expanded(
                   child: Text(
-                    n.leagueName.toUpperCase(),
+                    n.leagueName.trUpper,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
