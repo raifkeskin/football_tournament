@@ -1,9 +1,12 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/instagram_share.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -655,6 +658,9 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   String? _headline;
   String? _article;
 
+  /// Instagram yüklü mü (Android / iOS).
+  late final Future<bool> _ig = InstagramShare.isAvailable();
+
   /// Onay bekleyen haber bu ekranda yayınlandı mı.
   bool _published = false;
   bool _publishing = false;
@@ -754,6 +760,22 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     }
   }
 
+  /// Haber; bu ekranda kaydedilen manşet / metinle.
+  NewsArticle _current(NewsItem n) {
+    var article = NewsArticle.of(n)!;
+    if (_headline != null) {
+      article = article.withHeadline(
+        _headline!.isEmpty ? NewsArticle.suggestions(n).first : _headline!,
+      );
+    }
+    if (_article != null) {
+      article = article.withBody(
+        _article!.isEmpty ? NewsArticle.autoBody(n) : _article!,
+      );
+    }
+    return article;
+  }
+
   String get _matchId {
     final n = widget.item;
     final id = (n.autoData?['match_id'] ?? '').toString();
@@ -766,17 +788,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     final loggedIn = AppSession.of(context).value.user != null;
     final session = AppSession.of(context).value;
     final base = NewsArticle.of(n);
-    var article = base;
-    if (article != null && _headline != null) {
-      article = article.withHeadline(
-        _headline!.isEmpty ? NewsArticle.suggestions(n).first : _headline!,
-      );
-    }
-    if (article != null && _article != null) {
-      article = article.withBody(
-        _article!.isEmpty ? NewsArticle.autoBody(n) : _article!,
-      );
-    }
+    final article = base == null ? null : _current(n);
     final canEdit =
         base != null &&
         n.autoKind != null &&
@@ -802,7 +814,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   child: _Clipping(
                     item: n,
                     article: article,
-                    onEdit: canEdit ? () => _editHeadline(article!) : null,
+                    onEdit: canEdit ? () => _editHeadline(article) : null,
                   ),
                 ),
               ],
@@ -1052,6 +1064,39 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               : 'Beğenmek için giriş yap',
           loggedIn ? _toggleLike : null,
         ),
+        // Yayındaki haber Instagram hikâyesi olarak paylaşılır.
+        if (!_pending && NewsArticle.of(n) != null)
+          FutureBuilder<bool>(
+            future: _ig,
+            builder: (context, snap) => snap.data != true
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: square(
+                      ShaderMask(
+                        blendMode: BlendMode.srcIn,
+                        shaderCallback: (b) => const LinearGradient(
+                          colors: [
+                            Color(0xFFF58529),
+                            Color(0xFFDD2A7B),
+                            Color(0xFF8134AF),
+                          ],
+                        ).createShader(b),
+                        child: const Icon(Icons.camera_alt_outlined, size: 22),
+                      ),
+                      'Instagram hikâyesinde paylaş',
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          settings: const RouteSettings(
+                            name: 'NewsStoryScreen',
+                          ),
+                          builder: (_) =>
+                              _NewsStoryScreen(item: n, article: _current(n)),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
         const SizedBox(width: 8),
         square(
           const Icon(Icons.send_outlined, color: Colors.white, size: 21),
@@ -1108,10 +1153,22 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
 /// Bantla yapıştırılmış, kenarları yırtık gazete küpürü.
 class _Clipping extends StatelessWidget {
-  const _Clipping({required this.item, required this.article, this.onEdit});
+  const _Clipping({
+    required this.item,
+    required this.article,
+    this.onEdit,
+    this.maxParagraphs,
+    this.tilt = true,
+  });
 
   final NewsItem item;
   final NewsArticle article;
+
+  /// Instagram hikâyesinde metnin ilk paragrafları.
+  final int? maxParagraphs;
+
+  /// Hafif eğik durur (hikâyede düz).
+  final bool tilt;
 
   /// Sorumluya manşeti düzenleme düğmesi.
   final VoidCallback? onEdit;
@@ -1200,10 +1257,14 @@ class _Clipping extends StatelessWidget {
             const SizedBox(height: 10),
             Container(height: 1, color: _ink.withValues(alpha: 0.45)),
             const SizedBox(height: 10),
-            for (final p in a.paragraphs)
+            for (final p in a.paragraphs.take(
+              maxParagraphs ?? a.paragraphs.length,
+            ))
               Padding(
                 padding: const EdgeInsets.only(bottom: 9),
-                child: SelectableText(p, style: body),
+                child: maxParagraphs == null
+                    ? SelectableText(p, style: body)
+                    : Text(p, style: body),
               ),
             const SizedBox(height: 4),
             Container(height: 1, color: _ink.withValues(alpha: 0.35)),
@@ -1240,7 +1301,7 @@ class _Clipping extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Transform.rotate(
-        angle: -0.018,
+        angle: tilt ? -0.018 : 0,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -1516,6 +1577,189 @@ class _HeadlineSheetState extends State<_HeadlineSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Instagram hikâyesi: 9:16 görsel (fotoğraf + gazete küpürü) önizlenir,
+/// "Hikâyede paylaş" ile Instagram'ın hikâye ekranı açılır.
+class _NewsStoryScreen extends StatefulWidget {
+  const _NewsStoryScreen({required this.item, required this.article});
+
+  final NewsItem item;
+  final NewsArticle article;
+
+  @override
+  State<_NewsStoryScreen> createState() => _NewsStoryScreenState();
+}
+
+class _NewsStoryScreenState extends State<_NewsStoryScreen> {
+  final _shot = GlobalKey();
+  bool _busy = false;
+
+  Future<void> _share() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final boundary =
+          _shot.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await boundary.toImage(
+        pixelRatio: 1080 / boundary.size.width,
+      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('Görsel oluşturulamadı.');
+      final ok = await InstagramShare.share(
+        data.buffer.asUint8List(),
+        story: true,
+      );
+      if (!ok) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Instagram\'a aktarılamadı: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.item;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Instagram hikâyesi'),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: FittedBox(
+                  child: RepaintBoundary(
+                    key: _shot,
+                    child: SizedBox(width: 360, height: 640, child: _story(n)),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFDD2A7B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _busy ? null : _share,
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(
+                    _busy ? 'Hazırlanıyor…' : 'HİKÂYEDE PAYLAŞ',
+                    style: const TextStyle(
+                      fontFamily: 'BarlowCondensed',
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Instagram\'da o an açık olan hesaptan paylaşılır.',
+                style: TextStyle(color: _muted, fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _story(NewsItem n) {
+    final logo = (n.leagueLogoUrl ?? '').trim();
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0B1220), Color(0xFF0F172A)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 300,
+            child: NewsVisual(item: n),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 250,
+            bottom: 52,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: 360,
+                child: _Clipping(
+                  item: n,
+                  article: widget.article,
+                  maxParagraphs: 2,
+                  tilt: false,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 18,
+            right: 18,
+            bottom: 14,
+            child: Row(
+              children: [
+                if (logo.isNotEmpty) ...[
+                  WebSafeImage(url: logo, width: 26, height: 26),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    n.leagueName.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
+                  ),
+                ),
+                Text(
+                  'LİG MASASI',
+                  style: _cond(
+                    14,
+                    color: _accent(),
+                  ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.8),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -15,6 +15,7 @@ import '../features/media_credits/admin_media_credits_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
+import '../features/stats/admin_stats_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
 import '../features/identity/admin_identity_screen.dart';
 import '../features/tournament_request/admin_tournament_requests_screen.dart';
@@ -306,6 +307,18 @@ class AdminPanelWidget extends StatelessWidget {
             child: Column(
               children: [
                 if (isAdmin) ...[
+                  _buildSmallActionTile(
+                    context,
+                    'İstatistikler',
+                    Icons.insights_rounded,
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        settings: const RouteSettings(name: 'AdminStatsScreen'),
+                        builder: (_) => const AdminStatsScreen(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   _buildSmallActionTile(
                     context,
                     'Şifre Talepleri',
