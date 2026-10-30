@@ -244,6 +244,10 @@ class _MainNavigatorState extends State<MainNavigator> {
       child: Scaffold(
         key: _scaffoldKey,
         onDrawerChanged: LeagueSwitchScope.setDrawerOpen,
+        // Ana sayfada yazı alanı yok: Android'in bazen kapanmış klavyenin
+        // boşluğunu bildirmeye devam etmesi ana sayfayı yarıda kesiyordu
+        // (içteki iskelet kapalıydı ama bu dıştaki küçülüyordu).
+        resizeToAvoidBottomInset: _aktifSekme != 0,
         extendBody: !kNewHomeDesign,
         // Alt çubuk yok: admin ayarı kapalıysa ya da Profil sekmesinde yönetim
         // paneli / giriş formu açıkken (gezinme bantaki ya da yan menüden).
