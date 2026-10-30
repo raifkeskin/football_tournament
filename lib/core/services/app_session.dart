@@ -549,7 +549,15 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       ErrorReporter.report(
         StateError(
           'Oturum yetkisi düştü (${value.role} → '
-          '${isAdmin ? 'admin' : ownedLeagueIds.isNotEmpty ? 'owner' : ownedRegions.isNotEmpty ? 'region' : managedTeams.isNotEmpty ? 'manager' : 'player'})',
+          '${isAdmin
+              ? 'admin'
+              : ownedLeagueIds.isNotEmpty
+              ? 'owner'
+              : ownedRegions.isNotEmpty
+              ? 'region'
+              : managedTeams.isNotEmpty
+              ? 'manager'
+              : 'player'})',
         ),
         StackTrace.current,
         context: 'session',

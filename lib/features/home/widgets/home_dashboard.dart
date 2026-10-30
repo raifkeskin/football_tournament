@@ -24,6 +24,9 @@ import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import 'home_news_strip.dart';
+import '../../news/screens/news_screens.dart';
+import '../../tournament/models/league_extras.dart';
+import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
 import 'overdue_results_banner.dart';
@@ -1330,6 +1333,34 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           const SizedBox(height: 12),
         ],
+        // Onay bekleyen otomatik haberler (admin, kurucu başkan, bölge
+        // sorumlusu); yeni haberler açılana dek yalnız admin.
+        if ((session.isAdmin || AppSettings.newsScreenEnabled.value) &&
+            (session.panelLeagueIds?.contains(widget.league.id) ?? true))
+          StreamBuilder<List<NewsItem>>(
+            stream: ServiceLocator.leagueService.watchNewsFeed(
+              leagueId: widget.league.id,
+              pending: true,
+            ),
+            builder: (context, snap) {
+              final n = (snap.data ?? const <NewsItem>[])
+                  .where((x) => x.tournamentId == widget.league.id)
+                  .length;
+              if (n == 0) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _alert(
+                  '$n haber onayını bekliyor. Manşeti düzenleyip '
+                  'yayınlamak için dokun.',
+                  onTap: () => openNewsList(
+                    context,
+                    leagueId: widget.league.id,
+                    pending: true,
+                  ),
+                ),
+              );
+            },
+          ),
         // Son dakika haber kartı (mevcut bileşen).
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
         // Yeni haberler (Kart Akışı) açılana dek yalnız admin görür.

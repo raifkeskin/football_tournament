@@ -660,7 +660,7 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data, link_url';
+      'auto_kind, match_id, week, auto_data, link_url, headline, pending_until';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -766,6 +766,10 @@ class SupabaseLeagueService implements ILeagueService {
       linkUrl: (r['link_url'] ?? '').toString().trim().isEmpty
           ? null
           : r['link_url'].toString().trim(),
+      pendingUntil: _readDate(r['pending_until']),
+      headline: (r['headline'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['headline'].toString().trim(),
       // RLS yalnızca kullanıcının kendi beğenisini döndürür.
       likedByMe:
           r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
@@ -865,13 +869,17 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   @override
-  Stream<List<NewsItem>> watchNewsFeed({String? leagueId, String? seasonId}) {
+  Stream<List<NewsItem>> watchNewsFeed({
+    String? leagueId,
+    String? seasonId,
+    bool pending = false,
+  }) {
     final id = (leagueId ?? '').trim();
     final sid = (seasonId ?? '').trim();
     final uid = _client.auth.currentUser?.id;
     // Aynı kullanıcı + filtre için tek akış: build içinde çağrılsa da yeniden
     // bağlanmaz; giriş/çıkışta "beğendim mi" bilgisi doğru kullanıcıya ait olur.
-    return _newsFeeds.putIfAbsent('${uid ?? '-'}|$id|$sid', () {
+    return _newsFeeds.putIfAbsent('${uid ?? '-'}|$id|$sid|$pending', () {
       // Turnuva sezondan gelir; turnuvaya göre süzmek için iç birleşim.
       final season = sid.isEmpty && id.isNotEmpty
           ? 'seasons!inner(league_id, leagues(name, logo_url, is_private))'
@@ -892,10 +900,14 @@ class SupabaseLeagueService implements ILeagueService {
                   ? ''
                   : ' | seasons.league_id=$id'}',
         );
-        var query = _client
-            .from('news')
-            .select(select)
-            .eq('is_published', true);
+        // Onay bekleyenler: yalnız sorumlular okur (RLS).
+        var query = pending
+            ? _client
+                  .from('news')
+                  .select(select)
+                  .eq('is_published', false)
+                  .not('pending_until', 'is', null)
+            : _client.from('news').select(select).eq('is_published', true);
         if (sid.isNotEmpty) {
           query = query.eq('season_id', sid);
         } else if (id.isNotEmpty) {
@@ -956,6 +968,18 @@ class SupabaseLeagueService implements ILeagueService {
         }
       });
     });
+  }
+
+  @override
+  Future<void> setNewsHeadline({
+    required String newsId,
+    String? headline,
+  }) async {
+    final h = (headline ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    await _client
+        .from('news')
+        .update({'headline': h.isEmpty ? null : h})
+        .eq('id', newsId);
   }
 
   @override

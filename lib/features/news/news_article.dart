@@ -86,12 +86,80 @@ class NewsArticle {
   /// Küpürle anlatılamayan türler (günün programı, Haftanın Seçimi,
   /// Instagram) için null: detayda haberin kendi kartı gösterilir.
   static NewsArticle? of(NewsItem n) {
+    final a = _auto(n);
+    final h = (n.headline ?? '').trim();
+    if (a == null || h.isEmpty) return a;
+    return NewsArticle(
+      kicker: a.kicker,
+      headline: h,
+      deck: a.deck,
+      paragraphs: a.paragraphs,
+      home: a.home,
+      away: a.away,
+      hs: a.hs,
+      as: a.as,
+    );
+  }
+
+  NewsArticle withHeadline(String h) => NewsArticle(
+    kicker: kicker,
+    headline: h,
+    deck: deck,
+    paragraphs: paragraphs,
+    home: home,
+    away: away,
+    hs: hs,
+    as: as,
+  );
+
+  /// Kurallarla yazılan haber (sorumlunun manşeti uygulanmadan).
+  static NewsArticle? _auto(NewsItem n) {
     final d = n.autoData;
     if (n.isMatchResult && d != null) return _result(n, d);
     if (n.isWeekResults && d != null) return _week(n, d);
     if (n.isMatchPreview && d != null) return _preview(n, d);
     if (n.autoKind == null && n.liveDrawId == null) return _manual(n);
     return null;
+  }
+
+  /// Manşet düzenlerken sunulan hazır öneriler: kuralın seçtiği manşet ve
+  /// skora göre diğer standart kalıplar.
+  static List<String> suggestions(NewsItem n) {
+    final a = _auto(n);
+    if (a == null) return const [];
+    final out = <String>[a.headline];
+    final home = a.home, away = a.away, hs = a.hs, as = a.as;
+    if (n.isMatchResult &&
+        home != null &&
+        away != null &&
+        hs != null &&
+        as != null) {
+      final sc = _score(hs, as);
+      out.add('${home.name} $sc ${away.name}');
+      if (hs == as) {
+        out.add('${home.name} ile ${away.name} puanları paylaştı: $sc');
+      } else {
+        final w = hs > as ? home : away;
+        out.add('${w.name} 3 puanı aldı: $sc');
+        out.add('${w.name} kazandı: $sc');
+      }
+      // 2+ gol atan oyuncular.
+      final d = n.autoData!;
+      for (final side in ['home', 'away']) {
+        final team = side == 'home' ? home : away;
+        for (final m in _scorers(d, side)) {
+          final c = (m['n'] as num?)?.toInt() ?? 1;
+          if (c >= 2 && m['og'] != true) {
+            out.add('${m['name']} $c gol attı, ${team.name} $sc');
+          }
+        }
+      }
+    }
+    final seen = <String>{};
+    return [
+      for (final h in out)
+        if (seen.add(h)) h,
+    ];
   }
 
   /// Listede ve kartta görünen başlık.
@@ -265,10 +333,11 @@ class NewsArticle {
       headline = '${win.name} farka koştu: $sc';
     } else if (hero != null) {
       headline = '$hero $heroGoals gol attı, ${win.name} kazandı: $sc';
-    } else if (as > hs) {
-      headline = '${away.name} deplasmanda kazandı: $sc';
+    } else if ((hs - as).abs() == 1) {
+      // Tüm maçlar aynı sahada oynanabilir: ev sahibi / deplasman yazılmaz.
+      headline = '${win.name} tek golle kazandı: $sc';
     } else {
-      headline = '${home.name} sahasında kazandı: $sc';
+      headline = '${win.name} net kazandı: $sc';
     }
 
     // Özet satırı ve paragraflar.
