@@ -1780,12 +1780,36 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             height: 300,
             child: n.imageUrls.isEmpty
                 ? NewsVisual(item: n)
-                : WebSafeImage(url: n.imageUrls[_photo], fit: BoxFit.cover),
+                // Takım fotoğrafı kırpılmaz (kenardaki oyuncular da görünür);
+                // boşluğu aynı fotoğrafın bulanık hâli doldurur.
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ImageFiltered(
+                        imageFilter: ui.ImageFilter.blur(
+                          sigmaX: 18,
+                          sigmaY: 18,
+                        ),
+                        child: WebSafeImage(
+                          url: n.imageUrls[_photo],
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: WebSafeImage(
+                          url: n.imageUrls[_photo],
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
           Positioned(
             left: 0,
             right: 0,
-            top: 250,
+            top: 262,
             bottom: 52,
             child: FittedBox(
               fit: BoxFit.scaleDown,
