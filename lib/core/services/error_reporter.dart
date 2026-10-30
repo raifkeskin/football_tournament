@@ -37,6 +37,13 @@ class ErrorReporter {
 
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
+      // Resim indirirken anlık bağlantı kopması (ağ değişti, uygulama arka
+      // plandan döndü): resim kendi yedeğini gösterir, sonra yeniden
+      // yüklenir; hata kaydına yazılmaz.
+      if (details.library == 'image resource service' &&
+          _isTransientNetwork(details.exception)) {
+        return;
+      }
       // Taşma (overflow) yalnızca görsel bir uyarıdır (release'de hiç
       // bildirilmez): ekranı bozmaz, kart açılmaz.
       final overflow = details.exception.toString().contains('overflowed');
@@ -110,6 +117,24 @@ class ErrorReporter {
   static String? get version => _version;
 
   /// Hatayı bir kez (oturum başına parmak izi) sunucuya yazar.
+  /// Geçici ağ hataları (cihazın bağlantısı; uygulama kusuru değil).
+  static bool _isTransientNetwork(Object error) {
+    final m = error.toString();
+    const signs = [
+      "Can't assign requested address",
+      'Failed host lookup',
+      'Connection reset',
+      'Connection closed',
+      'Connection refused',
+      'Connection abort',
+      'Network is unreachable',
+      'Software caused connection abort',
+      'timed out',
+      'SocketException',
+    ];
+    return signs.any(m.contains);
+  }
+
   static void report(
     Object error,
     StackTrace? stack, {
