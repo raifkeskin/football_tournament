@@ -41,6 +41,21 @@ Future<XFile?> cropPortraitPhotoFromUrl(
   }
 }
 
+/// Yuvarlak profil resmi (ör. medya künyesi) için kare kadraj; galeriden
+/// seçer, vazgeçilirse null.
+Future<XFile?> pickAndCropAvatarPhoto(BuildContext context) async {
+  final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+  if (picked == null) return null;
+  final bytes = await picked.readAsBytes();
+  if (!context.mounted) return null;
+  return Navigator.of(context).push<XFile>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _PhotoCropScreen(bytes: bytes, circle: true),
+    ),
+  );
+}
+
 /// Kadraj ekranı: fotoğraf sürüklenir, iki parmakla ya da kaydırıcıyla
 /// yakınlaştırılır. Dikdörtgen çerçeve oyuncu kartını, içindeki daire yuvarlak
 /// görünümleri gösterir. Kesilmiş JPEG döner.
@@ -54,9 +69,12 @@ Future<XFile?> cropPortraitPhoto(BuildContext context, Uint8List bytes) {
 }
 
 class _PhotoCropScreen extends StatefulWidget {
-  const _PhotoCropScreen({required this.bytes});
+  const _PhotoCropScreen({required this.bytes, this.circle = false});
 
   final Uint8List bytes;
+
+  /// Kare çerçeve, yalnız daire görünür (yuvarlak profil resmi).
+  final bool circle;
 
   @override
   State<_PhotoCropScreen> createState() => _PhotoCropScreenState();
@@ -205,11 +223,12 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
             builder: (context, c) {
               final maxW = math.min(c.maxWidth - 48, 420.0);
               final maxH = c.maxHeight - 32;
+              final aspect = widget.circle ? 1.0 : kPortraitPhotoAspect;
               var fw = maxW;
-              var fh = fw / kPortraitPhotoAspect;
+              var fh = fw / aspect;
               if (fh > maxH) {
                 fh = maxH;
-                fw = fh * kPortraitPhotoAspect;
+                fw = fh * aspect;
               }
               _place(Size(fw, fh));
               final origin = Offset(
@@ -252,6 +271,7 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
                         child: CustomPaint(
                           painter: _FramePainter(
                             Rect.fromLTWH(origin.dx, origin.dy, fw, fh),
+                            circle: widget.circle,
                           ),
                         ),
                       ),
@@ -283,13 +303,16 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
             ],
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
           child: Text(
-            'Sürükleyerek kaydırın, iki parmakla büyütün. Çerçeve oyuncu '
-            'kartında, daire yuvarlak fotoğraflarda görünen alandır.',
+            widget.circle
+                ? 'Sürükleyerek kaydırın, iki parmakla büyütün. Daire, '
+                      'görünecek alandır.'
+                : 'Sürükleyerek kaydırın, iki parmakla büyütün. Çerçeve oyuncu '
+                      'kartında, daire yuvarlak fotoğraflarda görünen alandır.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
           ),
         ),
       ],
@@ -299,12 +322,30 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
 
 /// Çerçeve dışını karartır; çerçeveyi ve içindeki daireyi çizer.
 class _FramePainter extends CustomPainter {
-  _FramePainter(this.frame);
+  _FramePainter(this.frame, {this.circle = false});
 
   final Rect frame;
+  final bool circle;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (circle) {
+      canvas.drawPath(
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Offset.zero & size)
+          ..addOval(frame),
+        Paint()..color = Colors.black.withValues(alpha: 0.62),
+      );
+      canvas.drawOval(
+        frame,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = Colors.white,
+      );
+      return;
+    }
     final r = RRect.fromRectAndRadius(frame, const Radius.circular(10));
     canvas.drawPath(
       Path()
@@ -332,7 +373,8 @@ class _FramePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FramePainter old) => old.frame != frame;
+  bool shouldRepaint(_FramePainter old) =>
+      old.frame != frame || old.circle != circle;
 }
 
 /// Kesme işi: oranlar (x, y, w, h) resmin yönü düzeltilmiş boyutuna göre.

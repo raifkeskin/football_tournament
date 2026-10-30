@@ -8,6 +8,7 @@ import '../../core/services/app_session.dart';
 import '../../core/services/image_upload_service.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
+import '../../core/widgets/photo_crop_screen.dart';
 import '../../core/widgets/picked_image.dart';
 import '../../core/widgets/web_safe_image.dart';
 import '../auth/widgets/phone_input.dart';
@@ -464,7 +465,7 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
   }
 
   Future<void> _pickAvatar() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    final picked = await pickAndCropAvatarPhoto(context);
     if (picked == null || !mounted) return;
     setState(() {
       _newAvatar = picked;
