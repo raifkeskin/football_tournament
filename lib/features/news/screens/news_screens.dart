@@ -651,8 +651,9 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   bool _busy = false;
   int _page = 0;
 
-  /// Bu ekranda kaydedilen manşet ('' = otomatiğe dönüldü).
+  /// Bu ekranda kaydedilen manşet ve metin ('' = otomatiğe dönüldü).
   String? _headline;
+  String? _article;
 
   /// Onay bekleyen haber bu ekranda yayınlandı mı.
   bool _published = false;
@@ -685,7 +686,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
   Future<void> _editHeadline(NewsArticle current) async {
     final n = widget.item;
-    final result = await showModalBottomSheet<String>(
+    final result = await showModalBottomSheet<(String, String)>(
       context: context,
       isScrollControlled: true,
       backgroundColor: _card,
@@ -694,26 +695,35 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       ),
       builder: (_) => _HeadlineSheet(
         current: current.headline,
+        currentBody: current.paragraphs.join('\n\n'),
+        autoBody: NewsArticle.autoBody(n),
         suggestions: NewsArticle.suggestions(n),
-        custom: (_headline ?? n.headline ?? '').isNotEmpty,
+        custom:
+            (_headline ?? n.headline ?? '').isNotEmpty ||
+            (_article ?? n.article ?? '').isNotEmpty,
       ),
     );
     if (result == null || !mounted) return;
+    final (headline, article) = result;
     try {
       await ServiceLocator.leagueService.setNewsHeadline(
         newsId: n.id,
-        headline: result,
+        headline: headline,
+        article: article,
       );
       if (!mounted) return;
-      setState(() => _headline = result.trim());
+      setState(() {
+        _headline = headline.trim();
+        _article = article.trim();
+      });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Manşet kaydedildi.')));
+      ).showSnackBar(const SnackBar(content: Text('Haber kaydedildi.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Manşet kaydedilemedi: $e')));
+      ).showSnackBar(SnackBar(content: Text('Haber kaydedilemedi: $e')));
     }
   }
 
@@ -756,11 +766,17 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     final loggedIn = AppSession.of(context).value.user != null;
     final session = AppSession.of(context).value;
     final base = NewsArticle.of(n);
-    final article = base == null || _headline == null
-        ? base
-        : base.withHeadline(
-            _headline!.isEmpty ? NewsArticle.suggestions(n).first : _headline!,
-          );
+    var article = base;
+    if (article != null && _headline != null) {
+      article = article.withHeadline(
+        _headline!.isEmpty ? NewsArticle.suggestions(n).first : _headline!,
+      );
+    }
+    if (article != null && _article != null) {
+      article = article.withBody(
+        _article!.isEmpty ? NewsArticle.autoBody(n) : _article!,
+      );
+    }
     final canEdit =
         base != null &&
         n.autoKind != null &&
@@ -786,7 +802,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   child: _Clipping(
                     item: n,
                     article: article,
-                    onEdit: canEdit ? () => _editHeadline(article) : null,
+                    onEdit: canEdit ? () => _editHeadline(article!) : null,
                   ),
                 ),
               ],
@@ -1154,7 +1170,7 @@ class _Clipping extends StatelessWidget {
                 ),
                 if (onEdit != null)
                   IconButton(
-                    tooltip: 'Manşeti düzenle',
+                    tooltip: 'Haberi düzenle',
                     onPressed: onEdit,
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.edit_outlined, color: _ink2),
@@ -1341,19 +1357,23 @@ class _TornClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant _TornClipper old) => old.seed != seed;
 }
 
-/// Manşet düzenleme: serbest yazı, hazır öneriler, otomatiğe dönüş.
-/// Kaydedilen metni döndürür ('' = kurallarla yazılan manşet).
+/// Haberi düzenleme: manşet (hazır önerilerle) ve metin; otomatiğe dönüş.
+/// (manşet, metin) döndürür; '' = kurallarla yazılan.
 class _HeadlineSheet extends StatefulWidget {
   const _HeadlineSheet({
     required this.current,
+    required this.currentBody,
+    required this.autoBody,
     required this.suggestions,
     required this.custom,
   });
 
   final String current;
+  final String currentBody;
+  final String autoBody;
   final List<String> suggestions;
 
-  /// Şu anki manşet elle yazılmış mı.
+  /// Manşet ya da metin elle yazılmış mı.
   final bool custom;
 
   @override
@@ -1361,104 +1381,140 @@ class _HeadlineSheet extends StatefulWidget {
 }
 
 class _HeadlineSheetState extends State<_HeadlineSheet> {
-  late final _ctrl = TextEditingController(text: widget.current);
+  late final _ctrl = TextEditingController(text: _plain(widget.current));
+  late final _body = TextEditingController(text: _plain(widget.currentBody));
+
+  /// Satır kırılmasın diye eklenen görünmez işaretler alanda görünmez.
+  static String _plain(String s) =>
+      s.replaceAll('\u2060', '').replaceAll('\u00A0', ' ');
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _body.dispose();
     super.dispose();
   }
+
+  InputDecoration get _field => InputDecoration(
+    filled: true,
+    fillColor: _bg,
+    counterStyle: const TextStyle(color: _muted),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+  );
+
+  Widget _label(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      t,
+      style: const TextStyle(
+        color: _muted,
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final accent = _accent();
-    final auto = widget.suggestions.isEmpty ? '' : widget.suggestions.first;
+    final auto = _plain(
+      widget.suggestions.isEmpty ? '' : widget.suggestions.first,
+    );
+    final autoBody = _plain(widget.autoBody);
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        16 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'MANŞETİ DÜZENLE',
-              style: _cond(18).copyWith(letterSpacing: 1),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _ctrl,
-              maxLength: 140,
-              maxLines: 3,
-              minLines: 1,
-              textCapitalization: TextCapitalization.sentences,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: _bg,
-                counterStyle: const TextStyle(color: _muted),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'HAZIR ÖNERİLER',
-              style: TextStyle(
-                color: _muted,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final s in widget.suggestions)
-                  ActionChip(
-                    label: Text(s),
-                    labelStyle: const TextStyle(color: _soft, fontSize: 13),
-                    backgroundColor: _card2,
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                    onPressed: () => setState(() => _ctrl.text = s),
+                Text(
+                  'HABERİ DÜZENLE',
+                  style: _cond(18).copyWith(letterSpacing: 1),
+                ),
+                const SizedBox(height: 12),
+                _label('MANŞET'),
+                TextField(
+                  controller: _ctrl,
+                  maxLength: 140,
+                  maxLines: 3,
+                  minLines: 1,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  decoration: _field,
+                ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final s in widget.suggestions)
+                      ActionChip(
+                        label: Text(_plain(s)),
+                        labelStyle: const TextStyle(color: _soft, fontSize: 13),
+                        backgroundColor: _card2,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                        onPressed: () => setState(() => _ctrl.text = _plain(s)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _label('HABER METNİ · paragraflar arasında boş satır'),
+                TextField(
+                  controller: _body,
+                  maxLength: 4000,
+                  minLines: 6,
+                  maxLines: 14,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.4,
                   ),
+                  decoration: _field,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (widget.custom)
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(('', '')),
+                        child: const Text(
+                          'Otomatiğe dön',
+                          style: TextStyle(color: _muted),
+                        ),
+                      ),
+                    const Spacer(),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: accent),
+                      onPressed: () {
+                        final t = _ctrl.text.trim();
+                        final b = _body.text.trim();
+                        // Otomatikle aynıysa elle yazılmış sayılmaz.
+                        Navigator.of(
+                          context,
+                        ).pop((t == auto ? '' : t, b == autoBody ? '' : b));
+                      },
+                      child: const Text('Kaydet'),
+                    ),
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                if (widget.custom)
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(''),
-                    child: const Text(
-                      'Otomatiğe dön',
-                      style: TextStyle(color: _muted),
-                    ),
-                  ),
-                const Spacer(),
-                FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: accent),
-                  onPressed: () {
-                    final t = _ctrl.text.trim();
-                    // Otomatik manşetle aynıysa elle manşet kaydedilmez.
-                    Navigator.of(context).pop(t == auto ? '' : t);
-                  },
-                  child: const Text('Kaydet'),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
