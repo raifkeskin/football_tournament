@@ -157,6 +157,21 @@ flutter:
           weight: 700
         - asset: assets/fonts/Barlow-ExtraBold.ttf
           weight: 800
+    # Haber detayındaki gazete küpürü (OFL, assets/fonts/OFL-PlayfairDisplay.txt
+    # ve OFL-OldStandard.txt); Latin + Türkçe harflere küçültülmüş.
+    - family: PlayfairDisplay
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Black.ttf
+          weight: 900
+    - family: OldStandard
+      fonts:
+        - asset: assets/fonts/OldStandard-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/OldStandard-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/OldStandard-Bold.ttf
+          weight: 700
   # fonts:
   #   - family: Schyler
   #     fonts:

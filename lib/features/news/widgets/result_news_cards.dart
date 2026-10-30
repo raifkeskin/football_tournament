@@ -113,6 +113,10 @@ class _Result {
   final List<_Scorer> awayScorers;
 }
 
+/// Haberin maçını Maç Detayı ekranında açar.
+Future<void> openNewsMatch(BuildContext context, String matchId) =>
+    _openMatch(context, matchId);
+
 Future<void> _openMatch(BuildContext context, String matchId) async {
   if (matchId.isEmpty) return;
   final nav = Navigator.of(context);

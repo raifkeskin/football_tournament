@@ -23,6 +23,8 @@ import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
+import 'home_news_strip.dart';
+import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
@@ -1330,12 +1332,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ],
         // Son dakika haber kartı (mevcut bileşen).
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
-        HomeNewsCard(
-          // Panelin kendi kenar boşluğu var; kart diğerleriyle aynı genişlikte.
-          inset: 0,
-          leagueId: widget.league.id,
-          regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
-        ),
+        // Yeni haberler (Kart Akışı) açılana dek yalnız admin görür.
+        if (session.isAdmin || AppSettings.newsScreenEnabled.value)
+          HomeNewsStrip(
+            leagueId: widget.league.id,
+            regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
+          )
+        else
+          HomeNewsCard(
+            // Panelin kendi kenar boşluğu var; kart diğerleriyle aynı genişlikte.
+            inset: 0,
+            leagueId: widget.league.id,
+            regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
+          ),
         if (thisWeekMatches.isNotEmpty) ...[
           _sectionHeader(
             'BU HAFTA · $thisWeek. HAFTA',
