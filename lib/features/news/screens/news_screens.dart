@@ -459,7 +459,9 @@ class _NewsListScreenState extends State<NewsListScreen> {
                   ),
                 ] else ...[
                   SliverToBoxAdapter(child: _Featured(item: items.first)),
-                  SliverList.list(children: _rows(items.skip(1).toList())),
+                  SliverList.list(
+                    children: [for (final n in items.skip(1)) _Row(item: n)],
+                  ),
                   const SliverToBoxAdapter(child: SizedBox(height: 32)),
                 ],
               ],
@@ -468,50 +470,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
         ),
       ),
     );
-  }
-
-  /// Satırlar; hafta (yoksa gün) değişince küçük başlık.
-  List<Widget> _rows(List<NewsItem> items) {
-    const months = [
-      'OCAK',
-      'ŞUBAT',
-      'MART',
-      'NİSAN',
-      'MAYIS',
-      'HAZİRAN',
-      'TEMMUZ',
-      'AĞUSTOS',
-      'EYLÜL',
-      'EKİM',
-      'KASIM',
-      'ARALIK',
-    ];
-    String group(NewsItem n) {
-      final w = n.week ?? (n.autoData?['week'] as num?)?.toInt();
-      if (w != null) return '$w. HAFTA';
-      final t = n.createdAt?.toLocal();
-      return t == null ? '' : '${t.day} ${months[t.month - 1]}';
-    }
-
-    final out = <Widget>[];
-    String? last;
-    for (final n in items) {
-      final g = group(n);
-      if (g != last && g.isNotEmpty) {
-        out.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
-            child: Text(
-              g,
-              style: _cond(13, color: _muted).copyWith(letterSpacing: 1.5),
-            ),
-          ),
-        );
-        last = g;
-      }
-      out.add(_Row(item: n));
-    }
-    return out;
   }
 }
 
