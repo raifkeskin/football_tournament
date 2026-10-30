@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../news/screens/news_screens.dart';
+
 import '../../core/push/push_bridge_stub.dart'
     if (dart.library.js_interop) '../../core/push/push_bridge_web.dart'
     as bridge;
@@ -86,6 +88,9 @@ class NotificationRouter {
         if (ref != null) await _openMatch(context, ref, openReferee: true);
       case 'news':
         if (ref != null) await _openNews(context, ref);
+      // Onaya düşen otomatik haber: turnuvanın onay bekleyen haberleri.
+      case 'newsreview':
+        if (ref != null) await _openNewsReview(context, ref);
       // Kadro talebi, etiketsiz Instagram gönderisi (approval-ig…) ve
       // yayın linki uyuşmazlığı (yt-conflict-…) Bekleyen Onaylar'da.
       case 'approval':
@@ -104,6 +109,17 @@ class NotificationRouter {
           ),
         );
     }
+  }
+
+  static Future<void> _openNewsReview(BuildContext context, String id) async {
+    final row = await Supabase.instance.client
+        .from('news')
+        .select('seasons(league_id)')
+        .eq('id', id)
+        .maybeSingle();
+    final leagueId = ((row?['seasons'] as Map?)?['league_id'] ?? '').toString();
+    if (!context.mounted || leagueId.isEmpty) return;
+    openNewsList(context, leagueId: leagueId, pending: true);
   }
 
   /// Haberin turnuva sayfası, Haberler sekmesi; haber açık gelir.
