@@ -312,7 +312,8 @@ class NewsArticle {
 
     // Başlık: maçın akışından standart manşet.
     String back(String score) =>
-        '$score${_fromSuffix(int.parse(score.split('–').last))} döndü';
+        // Skorda satır kırılmasın diye görünmez işaret var; sayı ayıklanır.
+        '$score${_fromSuffix(int.tryParse(score.split('–').last.replaceAll('\u2060', '')) ?? 0)} döndü';
     final win = hs == as ? null : (hs > as ? home : away);
     final winWorst = hs > as ? homeWorst : awayWorst;
     final winWorstScore = hs > as ? homeWorstScore : awayWorstScore;
