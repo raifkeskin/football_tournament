@@ -25,6 +25,13 @@ const _paper2 = Color(0xFFE6DBC2);
 const _ink = Color(0xFF1D1A16);
 const _ink2 = Color(0xFF5A5246);
 const _kickRed = Color(0xFF8A1C1C);
+const _amber = Color(0xFFFBBF24);
+
+/// "14:05"
+String hhmm(DateTime t) {
+  final l = t.toLocal();
+  return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+}
 
 Color _accent() =>
     ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
@@ -61,11 +68,16 @@ void openNewsList(
   BuildContext context, {
   required String leagueId,
   String? regionId,
+  bool pending = false,
 }) {
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       settings: const RouteSettings(name: 'NewsListScreen'),
-      builder: (_) => NewsListScreen(leagueId: leagueId, regionId: regionId),
+      builder: (_) => NewsListScreen(
+        leagueId: leagueId,
+        regionId: regionId,
+        pending: pending,
+      ),
     ),
   );
 }
@@ -274,10 +286,18 @@ class _WeekLine extends StatelessWidget {
 /// Turnuvanın tüm haberleri: türe göre süzülür; en yenisi büyük kartla,
 /// diğerleri haftaya göre gruplu satırlarla. Dokununca detay açılır.
 class NewsListScreen extends StatefulWidget {
-  const NewsListScreen({super.key, required this.leagueId, this.regionId});
+  const NewsListScreen({
+    super.key,
+    required this.leagueId,
+    this.regionId,
+    this.pending = false,
+  });
 
   final String leagueId;
   final String? regionId;
+
+  /// Onay bekleyen otomatik haberler (sorumlular için).
+  final bool pending;
 
   @override
   State<NewsListScreen> createState() => _NewsListScreenState();
@@ -285,7 +305,7 @@ class NewsListScreen extends StatefulWidget {
 
 class _NewsListScreenState extends State<NewsListScreen> {
   late final Stream<List<NewsItem>> _stream = ServiceLocator.leagueService
-      .watchNewsFeed(leagueId: widget.leagueId);
+      .watchNewsFeed(leagueId: widget.leagueId, pending: widget.pending);
 
   NewsKind? _filter;
 
@@ -307,7 +327,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
         foregroundColor: Colors.white,
         titleSpacing: 0,
         title: Text(
-          'HABERLER',
+          widget.pending ? 'ONAY BEKLEYEN HABERLER' : 'HABERLER',
           style: _cond(
             20,
           ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.6),
@@ -338,32 +358,42 @@ class _NewsListScreenState extends State<NewsListScreen> {
               : all.where((n) => n.kind == _filter).toList();
           return CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 52,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                    children: [
-                      for (final (k, label) in _filters)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: _Chip(
-                            label: label,
-                            on: _filter == k,
-                            onTap: () => setState(() => _filter = k),
+              if (!widget.pending)
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 52,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                      children: [
+                        for (final (k, label) in _filters)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: _Chip(
+                              label: label,
+                              on: _filter == k,
+                              onTap: () => setState(() => _filter = k),
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
               if (items.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
-                  child: _Empty('Bu türde haber yok.'),
+                  child: _Empty(
+                    widget.pending
+                        ? 'Onay bekleyen haber yok.'
+                        : 'Bu türde haber yok.',
+                  ),
                 )
-              else ...[
+              else if (widget.pending) ...[
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                SliverList.list(
+                  children: [for (final n in items) _Row(item: n)],
+                ),
+              ] else ...[
                 SliverToBoxAdapter(child: _Featured(item: items.first)),
                 SliverList.list(children: _rows(items.skip(1).toList())),
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -561,9 +591,11 @@ class _Row extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        newsAgo(item.createdAt),
-                        style: const TextStyle(
-                          color: _muted,
+                        item.isPending
+                            ? 'Onay bekliyor · ${hhmm(item.pendingUntil!)}\'de yayınlanır'
+                            : newsAgo(item.createdAt),
+                        style: TextStyle(
+                          color: item.isPending ? _amber : _muted,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -621,6 +653,35 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
   /// Bu ekranda kaydedilen manşet ('' = otomatiğe dönüldü).
   String? _headline;
+
+  /// Onay bekleyen haber bu ekranda yayınlandı mı.
+  bool _published = false;
+  bool _publishing = false;
+
+  bool get _pending => widget.item.isPending && !_published;
+
+  Future<void> _publish() async {
+    if (_publishing) return;
+    setState(() => _publishing = true);
+    try {
+      await ServiceLocator.leagueService.setNewsPublished(
+        newsId: widget.item.id,
+        isPublished: true,
+      );
+      if (!mounted) return;
+      setState(() => _published = true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Haber yayınlandı.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Yayınlanamadı: $e')));
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
+  }
 
   Future<void> _editHeadline(NewsArticle current) async {
     final n = widget.item;
@@ -864,7 +925,14 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
   Widget _bar(bool loggedIn, {bool inline = false}) {
     final accent = _accent();
-    final matchId = _matchId;
+    final n = widget.item;
+    // Onay bekleyen haberde sorumluya "YAYINLA"; diğerleri yalnız görür.
+    final approve =
+        _pending &&
+        AppSession.of(
+          context,
+        ).value.canManageRegion(n.tournamentId, n.regionId);
+    final matchId = approve ? '' : _matchId;
     Widget square(Widget icon, String tip, VoidCallback? onTap) => Tooltip(
       message: tip,
       child: Material(
@@ -910,6 +978,31 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                     fontWeight: FontWeight.w800,
                     fontSize: 17,
                     letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          )
+        else if (approve)
+          Expanded(
+            child: SizedBox(
+              height: 48,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _amber,
+                  foregroundColor: const Color(0xFF2A1D00),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _publishing ? null : _publish,
+                child: const Text(
+                  'YAYINLA',
+                  style: TextStyle(
+                    fontFamily: 'BarlowCondensed',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ),
@@ -970,7 +1063,27 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 22, 12, 12),
-          child: row,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_pending && n.pendingUntil != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Onay bekliyor · Manşeti düzenleyip yayınlayabilirsin. '
+                    'Onaylanmazsa ${hhmm(n.pendingUntil!)}\'de kendiliğinden '
+                    'yayınlanır.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: _amber,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              row,
+            ],
+          ),
         ),
       ),
     );

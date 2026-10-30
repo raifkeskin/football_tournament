@@ -58,7 +58,12 @@ abstract class ILeagueService {
   /// Haberler akışı: yayındaki haberler, en yeni önce. [seasonId] verilirse
   /// o sezon, yoksa [leagueId] turnuvası, ikisi de boşsa tümü.
   /// Giriş yapılmışsa her haberde [NewsItem.likedByMe] dolu gelir.
-  Stream<List<NewsItem>> watchNewsFeed({String? leagueId, String? seasonId});
+  /// [pending]: yayın yerine onay bekleyen otomatik haberler.
+  Stream<List<NewsItem>> watchNewsFeed({
+    String? leagueId,
+    String? seasonId,
+    bool pending = false,
+  });
 
   /// Yönetim listesi "Tümü": verilen turnuvaların tüm haberleri (taslak ve
   /// süresi dolmuşlar dahil), en yeni üstte.
