@@ -10,6 +10,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/instagram_share.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
@@ -174,24 +175,80 @@ class NewsVisual extends StatelessWidget {
       );
     }
     if (item.isWeekResults && d != null && !compact) {
+      // Haftanın bütün maçları; sığmazsa satırlar birlikte küçülür.
       final matches = [
         for (final m in (d['matches'] as List? ?? const []))
           if (m is Map) m,
-      ].take(3);
+      ];
+      final dense = matches.length > 5;
+      final week = item.week ?? (d['week'] as num?)?.toInt();
+      final leagueLogo = (item.leagueLogoUrl ?? '').trim();
+      final title = [
+        if (item.leagueName.isNotEmpty) item.leagueName.toUpperCase(),
+        if (week != null) '$week. HAFTA',
+      ].join(' · ');
       return DecoratedBox(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF111827), Color(0xFF1F2A12)],
+          gradient: RadialGradient(
+            center: Alignment(0, -0.2),
+            radius: 0.95,
+            colors: [Color(0xFF172554), Color(0xFF0B1220)],
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 14, 12, 70),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [for (final m in matches) _WeekLine(m)],
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const _LmPattern(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 70),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      if (leagueLogo.isNotEmpty) ...[
+                        WebSafeImage(
+                          url: leagueLogo,
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _cond(13).copyWith(letterSpacing: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, c) => Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: SizedBox(
+                            width: c.maxWidth,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final m in matches)
+                                  _WeekLine(m, dense: dense),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -217,10 +274,51 @@ class NewsVisual extends StatelessWidget {
   }
 }
 
+/// Hafta özeti kapağının zemini: soluk, eğik Lig Masası arması deseni.
+class _LmPattern extends StatelessWidget {
+  const _LmPattern();
+
+  static const _tile = 34.0;
+  static const _px = 96;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ClipRect(
+        child: LayoutBuilder(
+          builder: (context, c) => OverflowBox(
+            minWidth: c.maxWidth * 1.6,
+            maxWidth: c.maxWidth * 1.6,
+            minHeight: c.maxHeight * 1.6,
+            maxHeight: c.maxHeight * 1.6,
+            child: Transform.rotate(
+              angle: -14 * math.pi / 180,
+              child: const DecoratedBox(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: ResizeImage(AssetImage(AppLogo.asset), width: _px),
+                    repeat: ImageRepeat.repeat,
+                    scale: _px / _tile,
+                    opacity: 0.10,
+                    alignment: Alignment.topLeft,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _WeekLine extends StatelessWidget {
-  const _WeekLine(this.m);
+  const _WeekLine(this.m, {this.dense = false});
 
   final Map m;
+
+  /// Çok maçlı haftada satırlar sıkışır.
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +337,7 @@ class _WeekLine extends StatelessWidget {
       fontWeight: FontWeight.w700,
     );
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: dense ? 2.5 : 4),
       child: Row(
         children: [
           Expanded(
@@ -258,8 +356,9 @@ class _WeekLine extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 6),
             padding: const EdgeInsets.symmetric(vertical: 3),
             decoration: BoxDecoration(
-              color: const Color(0xFF060B16),
+              color: const Color(0xD905080F),
               borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0x8CC9A44C)),
             ),
             child: Text(
               '${m['hs'] ?? 0}–${m['as'] ?? 0}',
