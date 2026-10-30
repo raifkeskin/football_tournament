@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/services/app_session.dart';
-import '../../core/services/app_settings.dart';
 import 'identity_access.dart';
 import 'identity_service.dart';
 import 'identity_verify_screen.dart';
@@ -10,8 +9,6 @@ import 'identity_verify_screen.dart';
 /// Ana sayfada selamın yanında "Profilini onayla" rozeti (yanıp sönen mavi
 /// tik) ve altında ince "Kimliğini okut" yazısı. Yalnız telefonda, oyuncu
 /// profili onaysızken görünür; onaylanınca kendiliğinden kaybolur.
-/// Yeni özellik: admin her zaman, diğerleri `verify_prompt_home_enabled`
-/// açılınca görür.
 class VerifyPromptChip extends StatefulWidget {
   const VerifyPromptChip({super.key, required this.session});
 
@@ -43,15 +40,13 @@ class _VerifyPromptChipState extends State<VerifyPromptChip>
     final s = widget.session;
     if (!VerifyPromptChip._platform()) return false;
     if ((s.playerId ?? '').trim().isEmpty) return false;
-    if (!IdentityAccess.visible(s)) return false;
-    return s.isAdmin || AppSettings.verifyPromptHomeEnabled.value;
+    return IdentityAccess.visible(s);
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge([
-        AppSettings.verifyPromptHomeEnabled,
         IdentityAccess.changes,
         IdentityService.changes,
       ]),

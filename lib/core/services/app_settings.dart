@@ -24,7 +24,6 @@ class AppSettings {
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
   static const _kBiometricLogin = 'biometric_login_enabled';
-  static const _kVerifyPrompt = 'verify_prompt_home_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
 
@@ -90,9 +89,6 @@ class AppSettings {
 
   /// Yüz tanıma / parmak izi ile giriş teklifi herkese açık mı (admin her zaman).
   static final biometricLoginEnabled = ValueNotifier<bool>(false);
-
-  /// Ana sayfada "Profilini onayla" rozeti herkese açık mı (admin her zaman).
-  static final verifyPromptHomeEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -149,8 +145,6 @@ class AppSettings {
           newsScreenEnabled.value = r['value'] == true;
         } else if (r['key'] == _kBiometricLogin) {
           biometricLoginEnabled.value = r['value'] == true;
-        } else if (r['key'] == _kVerifyPrompt) {
-          verifyPromptHomeEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

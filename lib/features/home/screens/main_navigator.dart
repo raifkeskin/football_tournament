@@ -963,15 +963,18 @@ class _MenuDrawer extends StatelessWidget {
     );
   }
 
-  /// Kimlik Doğrulama: admin, kurucu başkan ve bölge sorumlusu her zaman
-  /// görür (başkalarının kimliğini okutur); diğerleri yalnız kendi profili
-  /// onaylı değilken (kendisi ya da yönetici onaylayınca kaybolur).
+  /// Kimlik Doğrulama: admin, kurucu başkan, bölge sorumlusu ve takım
+  /// sorumlusu her zaman görür (başkalarının kimliğini okutur); diğerleri
+  /// "Profilini Doğrula" olarak, yalnız kendi profili onaylı değilken
+  /// (kendisi ya da yönetici onaylayınca kaybolur). Akış ikisinde de aynı.
   Widget _identityTile(BuildContext context, Color accent) {
+    final verifiesOthers =
+        session.hasManagementPanel || session.managedTeams.isNotEmpty;
     Widget tile() => Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: _tile(
         icon: Icons.verified_rounded,
-        label: 'Kimlik Doğrulama',
+        label: verifiesOthers ? 'Kimlik Doğrulama' : 'Profilini Doğrula',
         colors: const [Color(0xFF38BDF8), kVerifiedBlue],
         accent: accent,
         selected: false,
@@ -983,7 +986,7 @@ class _MenuDrawer extends StatelessWidget {
         },
       ),
     );
-    if (session.hasManagementPanel) return tile();
+    if (verifiesOthers) return tile();
     final playerId = (session.playerId ?? '').trim();
     if (playerId.isEmpty) return const SizedBox.shrink();
     return ValueListenableBuilder<int>(

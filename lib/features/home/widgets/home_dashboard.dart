@@ -1036,9 +1036,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ],
             ),
           ),
+          // Çok gruplu sezonda rozet grup seçicinin altında.
           if (multi && group != null) ...[
             const SizedBox(width: 10),
-            _groupPicker(data, group),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _groupPicker(data, group),
+                if (loggedIn) ...[
+                  const SizedBox(height: 8),
+                  VerifyPromptChip(session: session),
+                ],
+              ],
+            ),
           ] else if (loggedIn) ...[
             const SizedBox(width: 10),
             VerifyPromptChip(session: session),
