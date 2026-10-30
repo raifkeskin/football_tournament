@@ -1090,8 +1090,12 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                           settings: const RouteSettings(
                             name: 'NewsStoryScreen',
                           ),
-                          builder: (_) =>
-                              _NewsStoryScreen(item: n, article: _current(n)),
+                          builder: (_) => _NewsStoryScreen(
+                            item: n,
+                            article: _current(n),
+                            // Detayda o an görünen fotoğraf seçili gelir.
+                            initialPhoto: _page,
+                          ),
                         ),
                       ),
                     ),
@@ -1585,10 +1589,15 @@ class _HeadlineSheetState extends State<_HeadlineSheet> {
 /// Instagram hikâyesi: 9:16 görsel (fotoğraf + gazete küpürü) önizlenir,
 /// "Hikâyede paylaş" ile Instagram'ın hikâye ekranı açılır.
 class _NewsStoryScreen extends StatefulWidget {
-  const _NewsStoryScreen({required this.item, required this.article});
+  const _NewsStoryScreen({
+    required this.item,
+    required this.article,
+    this.initialPhoto = 0,
+  });
 
   final NewsItem item;
   final NewsArticle article;
+  final int initialPhoto;
 
   @override
   State<_NewsStoryScreen> createState() => _NewsStoryScreenState();
@@ -1597,6 +1606,12 @@ class _NewsStoryScreen extends StatefulWidget {
 class _NewsStoryScreenState extends State<_NewsStoryScreen> {
   final _shot = GlobalKey();
   bool _busy = false;
+
+  /// Hikâyede kullanılacak fotoğraf (birden fazlaysa seçilir).
+  late int _photo = widget.initialPhoto.clamp(
+    0,
+    widget.item.imageUrls.isEmpty ? 0 : widget.item.imageUrls.length - 1,
+  );
 
   Future<void> _share() async {
     if (_busy) return;
@@ -1653,6 +1668,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 ),
               ),
             ),
+            if (n.imageUrls.length > 1) _photoPicker(n.imageUrls),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: SizedBox(
@@ -1693,6 +1709,58 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     );
   }
 
+  /// Fotoğraf seçimi: küçük kareler, seçili olan çerçeveli.
+  Widget _photoPicker(List<String> urls) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 6),
+          child: Text(
+            'FOTOĞRAF SEÇ',
+            style: TextStyle(
+              color: _muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 60,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: urls.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final on = i == _photo;
+              return GestureDetector(
+                onTap: () => setState(() => _photo = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 80,
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: on ? const Color(0xFFDD2A7B) : Colors.white24,
+                      width: on ? 2.5 : 1,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: WebSafeImage(url: urls[i], fit: BoxFit.cover),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    ),
+  );
+
   Widget _story(NewsItem n) {
     final logo = (n.leagueLogoUrl ?? '').trim();
     return DecoratedBox(
@@ -1710,7 +1778,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             right: 0,
             top: 0,
             height: 300,
-            child: NewsVisual(item: n),
+            child: n.imageUrls.isEmpty
+                ? NewsVisual(item: n)
+                : WebSafeImage(url: n.imageUrls[_photo], fit: BoxFit.cover),
           ),
           Positioned(
             left: 0,
