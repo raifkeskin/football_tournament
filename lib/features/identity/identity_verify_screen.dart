@@ -186,7 +186,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       _error = null;
       _card = null;
       _candidates = null;
-      _status = 'Kartı telefonun arkasına yaklaştırın';
+      _status = IdCardReader.placementHint;
       _progress = null;
     });
     try {
@@ -614,9 +614,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         ),
         const SizedBox(height: 6),
         if (_progress == null)
-          const Text(
-            'Kartı telefonun arka ortasına düz yaslayın; okuma bitene kadar '
-            'oynatmayın (birkaç saniye).',
+          Text(
+            '${IdCardReader.placementHint}; okuma bitene kadar oynatmayın '
+            '(birkaç saniye). Okumazsa kartı birkaç santim kaydırıp bekleyin.',
             textAlign: TextAlign.center,
             style: TextStyle(color: kAdminMuted, fontSize: 12.5),
           )

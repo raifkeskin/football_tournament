@@ -38,10 +38,24 @@ class NewsItem {
     this.week,
     this.autoData,
     this.linkUrl,
+    this.headline,
+    this.article,
+    this.pendingUntil,
   });
 
   /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
   final String? linkUrl;
+
+  /// Sorumlunun düzenlediği manşet; null ise kurallarla yazılan başlık.
+  final String? headline;
+
+  /// Sorumlunun düzenlediği haber metni (paragraflar boş satırla ayrılır);
+  /// null ise kurallarla yazılan metin.
+  final String? article;
+
+  /// Onay bekleyen otomatik haber: bu saatte kendiliğinden yayınlanır.
+  final DateTime? pendingUntil;
+  bool get isPending => !isPublished && pendingUntil != null;
 
   /// Haberden açılan dış bağlantı: aktarılan Instagram gönderisi ya da
   /// haberin bağlantısı.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/widgets/admin_form.dart';
@@ -214,14 +215,14 @@ class _MediaCreditCard extends StatelessWidget {
         .map((w) => w.characters.first.toUpperCase())
         .join();
 
-    final actions = <(IconData, String, String)>[
-      if (digits != null) (Icons.call_outlined, 'Ara', 'tel:+$digits'),
+    // Uygulamaların kendi simgeleri (telefon, WhatsApp, Instagram).
+    final actions = <(Widget, String, String)>[
+      if (digits != null) (_BrandIcon.phone, 'Ara', 'tel:+$digits'),
       if (digits != null)
-        (Icons.chat_outlined, 'WhatsApp', 'https://wa.me/$digits'),
-      if (email != null)
-        (Icons.mail_outline_rounded, 'E-posta', 'mailto:$email'),
+        (_BrandIcon.whatsapp, 'WhatsApp', 'https://wa.me/$digits'),
+      if (email != null) (_BrandIcon.mail, 'E-posta', 'mailto:$email'),
       if (c.instagram != null)
-        (Icons.camera_alt_outlined, 'Instagram', _instagramUrl(c.instagram!)),
+        (_BrandIcon.instagram, 'Instagram', _instagramUrl(c.instagram!)),
     ];
 
     final details = <(String, String)>[
@@ -316,7 +317,10 @@ class _MediaCreditCard extends StatelessWidget {
                     padding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                     child: Row(
                       children: [
-                        Icon(Icons.smart_display_outlined, color: kAdminAccent),
+                        FaIcon(
+                          FontAwesomeIcons.youtube,
+                          color: Color(0xFFFF0000),
+                        ),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -355,8 +359,8 @@ class _MediaCreditCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Column(
                               children: [
-                                Icon(actions[i].$1, color: kAdminAccent),
-                                const SizedBox(height: 6),
+                                actions[i].$1,
+                                const SizedBox(height: 8),
                                 Text(
                                   actions[i].$2,
                                   style: const TextStyle(
@@ -476,6 +480,78 @@ class MatchInfoLine extends StatelessWidget {
         ),
         ?trailing,
       ],
+    );
+  }
+}
+
+/// İletişim düğmesinin simgesi: uygulamanın kendi renginde yuvarlatılmış
+/// kare içinde beyaz logo.
+class _BrandIcon extends StatelessWidget {
+  const _BrandIcon({
+    this.icon,
+    this.brand,
+    this.color,
+    this.gradient,
+    this.size = 22,
+  });
+
+  final IconData? icon;
+
+  /// Uygulama logosu (Font Awesome); [icon] yerine.
+  final FaIconData? brand;
+  final Color? color;
+  final Gradient? gradient;
+
+  /// Logonun boyutu (telefon ahizesi kendi çiziminde küçük kalır).
+  final double size;
+
+  static const phone = _BrandIcon(
+    icon: Icons.call_rounded,
+    size: 29,
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xFF5BE374), Color(0xFF1FB94A)],
+    ),
+  );
+  static const whatsapp = _BrandIcon(
+    brand: FontAwesomeIcons.whatsapp,
+    color: Color(0xFF25D366),
+  );
+  static const mail = _BrandIcon(
+    icon: Icons.mail_rounded,
+    color: Color(0xFF1E88E5),
+  );
+  static const instagram = _BrandIcon(
+    brand: FontAwesomeIcons.instagram,
+    gradient: RadialGradient(
+      center: Alignment(-0.6, 1.2),
+      radius: 1.5,
+      colors: [
+        Color(0xFFFEDA75),
+        Color(0xFFFA7E1E),
+        Color(0xFFD62976),
+        Color(0xFF962FBF),
+        Color(0xFF4F5BD5),
+      ],
+      stops: [0, 0.25, 0.5, 0.75, 1],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: brand != null
+          ? FaIcon(brand, color: Colors.white, size: size)
+          : Icon(icon, color: Colors.white, size: size),
     );
   }
 }

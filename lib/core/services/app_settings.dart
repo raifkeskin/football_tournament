@@ -23,7 +23,9 @@ class AppSettings {
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
+  static const _kBiometricLogin = 'biometric_login_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
+  static const _kNewsScreen = 'news_screen_enabled';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -84,7 +86,15 @@ class AppSettings {
   /// Takım sorumlusu menüsünde "Kadroya Futbolcu Ekle" kısayolu herkese açık
   /// mı; kapalıyken yalnız admin ve [rosterAddShortcutUsers] görür.
   static final rosterAddShortcutEnabled = ValueNotifier<bool>(false);
+
+  /// Yüz tanıma / parmak izi ile giriş teklifi herkese açık mı (admin her zaman).
+  static final biometricLoginEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
+
+  /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
+  /// Haberler ekranı, gazete küpürü detay) herkese açık mı; kapalıyken
+  /// yalnız admin görür, diğerleri eski haber kartını görür.
+  static final newsScreenEnabled = ValueNotifier<bool>(false);
 
   /// Oyuncu kartındaki "Mevki" sekmesi (asıl mevki + oynayabildiği en çok 3
   /// mevki) herkese açık mı; kapalıyken yalnız admin görür. Veritabanı da
@@ -131,6 +141,10 @@ class AppSettings {
           refereesEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAdd) {
           rosterAddShortcutEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kNewsScreen) {
+          newsScreenEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kBiometricLogin) {
+          biometricLoginEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

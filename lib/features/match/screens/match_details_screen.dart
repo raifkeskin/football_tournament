@@ -1372,28 +1372,39 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                         ),
                     ],
                   );
-                  // Silme yetkisi (bölge sorumlusu hariç) ve fotoğraf varsa çöp kutusu.
+                  // Silme yetkisi (bölge sorumlusu hariç) ve fotoğraf varsa çöp
+                  // kutusu; yalnız Fotoğraflar alt sekmesinde.
                   if (scheduleOnly || !hasPhotos) return dial;
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4, right: 10),
-                        child: FloatingActionButton(
-                          heroTag: 'media_delete',
-                          tooltip: 'Fotoğraf sil',
-                          backgroundColor: const Color(0xFFDC2626),
-                          foregroundColor: Colors.white,
-                          onPressed: () {
-                            _mediaSectionByMatch[match.id] = 1;
-                            _photoSelection.value = <String>{};
-                          },
-                          child: const Icon(Icons.delete_outline_rounded),
-                        ),
-                      ),
-                      Flexible(child: dial),
-                    ],
+                  return ValueListenableBuilder<int>(
+                    valueListenable: _mediaShownSection,
+                    builder: (context, shown, _) => shown != 1
+                        ? dial
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: 4,
+                                  right: 10,
+                                ),
+                                child: FloatingActionButton(
+                                  heroTag: 'media_delete',
+                                  tooltip: 'Fotoğraf sil',
+                                  backgroundColor: const Color(0xFFDC2626),
+                                  foregroundColor: Colors.white,
+                                  onPressed: () {
+                                    _mediaSectionByMatch[match.id] = 1;
+                                    _photoSelection.value = <String>{};
+                                  },
+                                  child: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
+                                ),
+                              ),
+                              Flexible(child: dial),
+                            ],
+                          ),
                   );
                 },
               ),
@@ -2955,6 +2966,10 @@ class _HighlightsTabView extends StatefulWidget {
 /// kurulunca (ör. fotoğraf eklendi) Gol Videoları'na dönmez.
 final Map<String, int> _mediaSectionByMatch = {};
 
+/// Medya sekmesinde o an görünen alt sekme (0 Gol Videoları, 1 Fotoğraflar);
+/// fotoğraf silme düğmesi yalnız Fotoğraflar'da görünür.
+final _mediaShownSection = ValueNotifier<int>(0);
+
 class _HighlightsTabViewState extends State<_HighlightsTabView> {
   /// null: tümü; aksi hâlde takım id'si.
   String? _teamFilter;
@@ -3088,6 +3103,11 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         final section =
             _section ??
             (hasStream || videos.isNotEmpty || photos.isEmpty ? 0 : 1);
+        if (_mediaShownSection.value != section) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _mediaShownSection.value = section,
+          );
+        }
         final switcher = _sectionSwitch(section, photos.length);
         if (section == 0) {
           return Column(

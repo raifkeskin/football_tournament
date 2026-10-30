@@ -121,19 +121,7 @@ class _NewsViewState extends State<NewsView> {
     }
   }
 
-  Future<void> _share(NewsItem n) async {
-    final title = n.leagueName.isEmpty ? '' : '${n.leagueName}\n\n';
-    // Instagram haberinde görseller yerine gönderinin kendisi paylaşılır.
-    final link = n.externalLink;
-    final images = link != null
-        ? '\n\n$link'
-        : n.imageUrls.isEmpty
-        ? ''
-        : '\n\n${n.imageUrls.join('\n')}';
-    await SharePlus.instance.share(
-      ShareParams(text: '$title${n.content}$images'),
-    );
-  }
+  Future<void> _share(NewsItem n) => shareNews(n);
 
   Future<void> _openInstagram(NewsItem n) async {
     final link = n.externalLink;
@@ -145,13 +133,8 @@ class _NewsViewState extends State<NewsView> {
     if (!ok) _snack('Bağlantı açılamadı.');
   }
 
-  void _openGallery(List<String> urls, int index) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.94),
-      builder: (ctx) => _GalleryViewer(urls: urls, initial: index),
-    );
-  }
+  void _openGallery(List<String> urls, int index) =>
+      openNewsGallery(context, urls, index);
 
   // ---- Görünüm --------------------------------------------------------
 
@@ -305,6 +288,30 @@ class _NewsViewState extends State<NewsView> {
       },
     );
   }
+}
+
+/// Haber fotoğraflarını tam ekran galeride açar.
+void openNewsGallery(BuildContext context, List<String> urls, int index) {
+  showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.94),
+    builder: (ctx) => _GalleryViewer(urls: urls, initial: index),
+  );
+}
+
+/// Haberi paylaşır: turnuva adı, metin ve fotoğraf / gönderi bağlantıları.
+Future<void> shareNews(NewsItem n) async {
+  final title = n.leagueName.isEmpty ? '' : '${n.leagueName}\n\n';
+  // Instagram haberinde görseller yerine gönderinin kendisi paylaşılır.
+  final link = n.externalLink;
+  final images = link != null
+      ? '\n\n$link'
+      : n.imageUrls.isEmpty
+      ? ''
+      : '\n\n${n.imageUrls.join('\n')}';
+  await SharePlus.instance.share(
+    ShareParams(text: '$title${n.content}$images'),
+  );
 }
 
 class _Message extends StatelessWidget {

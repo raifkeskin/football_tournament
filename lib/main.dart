@@ -12,6 +12,7 @@ import 'features/home/screens/main_navigator.dart';
 import 'features/home/home_warmup.dart';
 import 'core/services/app_session.dart';
 import 'core/services/active_tournament.dart';
+import 'core/services/app_client.dart';
 import 'core/services/app_settings.dart';
 import 'core/widgets/app_name_band.dart';
 import 'core/widgets/app_logo.dart';
@@ -49,6 +50,8 @@ void main() async {
   // ekranıyla açılır.
   await AppSessionController.enforceRememberMe();
   await AppSettings.load();
+  // Kurulumun sürümü (admin İstatistikler); beklenmez.
+  AppClient.start();
   await PasswordKeyboard.load();
   await GuestMode.load();
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.

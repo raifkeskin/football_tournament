@@ -36,8 +36,8 @@ from public.account_requests r;
 -- Sütun düzeyinde okuma: telefon ve kimlik no hariç.
 revoke select on public.players from anon, authenticated;
 grant select (id, name, surname, birth_date, preferred_foot, main_position,
-              sub_position, photo_url, height, weight, auth_uid, created_at,
-              updated_at)
+              sub_position, other_positions, photo_url, height, weight,
+              auth_uid, created_at, updated_at)
   on public.players to anon, authenticated;
 
 -- Realtime satırın tamamını (telefon dahil) yayıyordu.

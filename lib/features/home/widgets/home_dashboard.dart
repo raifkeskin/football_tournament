@@ -23,11 +23,17 @@ import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
+import 'home_news_strip.dart';
+import '../../news/screens/news_screens.dart';
+import '../../tournament/models/league_extras.dart';
+import '../../../core/services/service_locator.dart';
+import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
+import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
 
@@ -1030,9 +1036,22 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ],
             ),
           ),
+          // Çok gruplu sezonda rozet grup seçicinin altında.
           if (multi && group != null) ...[
             const SizedBox(width: 10),
-            _groupPicker(data, group),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _groupPicker(data, group),
+                if (loggedIn) ...[
+                  const SizedBox(height: 8),
+                  VerifyPromptChip(session: session),
+                ],
+              ],
+            ),
+          ] else if (loggedIn) ...[
+            const SizedBox(width: 10),
+            VerifyPromptChip(session: session),
           ],
         ],
       ),
@@ -1328,14 +1347,48 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           const SizedBox(height: 12),
         ],
+        // Onay bekleyen otomatik haberler: admin, kurucu başkan, bölge
+        // sorumlusu (yeni haber ekranları kapalı olsa da).
+        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
+          StreamBuilder<List<NewsItem>>(
+            stream: ServiceLocator.leagueService.watchNewsFeed(
+              leagueId: widget.league.id,
+              pending: true,
+            ),
+            builder: (context, snap) {
+              final n = (snap.data ?? const <NewsItem>[])
+                  .where((x) => x.tournamentId == widget.league.id)
+                  .length;
+              if (n == 0) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _alert(
+                  '$n haber onayını bekliyor. Manşeti düzenleyip '
+                  'yayınlamak için dokun.',
+                  onTap: () => openNewsList(
+                    context,
+                    leagueId: widget.league.id,
+                    pending: true,
+                  ),
+                ),
+              );
+            },
+          ),
         // Son dakika haber kartı (mevcut bileşen).
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
-        HomeNewsCard(
-          // Panelin kendi kenar boşluğu var; kart diğerleriyle aynı genişlikte.
-          inset: 0,
-          leagueId: widget.league.id,
-          regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
-        ),
+        // Yeni haberler (Kart Akışı) açılana dek yalnız admin görür.
+        if (session.isAdmin || AppSettings.newsScreenEnabled.value)
+          HomeNewsStrip(
+            leagueId: widget.league.id,
+            regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
+          )
+        else
+          HomeNewsCard(
+            // Panelin kendi kenar boşluğu var; kart diğerleriyle aynı genişlikte.
+            inset: 0,
+            leagueId: widget.league.id,
+            regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
+          ),
         if (thisWeekMatches.isNotEmpty) ...[
           _sectionHeader(
             'BU HAFTA · $thisWeek. HAFTA',

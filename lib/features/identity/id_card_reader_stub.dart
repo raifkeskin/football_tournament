@@ -8,6 +8,9 @@ class IdCardReader {
 
   static const supported = false;
 
+  static String get placementHint =>
+      'Kartı telefonun arka ortasına düz yaslayın';
+
   static Future<NfcState> nfcState() async => NfcState.unsupported;
 
   static Future<bool> openNfcSettings() async => false;

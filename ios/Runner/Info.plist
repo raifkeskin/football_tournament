@@ -69,6 +69,8 @@
 		<string>A0000002472001</string>
 		<string>00000000000000</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Şifre yazmadan Face ID ile hızlıca giriş yapabilmeniz için gerekir.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Paylaşım afişlerini fotoğraflarınıza kaydedebilmek için gerekir.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
