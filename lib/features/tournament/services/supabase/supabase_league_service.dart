@@ -660,7 +660,7 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data, link_url, headline, pending_until';
+      'auto_kind, match_id, week, auto_data, link_url, headline, article, pending_until';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -767,6 +767,9 @@ class SupabaseLeagueService implements ILeagueService {
           ? null
           : r['link_url'].toString().trim(),
       pendingUntil: _readDate(r['pending_until']),
+      article: (r['article'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['article'].toString().trim(),
       headline: (r['headline'] ?? '').toString().trim().isEmpty
           ? null
           : r['headline'].toString().trim(),
@@ -974,11 +977,16 @@ class SupabaseLeagueService implements ILeagueService {
   Future<void> setNewsHeadline({
     required String newsId,
     String? headline,
+    String? article,
   }) async {
     final h = (headline ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    final a = (article ?? '').trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');
     await _client
         .from('news')
-        .update({'headline': h.isEmpty ? null : h})
+        .update({
+          'headline': h.isEmpty ? null : h,
+          'article': a.isEmpty ? null : a,
+        })
         .eq('id', newsId);
   }
 

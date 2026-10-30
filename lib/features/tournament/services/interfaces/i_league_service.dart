@@ -71,8 +71,12 @@ abstract class ILeagueService {
 
   Future<void> setNewsLike({required String newsId, required bool liked});
 
-  /// Haberin manşetini değiştirir; boş = kurallarla yazılan başlığa dön.
-  Future<void> setNewsHeadline({required String newsId, String? headline});
+  /// Haberin manşetini ve metnini değiştirir; boş = kurallarla yazılana dön.
+  Future<void> setNewsHeadline({
+    required String newsId,
+    String? headline,
+    String? article,
+  });
 
   /// Haber sezona yazılır: [seasonId] yoksa bölgenin sezonu, o da yoksa
   /// turnuvanın aktif sezonu.

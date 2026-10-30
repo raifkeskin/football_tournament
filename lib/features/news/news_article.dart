@@ -86,20 +86,34 @@ class NewsArticle {
   /// Küpürle anlatılamayan türler (günün programı, Haftanın Seçimi,
   /// Instagram) için null: detayda haberin kendi kartı gösterilir.
   static NewsArticle? of(NewsItem n) {
-    final a = _auto(n);
+    var a = _auto(n);
+    if (a == null) return null;
     final h = (n.headline ?? '').trim();
-    if (a == null || h.isEmpty) return a;
-    return NewsArticle(
-      kicker: a.kicker,
-      headline: h,
-      deck: a.deck,
-      paragraphs: a.paragraphs,
-      home: a.home,
-      away: a.away,
-      hs: a.hs,
-      as: a.as,
-    );
+    if (h.isNotEmpty) a = a.withHeadline(h);
+    final body = (n.article ?? '').trim();
+    if (body.isNotEmpty) a = a.withBody(body);
+    return a;
   }
+
+  /// Kurallarla yazılan metin (düzenleme penceresinde başlangıç).
+  static String autoBody(NewsItem n) =>
+      (_auto(n)?.paragraphs ?? const <String>[]).join('\n\n');
+
+  /// Metni paragraflara (boş satır) bölerek değiştirir.
+  NewsArticle withBody(String body) => NewsArticle(
+    kicker: kicker,
+    headline: headline,
+    deck: deck,
+    paragraphs: body
+        .split(RegExp(r'\n\s*\n'))
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList(),
+    home: home,
+    away: away,
+    hs: hs,
+    as: as,
+  );
 
   NewsArticle withHeadline(String h) => NewsArticle(
     kicker: kicker,
@@ -175,7 +189,8 @@ class NewsArticle {
     return (nl > 0 ? t.substring(0, nl) : t).trim();
   }
 
-  static String _score(int a, int b) => '$a–$b';
+  /// Skor satır sonunda bölünmez ("1–" / "0)" olmasın).
+  static String _score(int a, int b) => '$a\u2060–\u2060$b';
 
   /// Sayının ayrılma eki: 0–3'ten, 1–1'den, 2–0'dan.
   static String _fromSuffix(int n) {
@@ -271,17 +286,17 @@ class NewsArticle {
         final after = h - a;
         String s;
         if (h + a == 1) {
-          s = '$min. dakikada $who ile $team öne geçti ($sc).';
+          s = '$min.\u00A0dakikada $who ile $team öne geçti ($sc).';
         } else if (after == 0) {
-          s = '$min. dakikada $who skoru eşitledi ($sc).';
+          s = '$min.\u00A0dakikada $who skoru eşitledi ($sc).';
         } else if (before == 0) {
-          s = '$min. dakikada $who ile $team yeniden öne geçti ($sc).';
+          s = '$min.\u00A0dakikada $who ile $team yeniden öne geçti ($sc).';
         } else if (after.abs() > before.abs() && after.abs() <= 3) {
-          s = '$min. dakikada $who farkı ${after.abs()} gole çıkardı ($sc).';
+          s = '$min.\u00A0dakikada $who farkı ${after.abs()} gole çıkardı ($sc).';
         } else {
           s = after.abs() == 1
-              ? '$min. dakikada $who farkı bire indirdi ($sc).'
-              : '$min. dakikada $who skoru $sc yaptı.';
+              ? '$min.\u00A0dakikada $who farkı bire indirdi ($sc).'
+              : '$min.\u00A0dakikada $who skoru $sc yaptı.';
         }
         sentences.add(s);
         if (a - h > homeWorst) {

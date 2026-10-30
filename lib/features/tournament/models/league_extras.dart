@@ -39,6 +39,7 @@ class NewsItem {
     this.autoData,
     this.linkUrl,
     this.headline,
+    this.article,
     this.pendingUntil,
   });
 
@@ -47,6 +48,10 @@ class NewsItem {
 
   /// Sorumlunun düzenlediği manşet; null ise kurallarla yazılan başlık.
   final String? headline;
+
+  /// Sorumlunun düzenlediği haber metni (paragraflar boş satırla ayrılır);
+  /// null ise kurallarla yazılan metin.
+  final String? article;
 
   /// Onay bekleyen otomatik haber: bu saatte kendiliğinden yayınlanır.
   final DateTime? pendingUntil;
