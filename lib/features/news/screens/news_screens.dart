@@ -592,7 +592,7 @@ class _Row extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         item.isPending
-                            ? 'Onay bekliyor · ${hhmm(item.pendingUntil!)}\'de yayınlanır'
+                            ? 'Onay bekliyor · saat ${hhmm(item.pendingUntil!)} olunca yayınlanır'
                             : newsAgo(item.createdAt),
                         style: TextStyle(
                           color: item.isPending ? _amber : _muted,
@@ -1071,8 +1071,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     'Onay bekliyor · Manşeti düzenleyip yayınlayabilirsin. '
-                    'Onaylanmazsa ${hhmm(n.pendingUntil!)}\'de kendiliğinden '
-                    'yayınlanır.',
+                    'Onaylanmazsa saat ${hhmm(n.pendingUntil!)} olunca '
+                    'kendiliğinden yayınlanır.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: _amber,

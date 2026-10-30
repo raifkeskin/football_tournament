@@ -1333,10 +1333,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           const SizedBox(height: 12),
         ],
-        // Onay bekleyen otomatik haberler (admin, kurucu başkan, bölge
-        // sorumlusu); yeni haberler açılana dek yalnız admin.
-        if ((session.isAdmin || AppSettings.newsScreenEnabled.value) &&
-            (session.panelLeagueIds?.contains(widget.league.id) ?? true))
+        // Onay bekleyen otomatik haberler: admin, kurucu başkan, bölge
+        // sorumlusu (yeni haber ekranları kapalı olsa da).
+        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
           StreamBuilder<List<NewsItem>>(
             stream: ServiceLocator.leagueService.watchNewsFeed(
               leagueId: widget.league.id,
