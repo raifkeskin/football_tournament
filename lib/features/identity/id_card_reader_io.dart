@@ -93,15 +93,55 @@ class IdCardReader {
     }
   }
 
+  /// Kartın nereye konacağı: iPhone'un NFC anteni üst kenarda (kameranın
+  /// yanında); Android'de çoğunlukla arka ortada.
+  static String get placementHint => Platform.isIOS
+      ? 'Kartı iPhone\'un arkasında üst kısma, kameranın hemen altına düz '
+            'yaslayın'
+      : 'Kartı telefonun arka ortasına düz yaslayın';
+
+  /// Okuma yarıda koparsa (kart kaydı, temas kesildi) bu kadar kez kendi
+  /// kendine yeniden denenir; kullanıcı baştan başlamak zorunda kalmaz.
+  static const _attempts = 3;
+
   /// Çipi okur: önce PACE (destekliyorsa), olmazsa BAC. [onStatus] okuma
   /// adımlarını, [onProgress] ilerlemeyi (0-1) bildirir (Android ekranı;
-  /// iPhone'da sistem penceresinde yüzde yazar).
+  /// iPhone'da sistem penceresinde yüzde yazar). Bağlantı koparsa
+  /// [_attempts] kez yeniden denenir.
   static Future<IdCardData> readChip(
     IdCardKey key, {
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
   }) async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await _readChipOnce(
+          key,
+          attempt: attempt,
+          onStatus: onStatus,
+          onProgress: onProgress,
+        );
+      } on _ReadInterrupted {
+        if (attempt >= _attempts) {
+          throw const IdCardError(
+            'Okuma yarıda kaldı. Kartı okuma bitene kadar oynatmadan, '
+            'telefona tam yaslı tutun ve tekrar deneyin.',
+          );
+        }
+        onProgress?.call(0);
+        onStatus?.call('Bağlantı koptu, yeniden deneniyor… kartı sabit tutun');
+      }
+    }
+  }
+
+  static Future<IdCardData> _readChipOnce(
+    IdCardKey key, {
+    required int attempt,
+    void Function(String status)? onStatus,
+    void Function(double progress)? onProgress,
+  }) async {
     final nfc = NfcProvider();
+    var detected = false;
     Future<void> step(double p) async {
       onProgress?.call(p);
       try {
@@ -113,15 +153,18 @@ class IdCardReader {
 
     Future<void> connect() => nfc.connect(
       timeout: const Duration(seconds: 45),
-      iosAlertMessage: 'Kimlik kartını telefonun arkasına yaklaştırın',
+      iosAlertMessage: attempt == 1
+          ? '$placementHint ve okuma bitene kadar oynatmayın.'
+          : 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden okunuyor.',
     );
 
     try {
-      onStatus?.call('Kartı telefonun arkasına yaklaştırın');
+      if (attempt == 1) onStatus?.call(placementHint);
       await connect();
       if (!nfc.isConnected()) {
         throw const IdCardError('Kart algılanamadı. Tekrar deneyin.');
       }
+      detected = true;
       onStatus?.call('Okunuyor, kartı oynatmayın…');
       await step(0.1);
 
@@ -195,6 +238,15 @@ class IdCardReader {
       final timeout =
           e.toString().contains('408') ||
           e.toString().toLowerCase().contains('timeout');
+      // Kart algılandı ama okuma koptu: sessizce kapatıp yeniden denenir.
+      if (detected && !timeout) {
+        try {
+          await nfc.disconnect(
+            iosErrorMessage: 'Bağlantı koptu, yeniden deneniyor',
+          );
+        } catch (_) {}
+        throw const _ReadInterrupted();
+      }
       final msg = timeout
           ? 'Kart algılanamadı. Kartı telefonun arkasına (kameranın '
                 'altına) yaslayıp tekrar deneyin.'
@@ -210,4 +262,9 @@ class IdCardReader {
       await nfc.disconnect(iosErrorMessage: message);
     } catch (_) {}
   }
+}
+
+/// Kart algılandıktan sonra okuma koptu (yeniden denenecek).
+class _ReadInterrupted implements Exception {
+  const _ReadInterrupted();
 }
