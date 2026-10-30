@@ -487,14 +487,23 @@ class MatchInfoLine extends StatelessWidget {
 /// İletişim düğmesinin simgesi: uygulamanın kendi renginde yuvarlatılmış
 /// kare içinde beyaz logo.
 class _BrandIcon extends StatelessWidget {
-  const _BrandIcon({required this.icon, this.color, this.gradient});
+  const _BrandIcon({
+    required this.icon,
+    this.color,
+    this.gradient,
+    this.size = 22,
+  });
 
   final IconData icon;
   final Color? color;
   final Gradient? gradient;
 
+  /// Logonun boyutu (telefon ahizesi kendi çiziminde küçük kalır).
+  final double size;
+
   static const phone = _BrandIcon(
     icon: Icons.call_rounded,
+    size: 29,
     gradient: LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -536,7 +545,7 @@ class _BrandIcon extends StatelessWidget {
         gradient: gradient,
         borderRadius: BorderRadius.circular(11),
       ),
-      child: FaIcon(icon, color: Colors.white, size: 22),
+      child: FaIcon(icon, color: Colors.white, size: size),
     );
   }
 }
