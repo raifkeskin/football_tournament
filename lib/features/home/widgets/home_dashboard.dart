@@ -33,6 +33,7 @@ import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
+import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
 
@@ -1038,6 +1039,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
           if (multi && group != null) ...[
             const SizedBox(width: 10),
             _groupPicker(data, group),
+          ] else if (loggedIn) ...[
+            const SizedBox(width: 10),
+            VerifyPromptChip(session: session),
           ],
         ],
       ),
