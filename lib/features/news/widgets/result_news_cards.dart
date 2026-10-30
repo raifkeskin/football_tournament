@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/utils/string_utils.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/instagram_share.dart';
@@ -202,7 +203,7 @@ class _Header extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              label.toUpperCase(),
+              label.trUpper,
               style: _cond(
                 13,
                 color: _onAccent(accent),
@@ -212,7 +213,7 @@ class _Header extends StatelessWidget {
           if (week != null) ...[
             const SizedBox(width: 10),
             Text(
-              week.toUpperCase(),
+              week.trUpper,
               style: _cond(15, color: _soft).copyWith(letterSpacing: 0.4),
             ),
           ],
@@ -330,7 +331,7 @@ class _Actions extends StatelessWidget {
       if (linkText != null)
         cell(
           Text(
-            '${linkText!.toUpperCase()} →',
+            '${linkText!.trUpper} →',
             maxLines: 1,
             style: _cond(16, color: accent).copyWith(letterSpacing: 0.4),
           ),
@@ -832,7 +833,7 @@ class _Band extends StatelessWidget {
         _Crest(t),
         const SizedBox(height: 6),
         Text(
-          t.name.toUpperCase(),
+          t.name.trUpper,
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -1257,7 +1258,7 @@ class MatchPreviewNewsCard extends StatelessWidget {
         _Crest(t),
         const SizedBox(height: 6),
         Text(
-          t.name.toUpperCase(),
+          t.name.trUpper,
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -1762,7 +1763,7 @@ class _DuelStrip extends StatelessWidget {
     final url = (photo ?? '').trim();
     final hasPhoto = url.isNotEmpty;
     Widget team(_Team t) {
-      final name = t.name.toUpperCase();
+      final name = t.name.trUpper;
       // Ad kelime bütün kalarak alt satıra iner; sütuna sığmayacak kadar
       // uzun tek kelime varsa yazı küçülür.
       final long = name.split(' ').any((w) => w.characters.length > 11);
@@ -2181,7 +2182,7 @@ class WeeklyPickNewsCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          title.toUpperCase(),
+                          title.trUpper,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: _cond(32),
