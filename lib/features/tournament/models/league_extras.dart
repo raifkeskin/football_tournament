@@ -38,10 +38,14 @@ class NewsItem {
     this.week,
     this.autoData,
     this.linkUrl,
+    this.headline,
   });
 
   /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
   final String? linkUrl;
+
+  /// Sorumlunun düzenlediği manşet; null ise kurallarla yazılan başlık.
+  final String? headline;
 
   /// Haberden açılan dış bağlantı: aktarılan Instagram gönderisi ya da
   /// haberin bağlantısı.

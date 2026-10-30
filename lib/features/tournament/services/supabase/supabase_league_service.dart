@@ -660,7 +660,7 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data, link_url';
+      'auto_kind, match_id, week, auto_data, link_url, headline';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -766,6 +766,9 @@ class SupabaseLeagueService implements ILeagueService {
       linkUrl: (r['link_url'] ?? '').toString().trim().isEmpty
           ? null
           : r['link_url'].toString().trim(),
+      headline: (r['headline'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['headline'].toString().trim(),
       // RLS yalnızca kullanıcının kendi beğenisini döndürür.
       likedByMe:
           r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
@@ -956,6 +959,18 @@ class SupabaseLeagueService implements ILeagueService {
         }
       });
     });
+  }
+
+  @override
+  Future<void> setNewsHeadline({
+    required String newsId,
+    String? headline,
+  }) async {
+    final h = (headline ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    await _client
+        .from('news')
+        .update({'headline': h.isEmpty ? null : h})
+        .eq('id', newsId);
   }
 
   @override

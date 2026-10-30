@@ -619,6 +619,43 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   bool _busy = false;
   int _page = 0;
 
+  /// Bu ekranda kaydedilen manşet ('' = otomatiğe dönüldü).
+  String? _headline;
+
+  Future<void> _editHeadline(NewsArticle current) async {
+    final n = widget.item;
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _HeadlineSheet(
+        current: current.headline,
+        suggestions: NewsArticle.suggestions(n),
+        custom: (_headline ?? n.headline ?? '').isNotEmpty,
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ServiceLocator.leagueService.setNewsHeadline(
+        newsId: n.id,
+        headline: result,
+      );
+      if (!mounted) return;
+      setState(() => _headline = result.trim());
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Manşet kaydedildi.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Manşet kaydedilemedi: $e')));
+    }
+  }
+
   Future<void> _toggleLike() async {
     if (_busy) return;
     final next = !_liked;
@@ -656,7 +693,17 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   Widget build(BuildContext context) {
     final n = widget.item;
     final loggedIn = AppSession.of(context).value.user != null;
-    final article = NewsArticle.of(n);
+    final session = AppSession.of(context).value;
+    final base = NewsArticle.of(n);
+    final article = base == null || _headline == null
+        ? base
+        : base.withHeadline(
+            _headline!.isEmpty ? NewsArticle.suggestions(n).first : _headline!,
+          );
+    final canEdit =
+        base != null &&
+        n.autoKind != null &&
+        session.canManageRegion(n.tournamentId, n.regionId);
     final top = MediaQuery.paddingOf(context).top;
     return Scaffold(
       backgroundColor: _bg,
@@ -675,7 +722,11 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 _hero(n, top),
                 Transform.translate(
                   offset: const Offset(0, -34),
-                  child: _Clipping(item: n, article: article),
+                  child: _Clipping(
+                    item: n,
+                    article: article,
+                    onEdit: canEdit ? () => _editHeadline(article) : null,
+                  ),
                 ),
               ],
               const SizedBox(height: 90),
@@ -928,10 +979,13 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
 /// Bantla yapıştırılmış, kenarları yırtık gazete küpürü.
 class _Clipping extends StatelessWidget {
-  const _Clipping({required this.item, required this.article});
+  const _Clipping({required this.item, required this.article, this.onEdit});
 
   final NewsItem item;
   final NewsArticle article;
+
+  /// Sorumluya manşeti düzenleme düğmesi.
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -970,15 +1024,29 @@ class _Clipping extends StatelessWidget {
               style: _cond(12.5, color: _kickRed).copyWith(letterSpacing: 1.6),
             ),
             const SizedBox(height: 6),
-            Text(
-              a.headline,
-              style: const TextStyle(
-                fontFamily: 'PlayfairDisplay',
-                fontWeight: FontWeight.w900,
-                color: _ink,
-                fontSize: 27,
-                height: 1.08,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    a.headline,
+                    style: const TextStyle(
+                      fontFamily: 'PlayfairDisplay',
+                      fontWeight: FontWeight.w900,
+                      color: _ink,
+                      fontSize: 27,
+                      height: 1.08,
+                    ),
+                  ),
+                ),
+                if (onEdit != null)
+                  IconButton(
+                    tooltip: 'Manşeti düzenle',
+                    onPressed: onEdit,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.edit_outlined, color: _ink2),
+                  ),
+              ],
             ),
             if (a.home != null && a.away != null) ...[
               const SizedBox(height: 12),
@@ -1158,4 +1226,128 @@ class _TornClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant _TornClipper old) => old.seed != seed;
+}
+
+/// Manşet düzenleme: serbest yazı, hazır öneriler, otomatiğe dönüş.
+/// Kaydedilen metni döndürür ('' = kurallarla yazılan manşet).
+class _HeadlineSheet extends StatefulWidget {
+  const _HeadlineSheet({
+    required this.current,
+    required this.suggestions,
+    required this.custom,
+  });
+
+  final String current;
+  final List<String> suggestions;
+
+  /// Şu anki manşet elle yazılmış mı.
+  final bool custom;
+
+  @override
+  State<_HeadlineSheet> createState() => _HeadlineSheetState();
+}
+
+class _HeadlineSheetState extends State<_HeadlineSheet> {
+  late final _ctrl = TextEditingController(text: widget.current);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accent();
+    final auto = widget.suggestions.isEmpty ? '' : widget.suggestions.first;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'MANŞETİ DÜZENLE',
+              style: _cond(18).copyWith(letterSpacing: 1),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ctrl,
+              maxLength: 140,
+              maxLines: 3,
+              minLines: 1,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: _bg,
+                counterStyle: const TextStyle(color: _muted),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'HAZIR ÖNERİLER',
+              style: TextStyle(
+                color: _muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final s in widget.suggestions)
+                  ActionChip(
+                    label: Text(s),
+                    labelStyle: const TextStyle(color: _soft, fontSize: 13),
+                    backgroundColor: _card2,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                    onPressed: () => setState(() => _ctrl.text = s),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                if (widget.custom)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(''),
+                    child: const Text(
+                      'Otomatiğe dön',
+                      style: TextStyle(color: _muted),
+                    ),
+                  ),
+                const Spacer(),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: accent),
+                  onPressed: () {
+                    final t = _ctrl.text.trim();
+                    // Otomatik manşetle aynıysa elle manşet kaydedilmez.
+                    Navigator.of(context).pop(t == auto ? '' : t);
+                  },
+                  child: const Text('Kaydet'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
