@@ -660,7 +660,8 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data, link_url, headline, article, pending_until';
+      'auto_kind, match_id, week, auto_data, link_url, headline, article, pending_until, '
+      'reactions, comment_count';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -767,6 +768,13 @@ class SupabaseLeagueService implements ILeagueService {
           ? null
           : r['link_url'].toString().trim(),
       pendingUntil: _readDate(r['pending_until']),
+      reactions: {
+        if (r['reactions'] is Map)
+          for (final e in (r['reactions'] as Map).entries)
+            if (int.tryParse(e.key.toString()) != null && e.value is num)
+              int.parse(e.key.toString()): (e.value as num).toInt(),
+      },
+      commentCount: (r['comment_count'] as num?)?.toInt() ?? 0,
       article: (r['article'] ?? '').toString().trim().isEmpty
           ? null
           : r['article'].toString().trim(),

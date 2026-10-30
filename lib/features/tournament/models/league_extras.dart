@@ -41,7 +41,15 @@ class NewsItem {
     this.headline,
     this.article,
     this.pendingUntil,
+    this.reactions = const {},
+    this.commentCount = 0,
   });
+
+  /// Tribün tepkileri: yuva (1-3) → sayı. Etiketler haber türüne göre.
+  final Map<int, int> reactions;
+
+  /// Yayındaki yorum sayısı.
+  final int commentCount;
 
   /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
   final String? linkUrl;

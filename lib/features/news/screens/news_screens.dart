@@ -15,6 +15,7 @@ import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
+import '../widgets/news_talk_widgets.dart';
 import '../widgets/result_news_cards.dart';
 import 'news_feed_screen.dart';
 
@@ -522,6 +523,7 @@ class _Featured extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    NewsTalkSummary(item: item),
                   ],
                 ),
               ),
@@ -587,6 +589,7 @@ class _Row extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      if (!item.isPending) NewsTalkSummary(item: item),
                     ],
                   ),
                 ),
@@ -778,6 +781,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         n.autoKind != null &&
         session.canManageRegion(n.tournamentId, n.regionId);
     final top = MediaQuery.paddingOf(context).top;
+    final talk = !_pending && n.isPublished && newsTalkOn(context);
     return BandBackPage(
       theme: ActiveTournament.theme.value,
       subtitle: 'Haberler',
@@ -794,14 +798,28 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
                     child: _ownCard(n, loggedIn),
                   ),
+                  if (talk) ...[
+                    const SizedBox(height: 14),
+                    NewsTalkSection(item: n),
+                  ],
                 ] else ...[
                   _hero(n, top),
                   Transform.translate(
                     offset: const Offset(0, -34),
-                    child: _Clipping(
-                      item: n,
-                      article: article,
-                      onEdit: canEdit ? () => _editHeadline(article) : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Clipping(
+                          item: n,
+                          article: article,
+                          onEdit: canEdit ? () => _editHeadline(article) : null,
+                        ),
+                        // Tribün (tepkiler) ve kapalı duran yorumlar.
+                        if (talk) ...[
+                          const SizedBox(height: 14),
+                          NewsTalkSection(item: n),
+                        ],
+                      ],
                     ),
                   ),
                 ],

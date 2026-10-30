@@ -17,6 +17,7 @@ import '../news/screens/news_feed_screen.dart';
 import '../tournament/screens/admin_penalty_management_screen.dart';
 import '../../screens/admin_pending_actions_screen.dart';
 import '../tournament/screens/tournament_hub_screen.dart';
+import '../news/widgets/news_talk_widgets.dart';
 
 /// Bildirimin açtığı ekran: maç bildirimleri maç detayını, haber Turnuva
 /// Sayfası'nın Haberler sekmesini, onay bekleyen ceza ceza onaylarını açar.
@@ -91,6 +92,9 @@ class NotificationRouter {
       // Onaya düşen otomatik haber: turnuvanın onay bekleyen haberleri.
       case 'newsreview':
         if (ref != null) await _openNewsReview(context, ref);
+      // Onaya düşen yorum: turnuvanın onay bekleyen yorumları.
+      case 'newscomment':
+        if (ref != null) await NewsCommentReviewScreen.open(context, ref);
       // Kadro talebi, etiketsiz Instagram gönderisi (approval-ig…) ve
       // yayın linki uyuşmazlığı (yt-conflict-…) Bekleyen Onaylar'da.
       case 'approval':

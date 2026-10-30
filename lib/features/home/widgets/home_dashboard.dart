@@ -24,7 +24,9 @@ import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import 'home_news_strip.dart';
+import '../../news/news_talk.dart';
 import '../../news/screens/news_screens.dart';
+import '../../news/widgets/news_talk_widgets.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
@@ -1370,6 +1372,23 @@ class _HomeDashboardState extends State<HomeDashboard> {
                     leagueId: widget.league.id,
                     pending: true,
                   ),
+                ),
+              );
+            },
+          ),
+        // Onay bekleyen yorumlar (haber sorumluları).
+        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
+          FutureBuilder<int>(
+            future: NewsTalkService.pendingCount(widget.league.id),
+            builder: (context, snap) {
+              final n = snap.data ?? 0;
+              if (n == 0) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _alert(
+                  '$n yorum onayını bekliyor. İncelemek için dokun.',
+                  onTap: () =>
+                      NewsCommentReviewScreen.open(context, widget.league.id),
                 ),
               );
             },
