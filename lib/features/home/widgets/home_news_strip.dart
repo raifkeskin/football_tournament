@@ -167,11 +167,8 @@ class _StripCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final article = NewsArticle.of(item);
-    final sub = [
-      if (article?.home != null && article?.hs != null) article!.deck,
-      newsAgo(item.createdAt),
-    ].join(' · ');
+    // Ana sayfada yalnız başlık ve ne zaman girildiği.
+    final sub = newsAgo(item.createdAt);
     return Material(
       color: const Color(0xFF0B1220),
       clipBehavior: Clip.antiAlias,
@@ -205,7 +202,7 @@ class _StripCard extends StatelessWidget {
                   NewsTag(item.tag),
                   const SizedBox(height: 6),
                   Text(
-                    NewsArticle.headlineOf(item).toUpperCase(),
+                    NewsArticle.headlineOf(item),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
