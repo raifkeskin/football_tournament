@@ -75,10 +75,41 @@ class PhoneMaskFormatter extends TextInputFormatter {
     if (typed && oldDigits.length >= 10 && newDigits.length > 10) {
       return oldValue;
     }
+    // Silme yalnız ayıracı (")", boşluk) götürdüyse maske onu geri koyar ve
+    // silme tuşu boşa gider: imlecin solundaki rakam silinir.
+    final cursor = newValue.selection.baseOffset;
+    if (newValue.text.length < oldValue.text.length &&
+        newDigits.length == oldDigits.length &&
+        cursor >= 0) {
+      final before = newValue.text
+          .substring(0, cursor.clamp(0, newValue.text.length))
+          .replaceAll(RegExp(r'\D'), '')
+          .length;
+      if (before > 0) {
+        final digits = newDigits.replaceRange(before - 1, before, '');
+        final formatted = _formatFromRaw10(digits);
+        return TextEditingValue(
+          text: formatted,
+          selection: TextSelection.collapsed(
+            offset: _offsetAfterDigits(formatted, before - 1),
+          ),
+        );
+      }
+    }
     final formatted = formatFromRaw(newValue.text);
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
     );
+  }
+
+  /// Biçimli metinde [count] rakamdan hemen sonraki konum.
+  static int _offsetAfterDigits(String text, int count) {
+    if (count <= 0) return text.startsWith('(') ? 1 : 0;
+    var seen = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (RegExp(r'\d').hasMatch(text[i]) && ++seen == count) return i + 1;
+    }
+    return text.length;
   }
 }
