@@ -1245,7 +1245,8 @@ class _Clipping extends StatelessWidget {
                 time: (item.autoData?['time'] ?? '').toString(),
               ),
             ],
-            if (a.deck.isNotEmpty) ...[
+            // Maç sonucunda skor kutusu zaten var; skor satırı tekrar yazılmaz.
+            if (a.deck.isNotEmpty && a.hs == null) ...[
               const SizedBox(height: 10),
               Text(
                 a.deck,
