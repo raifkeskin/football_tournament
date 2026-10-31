@@ -91,8 +91,34 @@ class IdentityService {
 
   static SupabaseClient get _sb => Supabase.instance.client;
 
-  /// Oyuncu id → onaylı mı (bu oturumda sorulanlar).
+  /// Oyuncu id → onaylı mı (bu oturumda sorulanlar). "Onaysız" bilgisi
+  /// [_falseTtl] sonra yeniden sorulur: kişi bu arada kayıt olup kimliğini
+  /// doğrulamış olabilir.
   static final Map<String, bool> _cache = {};
+  static final Map<String, DateTime> _falseAt = {};
+  static const _falseTtl = Duration(minutes: 2);
+  static StreamSubscription<AuthState>? _authSub;
+
+  /// Giriş/çıkışta önbellek sıfırlanır (kendi kaydından sonra tik hemen
+  /// görünsün).
+  static void _watchAuth() {
+    _authSub ??= _sb.auth.onAuthStateChange.listen((s) {
+      if (s.event == AuthChangeEvent.signedIn ||
+          s.event == AuthChangeEvent.signedOut) {
+        _cache.clear();
+        _falseAt.clear();
+        changes.value++;
+      }
+    });
+  }
+
+  static bool _fresh(String id) {
+    final v = _cache[id];
+    if (v == null) return false;
+    if (v) return true;
+    final at = _falseAt[id];
+    return at != null && DateTime.now().difference(at) < _falseTtl;
+  }
 
   /// Onay verildiğinde ya da kaldırıldığında artar; açık ekranlar yenilenir.
   static final ValueNotifier<int> changes = ValueNotifier(0);
@@ -101,8 +127,9 @@ class IdentityService {
 
   /// [ids] içinden onaylı olanlar. Önbellekte olmayanlar tek sorguda okunur.
   static Future<Set<String>> verifiedAmong(Iterable<String> ids) async {
+    _watchAuth();
     final all = {...ids}..remove('');
-    final missing = all.where((id) => !_cache.containsKey(id)).toList();
+    final missing = all.where((id) => !_fresh(id)).toList();
     for (var i = 0; i < missing.length; i += 150) {
       final part = missing.sublist(
         i,
@@ -113,8 +140,10 @@ class IdentityService {
           .select('player_id')
           .inFilter('player_id', part);
       final ok = {for (final r in rows) (r['player_id'] ?? '').toString()};
+      final now = DateTime.now();
       for (final id in part) {
         _cache[id] = ok.contains(id);
+        if (!ok.contains(id)) _falseAt[id] = now;
       }
     }
     return {
@@ -126,8 +155,7 @@ class IdentityService {
   /// Tek oyuncu sorusu: aynı anda gelen sorular (ör. kadro listesindeki
   /// satırlar) tek sorguda toplanır.
   static Future<bool> isVerified(String playerId) async {
-    final hit = _cache[playerId];
-    if (hit != null) return hit;
+    if (_fresh(playerId)) return _cache[playerId]!;
     _batch.add(playerId);
     final c = _batchDone ??= Completer<void>();
     _batchTimer ??= Timer(const Duration(milliseconds: 40), () async {
@@ -269,6 +297,7 @@ class IdentityService {
   static Future<void> unverify(String playerId) async {
     await _sb.rpc('identity_unverify', params: {'p_player_id': playerId});
     _cache[playerId] = false;
+    _falseAt[playerId] = DateTime.now();
     changes.value++;
   }
 
