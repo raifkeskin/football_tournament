@@ -19,18 +19,22 @@ class QuickEventBar extends StatelessWidget {
     required this.match,
     required this.homeName,
     required this.awayName,
+    this.onMoment,
   });
 
   final MatchModel match;
   final String homeName;
   final String awayName;
 
+  /// Verilirse KART / DEĞ. yanında OLAY: puana etki eden an (takıma göre).
+  final void Function(String teamId)? onMoment;
+
   @override
   Widget build(BuildContext context) {
     Widget side(String teamId, String name) {
       Widget button(
         String label,
-        _Kind kind, {
+        _Kind? kind, {
         IconData? icon,
         bool primary = false,
       }) => SizedBox(
@@ -45,7 +49,9 @@ class QuickEventBar extends StatelessWidget {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => _open(context, teamId, kind),
+            onTap: () => kind == null
+                ? onMoment?.call(teamId)
+                : _open(context, teamId, kind),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -100,8 +106,16 @@ class QuickEventBar extends StatelessWidget {
               Expanded(child: button('KART', _Kind.card)),
               const SizedBox(width: 6),
               Expanded(
-                child: button('DEĞ.', _Kind.sub, icon: Icons.swap_vert_rounded),
+                child: button(
+                  'DEĞ.',
+                  _Kind.sub,
+                  icon: onMoment == null ? Icons.swap_vert_rounded : null,
+                ),
               ),
+              if (onMoment != null) ...[
+                const SizedBox(width: 6),
+                Expanded(child: button('OLAY', null)),
+              ],
             ],
           ),
         ],

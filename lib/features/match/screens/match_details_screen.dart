@@ -1640,10 +1640,24 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       _tab == 0 &&
                       (m.status == MatchStatus.live ||
                           m.status == MatchStatus.halftime)
-                  ? QuickEventBar(
+                  ? MatchInsightsBuilder(
+                      key: ValueKey('quick_insights_${m.id}'),
                       match: m,
-                      homeName: homeName,
-                      awayName: awayName,
+                      builder: (context, insights) => QuickEventBar(
+                        match: m,
+                        homeName: homeName,
+                        awayName: awayName,
+                        onMoment: insights == null
+                            ? null
+                            : (teamId) => openMatchMoments(
+                                context,
+                                match: m,
+                                insights: insights,
+                                homeName: homeName,
+                                awayName: awayName,
+                                teamId: teamId,
+                              ),
+                      ),
                     )
                   : null,
               body: Column(
@@ -4387,66 +4401,14 @@ class _LineupTabState extends State<_LineupTab>
   /// Olay ikonları ve futbolcu puanı (yeni özellik; kapalıysa null).
   MatchInsights? _insights;
 
-  /// Maçın iki kadrosu (Olay ekle'de futbolcu seçimi için).
-  Future<List<MomentPlayer>> _momentPlayers(MatchModel m) async {
-    final rows = await Supabase.instance.client
-        .from('match_rosters')
-        .select('player_id, team_id, jersey_number, players(name, surname)')
-        .eq('match_id', m.id);
-    String name(Map r) {
-      final p = r['players'];
-      if (p is! Map) return '-';
-      return '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim();
-    }
-
-    final list =
-        [
-          for (final r in rows)
-            MomentPlayer(
-              id: '${r['player_id']}',
-              name: name(r),
-              number: '${r['jersey_number'] ?? ''}',
-              teamId: '${r['team_id']}',
-              teamName: shortTeamName(
-                r['team_id'] == m.homeTeamId
-                    ? widget.homeName
-                    : widget.awayName,
-              ),
-            ),
-        ]..sort((a, b) {
-          final t = (a.teamId == m.homeTeamId ? 0 : 1).compareTo(
-            b.teamId == m.homeTeamId ? 0 : 1,
-          );
-          return t != 0
-              ? t
-              : _jerseyValue(a.number).compareTo(_jerseyValue(b.number));
-        });
-    return list;
-  }
-
-  Future<void> _openMoments(MatchModel m, MatchInsights insights) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final players = await _momentPlayers(m);
-      if (!mounted) return;
-      if (players.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Önce esame (kadro) girilmeli.')),
-        );
-        return;
-      }
-      final live = MatchClock.liveMinuteParts(m);
-      await showMomentSheet(
-        context: context,
+  Future<void> _openMoments(MatchModel m, MatchInsights insights) =>
+      openMatchMoments(
+        context,
         match: m,
         insights: insights,
-        players: players,
-        minute: live?.minute,
+        homeName: widget.homeName,
+        awayName: widget.awayName,
       );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kadro okunamadı: $e')));
-    }
-  }
 
   Widget _body(BuildContext context, MatchModel m) {
     final insights = _insights;
@@ -4484,8 +4446,11 @@ class _LineupTabState extends State<_LineupTab>
         ],
         _viewSwitch(m),
         const SizedBox(height: 10),
-        // Olay ekle: puana etki eden anlar (yetkililer, maç başladıktan sonra).
-        if (insights != null && widget.isSuperAdmin && !_beforeKickoff(m)) ...[
+        // Olay ekle: puana etki eden anlar. Canlı maçta alttaki takım
+        // butonlarında (OLAY); burada yalnız maç bittikten sonra.
+        if (insights != null &&
+            widget.isSuperAdmin &&
+            m.status == MatchStatus.finished) ...[
           Align(
             alignment: Alignment.centerRight,
             child: OutlinedButton.icon(
@@ -7294,5 +7259,69 @@ class _SecondHalfMinuteEdit extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Olay ekle: puana etki eden anlar. [teamId] verilirse (canlı maçta alttaki
+/// takım butonu) futbolcu listesi yalnız o takımdan.
+Future<void> openMatchMoments(
+  BuildContext context, {
+  required MatchModel match,
+  required MatchInsights insights,
+  required String homeName,
+  required String awayName,
+  String? teamId,
+}) async {
+  final m = match;
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final rows = await Supabase.instance.client
+        .from('match_rosters')
+        .select('player_id, team_id, jersey_number, players(name, surname)')
+        .eq('match_id', m.id);
+    String name(Map r) {
+      final p = r['players'];
+      if (p is! Map) return '-';
+      return '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim();
+    }
+
+    final players =
+        [
+          for (final r in rows)
+            MomentPlayer(
+              id: '${r['player_id']}',
+              name: name(r),
+              number: '${r['jersey_number'] ?? ''}',
+              teamId: '${r['team_id']}',
+              teamName: shortTeamName(
+                r['team_id'] == m.homeTeamId ? homeName : awayName,
+              ),
+            ),
+        ]..sort((a, b) {
+          final t = (a.teamId == m.homeTeamId ? 0 : 1).compareTo(
+            b.teamId == m.homeTeamId ? 0 : 1,
+          );
+          return t != 0
+              ? t
+              : _jerseyValue(a.number).compareTo(_jerseyValue(b.number));
+        });
+    if (!context.mounted) return;
+    if (players.every((p) => teamId != null && p.teamId != teamId)) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Önce esame (kadro) girilmeli.')),
+      );
+      return;
+    }
+    final live = MatchClock.liveMinuteParts(m);
+    await showMomentSheet(
+      context: context,
+      match: m,
+      insights: insights,
+      players: players,
+      minute: live?.minute,
+      teamId: teamId,
+    );
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Kadro okunamadı: $e')));
   }
 }
