@@ -2081,6 +2081,39 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     );
   }
 
+  /// "Geri Al" onayı: hangi adımın geri alınacağı; dakika sayacı
+  /// sıfırlanacaksa açıkça uyarılır.
+  String _undoMessage(MatchModel m) {
+    final minute = MatchClock.liveMinute(m);
+    final now = minute == null ? '' : ' (şu an $minute)';
+    if (m.status == MatchStatus.finished) {
+      return 'Maç bitmemiş sayılır ve oynanıyor durumuna döner. Dakika '
+          'sayacı değişmez.';
+    }
+    if (m.status == MatchStatus.live && m.shootout != null) {
+      return 'Penaltı atışları silinir. Dakika sayacı değişmez.';
+    }
+    if (m.status == MatchStatus.live && m.extraTimeAt != null) {
+      return 'Uzatma başlangıcı geri alınır; uzatma dakika sayacı '
+          'sıfırlanır.';
+    }
+    if (m.status == MatchStatus.live && m.secondHalfAt != null) {
+      return '⚠️ Maç devre arasına döner ve İKİNCİ YARI DAKİKA SAYACI '
+          'SIFIRLANIR$now. İkinci yarıyı yeniden başlatınca sayaç baştan '
+          'başlar.';
+    }
+    if (m.status == MatchStatus.halftime) {
+      return 'Devre arası geri alınır; ilk yarı kaldığı dakikadan devam '
+          'eder.';
+    }
+    if (m.status == MatchStatus.live) {
+      return '⚠️ Maç "Başlamadı" durumuna döner ve DAKİKA SAYACI '
+          'SIFIRLANIR$now. Maçı yeniden başlatınca sayaç 0. dakikadan '
+          'başlar.';
+    }
+    return 'Maç bir önceki aşamaya döner.';
+  }
+
   /// Akış adımını uygular; maç sonu için skor onayı ister.
   Future<void> _runPhaseAction(MatchModel m, String action) async {
     if (action == 'finish' || action == 'undo') {
@@ -2094,7 +2127,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                         ' olarak kaydedilecek. Onaylıyor musunuz?'
                   : 'Skor ${m.homeScore} - ${m.awayScore} olarak kaydedilecek ve '
                         'maç puan durumuna yansıyacak. Onaylıyor musunuz?')
-            : 'Maç bir önceki aşamaya döner.',
+            : _undoMessage(m),
         confirmLabel: action == 'finish' ? 'BİTİR' : 'GERİ AL',
         destructive: action == 'undo',
         icon: action == 'finish'
