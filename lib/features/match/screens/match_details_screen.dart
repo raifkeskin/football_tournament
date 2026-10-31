@@ -3890,7 +3890,11 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
   @override
   Widget build(BuildContext context) {
     // Tam ekran düğmesi ya da yatay tutuş: oynatıcı ekranı doldurur.
-    return YoutubePlayerFrame(controller: _controller, title: 'Maç Yayını');
+    return YoutubePlayerFrame(
+      controller: _controller,
+      title: 'Maç Yayını',
+      youtubeUrl: widget.url,
+    );
   }
 }
 
