@@ -30,7 +30,8 @@ class NotificationRouter {
   /// Açılış adresindeki ve açıkken gelen bildirim tıklamalarını dinler.
   static void init() {
     if (!kIsWeb) {
-      // ligmasasi://katilim?m=<maç>: katılım sayfasındaki "Lig Masası'nı aç".
+      // ligmasasi://katilim?m=<maç>: katılım sayfasındaki "Lig Masası'nı aç";
+      // ligmasasi.com/haber/<id>: paylaşılan haber.
       // Açılışta gelen bağlantı da bu akıştan gelir.
       AppLinks().uriLinkStream.listen(_openLink, onError: (_) {});
     }
@@ -52,6 +53,15 @@ class NotificationRouter {
   }
 
   static void _openLink(Uri uri) {
+    // Paylaşılan haber: ligmasasi.com/haber/<id> ya da ligmasasi://haber/<id>.
+    final segs = [
+      if (uri.scheme == 'ligmasasi') uri.host,
+      ...uri.pathSegments,
+    ].where((x) => x.isNotEmpty).toList();
+    if (segs.length >= 2 && segs.first == 'haber') {
+      _queue('news-${segs[1]}');
+      return;
+    }
     final path = uri.scheme == 'ligmasasi' ? uri.host : uri.path;
     final match = uri.queryParameters['m'];
     if (!path.contains('katilim') || match == null || match.isEmpty) return;

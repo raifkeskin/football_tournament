@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haber · Lig Masası</title>
+<meta property="og:title" content="Lig Masası · Haber">
+<meta property="og:description" content="Maç sonuçları, haberler ve canlı skorlar Lig Masası'nda.">
+<meta property="og:image" content="https://ligmasasi.com/logo-lm.png">
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--line:#334155;--paper:#f3ecdc;--ink:#1c1917;--red:#991b1b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:12px 16px;border-bottom:1.5px solid #fff}
+header a{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:18px}
+header img{width:40px;height:40px}
+main{max-width:560px;margin:0 auto;padding:20px 16px 40px}
+.league{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}
+.league img{width:28px;height:28px;object-fit:contain}
+.photo{width:100%;border-radius:14px 14px 0 0;display:block;max-height:360px;object-fit:cover;background:#0b1220}
+.clip{background:var(--paper);color:var(--ink);border-radius:0 0 14px 14px;padding:18px 18px 14px;font-family:Georgia,"Times New Roman",serif}
+.clip.solo{border-radius:14px}
+.kicker{font:800 12px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;letter-spacing:1.5px;color:var(--red);text-transform:uppercase}
+h1{font-size:26px;line-height:1.15;margin:6px 0 12px;font-weight:800}
+.score{display:flex;align-items:center;gap:8px;border:2px solid var(--ink);padding:10px 12px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.score .t{flex:1;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;text-transform:uppercase;min-width:0}
+.score .t.r{justify-content:flex-end;text-align:right}
+.score .t span{overflow:hidden;text-overflow:ellipsis}
+.score img{width:30px;height:30px;object-fit:contain;flex:none}
+.score b{font:900 26px/1 Georgia,serif;white-space:nowrap}
+.clip p{margin:0 0 10px;font-size:17px;line-height:1.55}
+.foot{border-top:1px solid #0002;margin-top:6px;padding-top:8px;color:#57534e;font-size:13px}
+.stats{display:flex;gap:16px;color:var(--muted);font-size:14px;margin:12px 4px 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.card h2{font-size:17px;margin:0 0 4px}
+.card .sub{color:var(--muted);font-size:14px;margin:0 0 12px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{flex:1 1 140px;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;background:#000;border:1.5px solid #fff3;color:#fff;font-weight:700;font-size:15px;text-decoration:none}
+.btn svg{width:20px;height:20px;fill:#fff}
+.open{display:block;text-align:center;margin-top:10px;padding:13px;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;text-decoration:none}
+.msg{text-align:center;padding:28px 18px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header><a href="/indir"><img src="/logo-lm.png" alt="">LİG MASASI</a></header>
+<main>
+  <div id="news"><div class="card msg">Yükleniyor…</div></div>
+  <div class="card" style="margin-top:4px">
+    <h2>Yorumlar, anketler ve canlı skor uygulamada</h2>
+    <p class="sub">Maçları canlı takip et, habere tepki ver, maç önü tahminini yap.</p>
+    <div class="btns">
+      <a class="btn" href="https://apps.apple.com/tr/app/lig-masas%C4%B1/id6820082632">
+        <svg viewBox="0 0 24 24"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.27-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.66zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.28z"/></svg>
+        App Store
+      </a>
+      <a class="btn" href="https://play.google.com/store/apps/details?id=com.ligmasasi.app">
+        <svg viewBox="0 0 24 24"><path d="M3.6 1.8 13.4 12l-9.8 10.2c-.36-.2-.6-.6-.6-1.1V2.9c0-.5.24-.9.6-1.1zm11 11.4 2.6 2.7-11.5 6.6 8.9-9.3zm0-2.4L5.7 1.5l11.5 6.6-2.6 2.7zm3.9-1.9 3 1.7c.8.5.8 1.6 0 2.1l-3 1.7L15.7 12l2.8-2.9z"/></svg>
+        Google Play
+      </a>
+    </div>
+    <a id="open" class="open" href="/">Uygulamada aç</a>
+  </div>
+</main>
+<script>
+(function () {
+  var URL_ = 'https://qxdjebzszikeslobrozf.supabase.co/rest/v1/';
+  var KEY = '__SUPABASE_ANON_KEY__';
+  var INDIR = 'https://ligmasasi.com/indir';
+  var ua = navigator.userAgent || '';
+  var isAndroid = /Android/i.test(ua);
+  var isIOS = /iPhone|iPad|iPod/i.test(ua);
+  var m = location.pathname.match(/\/haber\/([0-9a-f-]{36})/i);
+  var id = m ? m[1] : '';
+  var box = document.getElementById('news');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+
+  // "Uygulamada aç": yüklüyse ligmasasi://haber/<id>; değilse indirme sayfası.
+  var open = document.getElementById('open');
+  if (isAndroid) {
+    open.href = 'intent://haber/' + id + '#Intent;scheme=ligmasasi;package=com.ligmasasi.app;' +
+      'S.browser_fallback_url=' + encodeURIComponent(INDIR) + ';end';
+  } else if (isIOS) {
+    open.href = 'ligmasasi://haber/' + id;
+    open.addEventListener('click', function () {
+      var t = setTimeout(function () { if (!document.hidden) location.href = INDIR; }, 1500);
+      document.addEventListener('visibilitychange', function () { if (document.hidden) clearTimeout(t); });
+    });
+  } else {
+    open.href = '/?n=news-' + id;
+    open.textContent = 'Web uygulamasında aç';
+  }
+
+  function fail() {
+    box.innerHTML = '<div class="card msg">Bu haber bulunamadı ya da yalnızca turnuvanın üyelerine açık. Uygulamada giriş yaparak görebilirsin.</div>';
+  }
+  if (!id) return fail();
+
+  var cols = 'content,headline,article,auto_kind,auto_data,week,image_urls,created_at,reactions,comment_count,' +
+    'seasons(leagues(name,logo_url))';
+  fetch(URL_ + 'news?id=eq.' + id + '&select=' + encodeURIComponent(cols), {
+    headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
+  }).then(function (r) { return r.json(); }).then(function (rows) {
+    var n = rows && rows[0];
+    if (!n) return fail();
+    var league = (n.seasons && n.seasons.leagues) || {};
+    var d = n.auto_data || {};
+    var hasScore = d.home && d.away && d.hs != null && d.as != null;
+    var score = hasScore ? d.hs + '–' + d.as : '';
+    var text = String(n.article || n.content || '').trim();
+    var lines = text.split(/\n+/).filter(function (l) { return l.trim(); });
+    var headline = String(n.headline || '').trim() ||
+      (hasScore ? d.home.name + ' ' + score + ' ' + d.away.name : (lines.shift() || 'Lig Masası'));
+    var week = d.week || n.week;
+    var kicker = n.auto_kind === 'match_result' ? 'Maç sonucu' + (week ? ' · ' + week + '. hafta' : '')
+      : n.auto_kind === 'match_preview' ? 'Maç önü'
+      : n.auto_kind === 'day_preview' ? 'Günün maçları' : 'Haber';
+    var photo = (n.image_urls || [])[0];
+    var reacts = 0;
+    for (var k in (n.reactions || {})) reacts += Number(n.reactions[k]) || 0;
+    function team(t, right) {
+      var img = t.logo ? '<img src="' + esc(t.logo) + '" alt="">' : '';
+      return '<div class="t' + (right ? ' r' : '') + '">' + (right ? '<span>' + esc(t.name) + '</span>' + img
+        : img + '<span>' + esc(t.name) + '</span>') + '</div>';
+    }
+    var date = new Date(n.created_at).toLocaleDateString('tr-TR', {day: 'numeric', month: 'long', year: 'numeric'});
+    document.title = headline + ' · Lig Masası';
+    box.innerHTML =
+      '<div class="league">' + (league.logo_url ? '<img src="' + esc(league.logo_url) + '" alt="">' : '') +
+        esc(league.name || '') + '</div>' +
+      (photo ? '<img class="photo" src="' + esc(photo) + '" alt="">' : '') +
+      '<article class="clip' + (photo ? '' : ' solo') + '">' +
+        '<div class="kicker">' + esc(kicker) + '</div>' +
+        '<h1>' + esc(headline) + '</h1>' +
+        (hasScore ? '<div class="score">' + team(d.home) + '<b>' + esc(score) + '</b>' + team(d.away, true) + '</div>' : '') +
+        lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') +
+        '<div class="foot">Lig Masası · ' + esc(league.name || '') + ' · ' + esc(date) + '</div>' +
+      '</article>' +
+      '<div class="stats"><span>👏 ' + reacts + ' tepki</span><span>💬 ' + (n.comment_count || 0) + ' yorum</span></div>';
+  }).catch(fail);
+})();
+</script>
+</body>
+</html>
