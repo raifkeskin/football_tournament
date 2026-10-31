@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -335,9 +336,8 @@ class YoutubePlayerFrame extends StatefulWidget {
     this.youtubeUrl,
   });
 
-  /// Verilirse üstte "YouTube'da aç" düğmesi çıkar; video gömülerek
-  /// oynatılamıyorsa (kanal izin vermiyor, video yok) ortada açıklama ve
-  /// aynı düğme gösterilir.
+  /// Video uygulama içinde oynatılamıyorsa (kanal gömmeye izin vermiyor,
+  /// video yok) ortada açıklama ve "YouTube'da izle" düğmesi çıkar.
   final String? youtubeUrl;
 
   final YoutubePlayerController controller;
@@ -356,6 +356,31 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   /// Oynatıcı hatası (gömme izni yok, video bulunamadı).
   YoutubeError _error = YoutubeError.none;
   StreamSubscription<YoutubePlayerValue>? _errorSub;
+
+  /// Oynatıcı her zaman hata bildirmiyor (yalnız kapak görseli kalıyor):
+  /// açılırken YouTube'a videonun gömülebilir olup olmadığı sorulur.
+  Future<void> _checkEmbeddable() async {
+    final url = (widget.youtubeUrl ?? '').trim();
+    if (url.isEmpty) return;
+    try {
+      final res = await http
+          .get(
+            Uri.https('www.youtube.com', '/oembed', {
+              'url': url,
+              'format': 'json',
+            }),
+          )
+          .timeout(const Duration(seconds: 6));
+      if (!mounted || _error != YoutubeError.none) return;
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        setState(() => _error = YoutubeError.notEmbeddable);
+      } else if (res.statusCode == 404) {
+        setState(() => _error = YoutubeError.videoNotFound);
+      }
+    } catch (_) {
+      // Sorulamazsa oynatıcının kendi hatası beklenir.
+    }
+  }
 
   Future<void> _openExternally() async {
     final uri = Uri.tryParse((widget.youtubeUrl ?? '').trim());
@@ -390,6 +415,7 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
     _errorSub = widget.controller.stream.listen((v) {
       if (v.error != _error && mounted) setState(() => _error = v.error);
     });
+    _checkEmbeddable();
     landscapeOnFullscreen(
       widget.controller,
       onChanged: (full) {
@@ -493,21 +519,6 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
               title: Text(widget.title, style: const TextStyle(fontSize: 16)),
               actions: [
                 ...widget.actions,
-                if ((widget.youtubeUrl ?? '').trim().isNotEmpty)
-                  TextButton.icon(
-                    onPressed: _openExternally,
-                    icon: const Icon(
-                      Icons.smart_display_rounded,
-                      color: Color(0xFFFF3B30),
-                    ),
-                    label: const Text(
-                      "YouTube'da aç",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
                 // Telefonda YouTube'un tam ekran düğmesi gizli; yerine bu.
                 if (!kIsWeb)
                   IconButton(
