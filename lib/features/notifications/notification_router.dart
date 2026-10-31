@@ -13,7 +13,6 @@ import '../../core/services/app_session.dart';
 import '../match/models/match.dart';
 import '../match/widgets/attendance_card.dart';
 import '../match/screens/match_details_screen.dart';
-import '../news/screens/news_feed_screen.dart';
 import '../tournament/screens/admin_penalty_management_screen.dart';
 import '../../screens/admin_pending_actions_screen.dart';
 import '../tournament/screens/tournament_hub_screen.dart';
@@ -135,7 +134,7 @@ class NotificationRouter {
         .maybeSingle();
     final leagueId = ((row?['seasons'] as Map?)?['league_id'] ?? '').toString();
     if (!context.mounted || leagueId.isEmpty) return;
-    NewsView.focusNewsId.value = id;
+    NewsListBody.focusNewsId.value = id;
     await TournamentHubScreen.open(
       context,
       leagueId: leagueId,
