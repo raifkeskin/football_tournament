@@ -585,6 +585,7 @@ class _FormationTabState extends State<FormationTab>
             stream: ServiceLocator.teamService.watchPlayers(
               teamId: _teamId,
               tournamentId: widget.match.seasonId,
+              matchId: widget.match.id,
             ),
             builder: (context, playerSnap) {
               final players = {

@@ -24,9 +24,12 @@ abstract class ITeamService {
 
   Stream<List<Team>> watchTeamsByGroup(String groupId, {String? caller});
 
+  /// [matchId] verilirse o maçın kadrosunda olup takımdan ayrılmış
+  /// oyuncular da listeye eklenir (eski maçlarda ad görünsün).
   Stream<List<PlayerModel>> watchPlayers({
     required String teamId,
     String? tournamentId,
+    String? matchId,
     String? caller,
   });
 
