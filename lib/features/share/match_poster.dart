@@ -146,13 +146,13 @@ class MatchPoster extends StatelessWidget {
     );
   }
 
-  Widget _info(IconData icon, String top, String bottom) {
+  Widget _info(IconData icon, String top, String bottom, PosterStyle st) {
     return Expanded(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: _navy, size: 24),
-          const SizedBox(width: 6),
+          Icon(icon, color: _gold, size: st.pick(24, 20)),
+          const SizedBox(width: 7),
           Flexible(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -160,18 +160,15 @@ class MatchPoster extends StatelessWidget {
               children: [
                 Text(
                   top,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _cond(12.5, color: _navy).copyWith(height: 1.05),
+                  style: _cond(
+                    st.pick(12.5, 11),
+                    color: Colors.white70,
+                  ).copyWith(height: 1.05),
                 ),
-                if (bottom.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    bottom,
-                    maxLines: 1,
-                    style: _cond(15, color: _navy, w: FontWeight.w800),
-                  ),
-                ],
+                const SizedBox(height: 2),
+                Text(bottom, maxLines: 1, style: _cond(st.pick(17, 15))),
               ],
             ),
           ),
@@ -179,9 +176,6 @@ class MatchPoster extends StatelessWidget {
       ),
     );
   }
-
-  Widget _divider() =>
-      Container(width: 1.5, height: 34, color: _navy.withValues(alpha: 0.25));
 
   @override
   Widget build(BuildContext context) {
@@ -289,43 +283,72 @@ class MatchPoster extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              // Bilgi bandı: saha | gün-tarih | saat
+              // Bilgi bandı (cam): üstte tarih | saat, altta saha.
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: st.pick(10, 7),
+                padding: EdgeInsets.fromLTRB(
+                  10,
+                  st.pick(10, 7),
+                  10,
+                  st.pick(10, 7),
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.94),
+                  color: _navy.withValues(alpha: 0.42),
                   borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x88000000),
-                      blurRadius: 14,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.38),
+                  ),
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _info(
-                      Icons.stadium_rounded,
-                      pitchName.trim().isEmpty
-                          ? 'SAHA BELİRLENMEDİ'
-                          : pitchName.trim().trUpper,
-                      '',
+                    Row(
+                      children: [
+                        _info(
+                          Icons.calendar_month_rounded,
+                          hasDate ? dayName.trUpper : 'TARİH',
+                          hasDate ? dateText : 'BELİRLENMEDİ',
+                          st,
+                        ),
+                        Container(
+                          width: 1,
+                          height: st.pick(32, 28),
+                          color: Colors.white.withValues(alpha: 0.28),
+                        ),
+                        _info(
+                          Icons.schedule_rounded,
+                          'SAAT',
+                          timeText.trim().isEmpty ? '--:--' : timeText.trim(),
+                          st,
+                        ),
+                      ],
                     ),
-                    _divider(),
-                    _info(
-                      Icons.calendar_month_rounded,
-                      hasDate ? dayName.trUpper : 'TARİH',
-                      hasDate ? dateText : 'BELİRLENMEDİ',
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: st.pick(8, 5)),
+                      child: Container(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.28),
+                      ),
                     ),
-                    _divider(),
-                    _info(
-                      Icons.schedule_rounded,
-                      'SAAT',
-                      timeText.trim().isEmpty ? '--:--' : timeText.trim(),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.stadium_rounded,
+                            color: _gold,
+                            size: st.pick(22, 19),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            pitchName.trim().isEmpty
+                                ? 'SAHA BELİRLENMEDİ'
+                                : pitchName.trim().trUpper,
+                            maxLines: 1,
+                            style: _cond(st.pick(17, 15)),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

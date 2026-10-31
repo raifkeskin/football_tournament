@@ -38,6 +38,7 @@ import '../../tournament/screens/formation_tab.dart';
 import '../../share/poster_background.dart';
 import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
+import '../../share/match_poster_designs.dart';
 import '../../share/match_result_poster.dart';
 import '../../share/poster_share.dart';
 import '../../share/pre_match_video.dart';
@@ -884,15 +885,58 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       );
       return;
     }
-    await showPosterPreview(
+    final dayName = date == null
+        ? ''
+        : DateFormat('EEEE', 'tr_TR').format(date);
+    final dateText = date == null
+        ? ''
+        : DateFormat('dd.MM.yyyy', 'tr_TR').format(date);
+    final timeText = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
+    final session = AppSession.of(context).value;
+    final designs =
+        session.isAdmin || AppSettings.matchPosterDesignsEnabled.value;
+    // Takım afişleri için renkler ve forma deseni.
+    final kits = <String, Map<String, dynamic>>{};
+    if (designs) {
+      try {
+        final rows = await Supabase.instance.client
+            .from('teams')
+            .select('id, first_color, second_color, jersey_style')
+            .inFilter('id', [m.homeTeamId, m.awayTeamId]);
+        for (final r in rows) {
+          kits[r['id'].toString()] = Map<String, dynamic>.from(r);
+        }
+      } catch (_) {
+        // Renkler okunamazsa varsayılan renklerle çizilir.
+      }
+      if (!mounted) return;
+    }
+    PosterSide side(String id, String name, String logo) => PosterSide.of(
+      id: id,
+      name: name,
+      logo: logo,
+      firstHex: kits[id]?['first_color']?.toString(),
+      secondHex: kits[id]?['second_color']?.toString(),
+      jerseyStyle: kits[id]?['jersey_style']?.toString(),
+    );
+    await showMatchPosterShare(
       context: context,
-      title: 'Maç Afişini Paylaş',
-      fileName: 'mac_$slug',
-      imageUrls: [leagueLogo, homeLogo, awayLogo],
+      fileSlug: slug,
       leagueId: m.leagueId,
-      kind: PosterKind.match,
-      formats: const [PosterFormat.post, PosterFormat.story],
-      poster: MatchPoster(
+      imageUrls: const [],
+      designsEnabled: designs,
+      info: MatchPosterInfo(
+        leagueName: leagueName,
+        leagueLogo: leagueLogo,
+        week: m.week,
+        home: side(m.homeTeamId, homeName, homeLogo),
+        away: side(m.awayTeamId, awayName, awayLogo),
+        pitchName: pitchName,
+        dayName: dayName,
+        dateText: dateText,
+        timeText: timeText,
+      ),
+      classic: MatchPoster(
         leagueName: leagueName,
         leagueLogo: leagueLogo,
         groupName: groupName,
@@ -902,11 +946,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         awayName: awayName,
         awayLogo: awayLogo,
         pitchName: pitchName,
-        dayName: date == null ? '' : DateFormat('EEEE', 'tr_TR').format(date),
-        dateText: date == null
-            ? ''
-            : DateFormat('dd.MM.yyyy', 'tr_TR').format(date),
-        timeText: rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime,
+        dayName: dayName,
+        dateText: dateText,
+        timeText: timeText,
       ),
     );
   }
