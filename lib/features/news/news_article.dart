@@ -132,6 +132,7 @@ class NewsArticle {
     if (n.isMatchResult && d != null) return _result(n, d);
     if (n.isWeekResults && d != null) return _week(n, d);
     if (n.isMatchPreview && d != null) return _preview(n, d);
+    if (n.isDayPreview && d != null) return _day(n, d);
     if (n.autoKind == null && n.liveDrawId == null) return _manual(n);
     return null;
   }
@@ -497,6 +498,52 @@ class NewsArticle {
       paragraphs: blocks.isNotEmpty
           ? blocks
           : [for (final m in matches) line(m)],
+    );
+  }
+
+  /// Günün maçları: saat sırasıyla maçlar, ilk ve son düdük.
+  static NewsArticle _day(NewsItem n, Map<String, dynamic> d) {
+    final week = (d['week'] as num?)?.toInt() ?? n.week;
+    final matches = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) m,
+    ];
+    String time(Map m) => (m['time'] ?? '').toString().trim();
+    final times = [
+      for (final m in matches)
+        if (time(m).isNotEmpty) time(m),
+    ]..sort();
+    final date = DateTime.tryParse((d['date'] ?? '').toString());
+    const days = [
+      'Pazartesi',
+      'Salı',
+      'Çarşamba',
+      'Perşembe',
+      'Cuma',
+      'Cumartesi',
+      'Pazar',
+    ];
+    final day = date == null ? 'Bugün' : days[date.weekday - 1];
+    final count = matches.length == 1 ? 'tek maç' : '${matches.length} maç';
+    return NewsArticle(
+      kicker: ['GÜNÜN MAÇLARI', if (week != null) '$week. HAFTA'].join(' · '),
+      headline: week == null ? '$day $count' : '$week. Hafta: $day $count',
+      deck: times.isEmpty
+          ? ''
+          : times.length == 1 || times.first == times.last
+          ? 'Başlama saati ${times.first}'
+          : 'İlk düdük ${times.first} · son maç ${times.last}',
+      paragraphs: [
+        for (final m in matches)
+          [
+            if (time(m).isNotEmpty) time(m),
+            '${ArticleTeam(m['home'] as Map?).name} – '
+                '${ArticleTeam(m['away'] as Map?).name}',
+            if ((m['pitch'] ?? '').toString().trim().isNotEmpty)
+              m['pitch'].toString().trim(),
+          ].join(' · '),
+        'Maçları Lig Masası\'ndan canlı takip edebilirsin.',
+      ],
     );
   }
 

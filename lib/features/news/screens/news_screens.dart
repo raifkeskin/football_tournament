@@ -178,8 +178,9 @@ class NewsVisual extends StatelessWidget {
         ),
       );
     }
-    if (item.isWeekResults && d != null && !compact) {
-      // Haftanın bütün maçları; sığmazsa satırlar birlikte küçülür.
+    if ((item.isWeekResults || item.isDayPreview) && d != null && !compact) {
+      // Haftanın bütün maçları (günün maçlarında saatleriyle); sığmazsa
+      // satırlar birlikte küçülür.
       final matches = [
         for (final m in (d['matches'] as List? ?? const []))
           if (m is Map) m,
@@ -365,7 +366,10 @@ class _WeekLine extends StatelessWidget {
               border: Border.all(color: const Color(0x8CC9A44C)),
             ),
             child: Text(
-              '${m['hs'] ?? 0}–${m['as'] ?? 0}',
+              // Günün maçlarında skor yerine başlama saati.
+              m['hs'] == null && m['time'] != null
+                  ? m['time'].toString()
+                  : '${m['hs'] ?? 0}–${m['as'] ?? 0}',
               textAlign: TextAlign.center,
               style: _cond(16),
             ),
