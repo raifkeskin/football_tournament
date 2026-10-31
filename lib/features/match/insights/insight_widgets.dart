@@ -234,6 +234,7 @@ Future<void> showMomentSheet({
   required MatchInsights insights,
   required List<MomentPlayer> players,
   int? minute,
+  String? teamId,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -247,6 +248,7 @@ Future<void> showMomentSheet({
       insights: insights,
       players: players,
       minute: minute,
+      teamId: teamId,
     ),
   );
 }
@@ -257,12 +259,16 @@ class _MomentSheet extends StatefulWidget {
     required this.insights,
     required this.players,
     this.minute,
+    this.teamId,
   });
 
   final MatchModel match;
   final MatchInsights insights;
   final List<MomentPlayer> players;
   final int? minute;
+
+  /// Verilirse futbolcu listesi yalnız bu takımdan (alttaki takım butonu).
+  final String? teamId;
 
   @override
   State<_MomentSheet> createState() => _MomentSheetState();
@@ -390,6 +396,13 @@ class _MomentSheetState extends State<_MomentSheet> {
   @override
   Widget build(BuildContext context) {
     final names = {for (final p in widget.players) p.id: p.name};
+    final team = widget.teamId;
+    final pickable = team == null
+        ? widget.players
+        : widget.players.where((p) => p.teamId == team).toList();
+    final teamName = pickable.isEmpty || team == null
+        ? null
+        : pickable.first.teamName;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -414,9 +427,9 @@ class _MomentSheetState extends State<_MomentSheet> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Olay ekle',
-                style: TextStyle(
+              Text(
+                teamName == null ? 'Olay ekle' : 'Olay ekle · $teamName',
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
                   fontSize: 18,
@@ -477,7 +490,7 @@ class _MomentSheetState extends State<_MomentSheet> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                for (final p in widget.players)
+                for (final p in pickable)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Material(
