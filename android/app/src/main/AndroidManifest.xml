@@ -69,13 +69,14 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="ligmasasi"/>
             </intent-filter>
-            <!-- Grup katılım bağlantısı ligmasasi.com/katilim/mac doğrudan uygulamada
-                 açılır (Android App Links; web/.well-known/assetlinks.json). -->
+            <!-- Grup katılım bağlantısı ligmasasi.com/katilim/mac ve paylaşılan haber
+                 ligmasasi.com/haber/<id> doğrudan uygulamada açılır (Android App Links; web/.well-known/assetlinks.json). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="ligmasasi.com" android:pathPrefix="/katilim/mac"/>
+                <data android:scheme="https" android:host="ligmasasi.com" android:pathPrefix="/haber/"/>
             </intent-filter>
             <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         </activity>

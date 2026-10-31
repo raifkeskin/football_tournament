@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -74,6 +75,13 @@ class ErrorReporter {
       // Cihazın bağlantısı yok (ör. oturum yenilemede DNS çözülemedi):
       // uygulama kusuru değil; bağlantı gelince kendini toparlar.
       if (_isTransientNetwork(error)) return true;
+      // Galeri açılırken ikinci dokunuş (Android already_active, iOS
+      // multiple_request): galeri bir kez açılır, kullanıcıya etkisi yok.
+      if (error is PlatformException &&
+          (error.code == 'already_active' ||
+              error.code == 'multiple_request')) {
+        return true;
+      }
       report(error, stack, context: 'async');
       return true;
     };

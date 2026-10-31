@@ -7,7 +7,7 @@ import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/screens/live_draw_screen.dart';
-import '../../news/screens/news_feed_screen.dart';
+import '../../news/screens/news_screens.dart';
 import '../../news/widgets/result_news_cards.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
@@ -144,7 +144,7 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
               // Turnuva Sayfası'nın Haberler sekmesi; bu haber açık gelir.
               onTap: () {
                 final n = items[_index];
-                NewsView.focusNewsId.value = n.id;
+                NewsListBody.focusNewsId.value = n.id;
                 TournamentHubScreen.open(
                   context,
                   leagueId: n.tournamentId,

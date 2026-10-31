@@ -14,7 +14,7 @@ import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/fixture_screen.dart';
-import '../../news/screens/news_feed_screen.dart';
+import '../../news/screens/news_screens.dart';
 import '../../player/screens/stats_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import '../models/league.dart';
@@ -485,8 +485,9 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
         );
       case TournamentHubTab.news:
         return _KeepAlive(
-          child: NewsView(
+          child: NewsListBody(
             key: ValueKey('nw|${season.id}|${group.regionId}'),
+            leagueId: widget.leagueId,
             seasonId: season.id,
             regionId: group.regionId,
           ),

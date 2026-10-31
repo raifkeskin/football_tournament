@@ -15,6 +15,10 @@
         "destination": "/katilim.html"
       },
       {
+        "source": "/haber/**",
+        "destination": "/haber.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

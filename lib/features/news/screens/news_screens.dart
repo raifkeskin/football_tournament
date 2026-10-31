@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/utils/string_utils.dart';
 import '../../../core/services/active_tournament.dart';
@@ -15,6 +17,7 @@ import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
+import '../widgets/news_talk_widgets.dart';
 import '../widgets/result_news_cards.dart';
 import 'news_feed_screen.dart';
 
@@ -175,8 +178,9 @@ class NewsVisual extends StatelessWidget {
         ),
       );
     }
-    if (item.isWeekResults && d != null && !compact) {
-      // Haftanın bütün maçları; sığmazsa satırlar birlikte küçülür.
+    if ((item.isWeekResults || item.isDayPreview) && d != null && !compact) {
+      // Haftanın bütün maçları (günün maçlarında saatleriyle); sığmazsa
+      // satırlar birlikte küçülür.
       final matches = [
         for (final m in (d['matches'] as List? ?? const []))
           if (m is Map) m,
@@ -362,7 +366,10 @@ class _WeekLine extends StatelessWidget {
               border: Border.all(color: const Color(0x8CC9A44C)),
             ),
             child: Text(
-              '${m['hs'] ?? 0}–${m['as'] ?? 0}',
+              // Günün maçlarında skor yerine başlama saati.
+              m['hs'] == null && m['time'] != null
+                  ? m['time'].toString()
+                  : '${m['hs'] ?? 0}–${m['as'] ?? 0}',
               textAlign: TextAlign.center,
               style: _cond(16),
             ),
@@ -408,110 +415,132 @@ class NewsListScreen extends StatefulWidget {
 }
 
 class _NewsListScreenState extends State<NewsListScreen> {
-  late final Stream<List<NewsItem>> _stream = ServiceLocator.leagueService
-      .watchNewsFeed(leagueId: widget.leagueId, pending: widget.pending);
-
   @override
   Widget build(BuildContext context) {
-    final accent = _accent();
     // Üst bantta turnuva adı, altında küçük puntoyla "Haberler".
     return BandBackPage(
       theme: ActiveTournament.theme.value,
       subtitle: widget.pending ? 'Onay Bekleyen Haberler' : 'Haberler',
       child: Scaffold(
         backgroundColor: _bg,
-        body: StreamBuilder<List<NewsItem>>(
-          stream: _stream,
-          builder: (context, snap) {
-            if (snap.hasError && !snap.hasData) {
-              return const _Empty('Haberler yüklenemedi.');
-            }
-            if (!snap.hasData) {
-              return Center(child: CircularProgressIndicator(color: accent));
-            }
-            final all = snap.data!
-                .where(
-                  (n) =>
-                      n.liveDrawId == null &&
-                      LeagueScope.allows(n.tournamentId) &&
-                      n.tournamentId == widget.leagueId &&
-                      (widget.regionId == null ||
-                          n.regionId == null ||
-                          n.regionId == widget.regionId),
-                )
-                .toList();
-            final items = all;
-            return CustomScrollView(
-              slivers: [
-                if (items.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _Empty(
-                      widget.pending
-                          ? 'Onay bekleyen haber yok.'
-                          : 'Henüz haber yok.',
-                    ),
-                  )
-                else if (widget.pending) ...[
-                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  SliverList.list(
-                    children: [for (final n in items) _Row(item: n)],
-                  ),
-                ] else ...[
-                  SliverToBoxAdapter(child: _Featured(item: items.first)),
-                  SliverList.list(children: _rows(items.skip(1).toList())),
-                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                ],
-              ],
-            );
-          },
+        body: NewsListBody(
+          leagueId: widget.leagueId,
+          regionId: widget.regionId,
+          pending: widget.pending,
         ),
       ),
     );
   }
+}
 
-  /// Satırlar; hafta (yoksa gün) değişince küçük başlık.
-  List<Widget> _rows(List<NewsItem> items) {
-    const months = [
-      'OCAK',
-      'ŞUBAT',
-      'MART',
-      'NİSAN',
-      'MAYIS',
-      'HAZİRAN',
-      'TEMMUZ',
-      'AĞUSTOS',
-      'EYLÜL',
-      'EKİM',
-      'KASIM',
-      'ARALIK',
-    ];
-    String group(NewsItem n) {
-      final w = n.week ?? (n.autoData?['week'] as num?)?.toInt();
-      if (w != null) return '$w. HAFTA';
-      final t = n.createdAt?.toLocal();
-      return t == null ? '' : '${t.day} ${months[t.month - 1]}';
-    }
+/// Haber listesinin gövdesi (başlık çubuğu yok): Haberler ekranında ve
+/// Turnuva Sayfası'nın Haberler sekmesinde. [seasonId] verilirse yalnız o
+/// sezonun haberleri.
+class NewsListBody extends StatefulWidget {
+  const NewsListBody({
+    super.key,
+    required this.leagueId,
+    this.seasonId,
+    this.regionId,
+    this.pending = false,
+  });
 
-    final out = <Widget>[];
-    String? last;
-    for (final n in items) {
-      final g = group(n);
-      if (g != last && g.isNotEmpty) {
-        out.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
-            child: Text(
-              g,
-              style: _cond(13, color: _muted).copyWith(letterSpacing: 1.5),
-            ),
-          ),
-        );
-        last = g;
+  final String leagueId;
+  final String? seasonId;
+  final String? regionId;
+  final bool pending;
+
+  /// Açılınca detayı açılacak haber (ör. bildirimden gelinen).
+  static final focusNewsId = ValueNotifier<String?>(null);
+
+  @override
+  State<NewsListBody> createState() => _NewsListBodyState();
+}
+
+class _NewsListBodyState extends State<NewsListBody> {
+  late final Stream<List<NewsItem>> _stream = ServiceLocator.leagueService
+      .watchNewsFeed(leagueId: widget.leagueId, pending: widget.pending);
+
+  List<NewsItem> _last = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    NewsListBody.focusNewsId.addListener(_onFocus);
+  }
+
+  @override
+  void dispose() {
+    NewsListBody.focusNewsId.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  /// Bekleyen haber listede varsa detayını açar.
+  void _onFocus() {
+    final id = NewsListBody.focusNewsId.value;
+    if (id == null || !mounted) return;
+    for (final n in _last) {
+      if (n.id == id) {
+        NewsListBody.focusNewsId.value = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) openNewsDetail(context, n);
+        });
+        return;
       }
-      out.add(_Row(item: n));
     }
-    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accent();
+    return StreamBuilder<List<NewsItem>>(
+      stream: _stream,
+      builder: (context, snap) {
+        if (snap.hasError && !snap.hasData) {
+          return const _Empty('Haberler yüklenemedi.');
+        }
+        if (!snap.hasData) {
+          return Center(child: CircularProgressIndicator(color: accent));
+        }
+        final items = snap.data!
+            .where(
+              (n) =>
+                  n.liveDrawId == null &&
+                  LeagueScope.allows(n.tournamentId) &&
+                  n.tournamentId == widget.leagueId &&
+                  (widget.seasonId == null || n.seasonId == widget.seasonId) &&
+                  (widget.regionId == null ||
+                      n.regionId == null ||
+                      n.regionId == widget.regionId),
+            )
+            .toList();
+        _last = items;
+        if (NewsListBody.focusNewsId.value != null) _onFocus();
+        return CustomScrollView(
+          slivers: [
+            if (items.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _Empty(
+                  widget.pending
+                      ? 'Onay bekleyen haber yok.'
+                      : 'Henüz haber yok.',
+                ),
+              )
+            else if (widget.pending) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              SliverList.list(children: [for (final n in items) _Row(item: n)]),
+            ] else ...[
+              SliverToBoxAdapter(child: _Featured(item: items.first)),
+              SliverList.list(
+                children: [for (final n in items.skip(1)) _Row(item: n)],
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -564,6 +593,7 @@ class _Featured extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    NewsTalkSummary(item: item),
                   ],
                 ),
               ),
@@ -629,6 +659,7 @@ class _Row extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      if (!item.isPending) NewsTalkSummary(item: item),
                     ],
                   ),
                 ),
@@ -714,6 +745,95 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
+  }
+
+  /// Paylaş: görsel + link (önerilen), Instagram hikâyesi, linki kopyala.
+  /// Küpürü olmayan ya da onay bekleyen haber doğrudan metin paylaşılır.
+  Future<void> _shareMenu(NewsItem n) async {
+    if (_pending || NewsArticle.of(n) == null) return shareNews(n);
+    final ig = await _ig;
+    if (!mounted) return;
+    Widget option(
+      IconData icon,
+      Color color,
+      String title,
+      String sub,
+      String value,
+    ) => ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        child: Icon(icon, size: 20),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Text(sub, style: const TextStyle(color: _muted)),
+      onTap: () => Navigator.pop(context, value),
+    );
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              option(
+                Icons.image_outlined,
+                const Color(0xFF128C7E),
+                'Görsel olarak paylaş',
+                'WhatsApp ve diğer uygulamalar · görsel + link',
+                'card',
+              ),
+              if (ig)
+                option(
+                  Icons.camera_alt_outlined,
+                  const Color(0xFFDD2A7B),
+                  'Instagram hikâyesi',
+                  'Dikey küpür',
+                  'story',
+                ),
+              option(
+                Icons.link,
+                const Color(0xFF475569),
+                'Linki kopyala',
+                newsLink(n).replaceFirst('https://', ''),
+                'link',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'link') {
+      await Clipboard.setData(ClipboardData(text: newsLink(n)));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Link kopyalandı.')));
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'NewsStoryScreen'),
+        builder: (_) => _NewsStoryScreen(
+          item: n,
+          article: _current(n),
+          initialPhoto: _page,
+          card: choice == 'card',
+        ),
+      ),
+    );
   }
 
   Future<void> _editHeadline(NewsArticle current) async {
@@ -820,6 +940,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         n.autoKind != null &&
         session.canManageRegion(n.tournamentId, n.regionId);
     final top = MediaQuery.paddingOf(context).top;
+    final talk = !_pending && n.isPublished && newsTalkOn(context);
     return BandBackPage(
       theme: ActiveTournament.theme.value,
       subtitle: 'Haberler',
@@ -836,14 +957,28 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
                     child: _ownCard(n, loggedIn),
                   ),
+                  if (talk) ...[
+                    const SizedBox(height: 14),
+                    NewsTalkSection(item: n),
+                  ],
                 ] else ...[
                   _hero(n, top),
                   Transform.translate(
                     offset: const Offset(0, -34),
-                    child: _Clipping(
-                      item: n,
-                      article: article,
-                      onEdit: canEdit ? () => _editHeadline(article) : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Clipping(
+                          item: n,
+                          article: article,
+                          onEdit: canEdit ? () => _editHeadline(article) : null,
+                        ),
+                        // Tribün (tepkiler) ve kapalı duran yorumlar.
+                        if (talk) ...[
+                          const SizedBox(height: 14),
+                          NewsTalkSection(item: n),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -1121,7 +1256,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         square(
           const Icon(Icons.send_outlined, color: Colors.white, size: 21),
           'Paylaş',
-          () => shareNews(widget.item),
+          () => _shareMenu(n),
         ),
       ],
     );
@@ -1179,10 +1314,14 @@ class _Clipping extends StatelessWidget {
     this.onEdit,
     this.maxParagraphs,
     this.tilt = true,
+    this.brand = false,
   });
 
   final NewsItem item;
   final NewsArticle article;
+
+  /// Instagram hikâyesinde üst satırın sağında Lig Masası arması ve adı.
+  final bool brand;
 
   /// Instagram hikâyesinde metnin ilk paragrafları.
   final int? maxParagraphs;
@@ -1225,9 +1364,29 @@ class _Clipping extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              a.kicker,
-              style: _cond(12.5, color: _kickRed).copyWith(letterSpacing: 1.6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    a.kicker,
+                    style: _cond(
+                      12.5,
+                      color: _kickRed,
+                    ).copyWith(letterSpacing: 1.6),
+                  ),
+                ),
+                if (brand) ...[
+                  Image.asset(AppLogo.asset, width: 22, height: 22),
+                  const SizedBox(width: 5),
+                  Text(
+                    'LİG MASASI',
+                    style: _cond(
+                      13,
+                      color: _ink,
+                    ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.8),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 6),
             Row(
@@ -1610,11 +1769,15 @@ class _NewsStoryScreen extends StatefulWidget {
     required this.item,
     required this.article,
     this.initialPhoto = 0,
+    this.card = false,
   });
 
   final NewsItem item;
   final NewsArticle article;
   final int initialPhoto;
+
+  /// true: WhatsApp vb. için 4:5 görsel, altında manşet ve haber linki.
+  final bool card;
 
   @override
   State<_NewsStoryScreen> createState() => _NewsStoryScreenState();
@@ -1642,10 +1805,20 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
       );
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) throw StateError('Görsel oluşturulamadı.');
-      final ok = await InstagramShare.share(
-        data.buffer.asUint8List(),
-        story: true,
-      );
+      final bytes = data.buffer.asUint8List();
+      if (widget.card) {
+        final n = widget.item;
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile.fromData(bytes, mimeType: 'image/png', name: 'haber.png'),
+            ],
+            text: '${widget.article.headline}\n${newsLink(n)}',
+          ),
+        );
+        return;
+      }
+      final ok = await InstagramShare.share(bytes, story: true);
       if (!ok) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Instagram açılamadı.')),
@@ -1668,7 +1841,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Instagram hikâyesi'),
+        title: Text(
+          widget.card ? 'Görsel olarak paylaş' : 'Instagram hikâyesi',
+        ),
       ),
       body: SafeArea(
         top: false,
@@ -1680,7 +1855,11 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 child: FittedBox(
                   child: RepaintBoundary(
                     key: _shot,
-                    child: SizedBox(width: 360, height: 640, child: _story(n)),
+                    child: SizedBox(
+                      width: 360,
+                      height: widget.card ? 450 : 640,
+                      child: widget.card ? _shareCard(n) : _story(n),
+                    ),
                   ),
                 ),
               ),
@@ -1693,16 +1872,24 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 height: 50,
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFDD2A7B),
+                    backgroundColor: widget.card
+                        ? const Color(0xFF128C7E)
+                        : const Color(0xFFDD2A7B),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   onPressed: _busy ? null : _share,
-                  icon: const Icon(Icons.camera_alt_outlined),
+                  icon: Icon(
+                    widget.card
+                        ? Icons.send_outlined
+                        : Icons.camera_alt_outlined,
+                  ),
                   label: Text(
-                    _busy ? 'Hazırlanıyor…' : 'HİKÂYEDE PAYLAŞ',
+                    _busy
+                        ? 'Hazırlanıyor…'
+                        : (widget.card ? 'PAYLAŞ' : 'HİKÂYEDE PAYLAŞ'),
                     style: const TextStyle(
                       fontFamily: 'BarlowCondensed',
                       fontWeight: FontWeight.w800,
@@ -1713,11 +1900,13 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
-                'Instagram\'da o an açık olan hesaptan paylaşılır.',
-                style: TextStyle(color: _muted, fontSize: 12.5),
+                widget.card
+                    ? 'Görsel, manşet ve haberin linkiyle gider.'
+                    : 'Instagram\'da o an açık olan hesaptan paylaşılır.',
+                style: const TextStyle(color: _muted, fontSize: 12.5),
               ),
             ),
           ],
@@ -1778,8 +1967,103 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     ),
   );
 
-  Widget _story(NewsItem n) {
+  /// Üstteki fotoğraf: takım fotoğrafı kırpılmaz (kenardaki oyuncular da
+  /// görünür); boşluğu aynı fotoğrafın bulanık hâli doldurur.
+  Widget _photoHeader(NewsItem n) => n.imageUrls.isEmpty
+      ? NewsVisual(item: n)
+      : Stack(
+          fit: StackFit.expand,
+          children: [
+            ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: WebSafeImage(url: n.imageUrls[_photo], fit: BoxFit.cover),
+            ),
+            ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
+            Align(
+              alignment: Alignment.topCenter,
+              child: WebSafeImage(
+                url: n.imageUrls[_photo],
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        );
+
+  /// Alt satır: turnuva logosu ve adı (görselde ayrıca site adresi).
+  Widget _footer(NewsItem n, {bool site = false}) {
     final logo = (n.leagueLogoUrl ?? '').trim();
+    return Row(
+      children: [
+        if (logo.isNotEmpty) ...[
+          WebSafeImage(url: logo, width: 26, height: 26),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            n.leagueName.trUpper,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
+          ),
+        ),
+        if (site)
+          Text(
+            'ligmasasi.com',
+            style: _cond(13, color: _muted).copyWith(letterSpacing: 0.4),
+          ),
+      ],
+    );
+  }
+
+  /// WhatsApp görseli (4:5): fotoğraf, üzerinde küpür, altta turnuva.
+  Widget _shareCard(NewsItem n) => DecoratedBox(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF0B1220), Color(0xFF0F172A)],
+      ),
+    ),
+    child: Stack(
+      children: [
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 190,
+          child: _photoHeader(n),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 150,
+          bottom: 44,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: 360,
+              child: _Clipping(
+                item: n,
+                article: widget.article,
+                maxParagraphs: 1,
+                tilt: false,
+                brand: true,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 18,
+          right: 18,
+          bottom: 10,
+          child: _footer(n, site: true),
+        ),
+      ],
+    ),
+  );
+
+  Widget _story(NewsItem n) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1795,33 +2079,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             right: 0,
             top: 0,
             height: 300,
-            child: n.imageUrls.isEmpty
-                ? NewsVisual(item: n)
-                // Takım fotoğrafı kırpılmaz (kenardaki oyuncular da görünür);
-                // boşluğu aynı fotoğrafın bulanık hâli doldurur.
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ImageFiltered(
-                        imageFilter: ui.ImageFilter.blur(
-                          sigmaX: 18,
-                          sigmaY: 18,
-                        ),
-                        child: WebSafeImage(
-                          url: n.imageUrls[_photo],
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: WebSafeImage(
-                          url: n.imageUrls[_photo],
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ],
-                  ),
+            child: _photoHeader(n),
           ),
           Positioned(
             left: 0,
@@ -1838,38 +2096,12 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                   article: widget.article,
                   maxParagraphs: 2,
                   tilt: false,
+                  brand: true,
                 ),
               ),
             ),
           ),
-          Positioned(
-            left: 18,
-            right: 18,
-            bottom: 14,
-            child: Row(
-              children: [
-                if (logo.isNotEmpty) ...[
-                  WebSafeImage(url: logo, width: 26, height: 26),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    n.leagueName.trUpper,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
-                  ),
-                ),
-                Text(
-                  'LİG MASASI',
-                  style: _cond(
-                    14,
-                    color: _accent(),
-                  ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.8),
-                ),
-              ],
-            ),
-          ),
+          Positioned(left: 18, right: 18, bottom: 14, child: _footer(n)),
         ],
       ),
     );

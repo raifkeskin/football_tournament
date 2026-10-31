@@ -132,6 +132,7 @@ class NewsArticle {
     if (n.isMatchResult && d != null) return _result(n, d);
     if (n.isWeekResults && d != null) return _week(n, d);
     if (n.isMatchPreview && d != null) return _preview(n, d);
+    if (n.isDayPreview && d != null) return _day(n, d);
     if (n.autoKind == null && n.liveDrawId == null) return _manual(n);
     return null;
   }
@@ -276,27 +277,58 @@ class NewsArticle {
     var homeWorstScore = '', awayWorstScore = '';
     final sentences = <String>[];
     if (timed) {
-      for (final g in goals) {
+      // Oyuncunun maçtaki kaçıncı golü; kaybeden takımın gol sayısı (şeref
+      // golü için).
+      final scored = <String, int>{};
+      final loserGoals = hs == as ? 0 : (hs > as ? as : hs);
+      for (var gi = 0; gi < goals.length; gi++) {
+        final g = goals[gi];
         final before = h - a;
         g.home ? h++ : a++;
         final team = g.home ? home.name : away.name;
         final who = g.og ? '${g.name} (kendi kalesine)' : g.name;
-        final min = g.label.replaceAll("'", '');
+        final nth = g.og
+            ? 1
+            : (scored['${g.home}|${g.name}'] =
+                  (scored['${g.home}|${g.name}'] ?? 0) + 1);
+        final min = '${g.label.replaceAll("'", '')}.\u00A0dakikada';
         final sc = _score(h, a);
         final after = h - a;
+        final last = gi == goals.length - 1 && goals.length > 1;
+        final loser = hs != as && g.home == (hs < as);
+        // İkinci golünü atan oyuncu cümlede öne çıkarılır.
+        final whoN = nth == 2 ? 'ikinci golünü atan $who' : who;
         String s;
         if (h + a == 1) {
-          s = '$min.\u00A0dakikada $who ile $team öne geçti ($sc).';
+          s = g.minute <= 5
+              ? 'Maçın daha $min $who ile $team öne geçti ($sc).'
+              : '$min $who ile $team öne geçti ($sc).';
+        } else if (last && after == 0) {
+          s = '$min $who skoru eşitledi ve son sözü söyledi ($sc).';
+        } else if (last && before == 0) {
+          s = '$min $who ile $team galibiyet golünü buldu ($sc).';
+        } else if (last && nth == 3) {
+          s = '$min hat-trick yapan $who maçın skorunu belirledi: $sc.';
+        } else if (last && !loser) {
+          s = '$min $whoN maçın skorunu belirledi: $sc.';
         } else if (after == 0) {
-          s = '$min.\u00A0dakikada $who skoru eşitledi ($sc).';
+          s = '$min $who skoru eşitledi ($sc).';
         } else if (before == 0) {
-          s = '$min.\u00A0dakikada $who ile $team yeniden öne geçti ($sc).';
-        } else if (after.abs() > before.abs() && after.abs() <= 3) {
-          s = '$min.\u00A0dakikada $who farkı ${after.abs()} gole çıkardı ($sc).';
-        } else {
+          s = '$min $who ile $team yeniden öne geçti ($sc).';
+        } else if (nth == 3) {
+          s = '$min $who hat-trick yaptı ($sc).';
+        } else if (loser && loserGoals == 1 && (hs - as).abs() >= 2) {
+          s = '$min $who ile $team şeref golünü buldu ($sc).';
+        } else if (after.abs() < before.abs()) {
           s = after.abs() == 1
-              ? '$min.\u00A0dakikada $who farkı bire indirdi ($sc).'
-              : '$min.\u00A0dakikada $who skoru $sc yaptı.';
+              ? '$min $whoN farkı bire indirdi ($sc).'
+              : '$min $whoN ile $team farkı azalttı ($sc).';
+        } else if (after.abs() == 3) {
+          s = '$min $whoN farkı üçe çıkardı ve maçı kopardı ($sc).';
+        } else if (after.abs() == 2) {
+          s = '$min $whoN farkı ikiye çıkardı ($sc).';
+        } else {
+          s = '$min $whoN farkı daha da açtı ($sc).';
         }
         sentences.add(s);
         if (a - h > homeWorst) {
@@ -466,6 +498,52 @@ class NewsArticle {
       paragraphs: blocks.isNotEmpty
           ? blocks
           : [for (final m in matches) line(m)],
+    );
+  }
+
+  /// Günün maçları: saat sırasıyla maçlar, ilk ve son düdük.
+  static NewsArticle _day(NewsItem n, Map<String, dynamic> d) {
+    final week = (d['week'] as num?)?.toInt() ?? n.week;
+    final matches = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) m,
+    ];
+    String time(Map m) => (m['time'] ?? '').toString().trim();
+    final times = [
+      for (final m in matches)
+        if (time(m).isNotEmpty) time(m),
+    ]..sort();
+    final date = DateTime.tryParse((d['date'] ?? '').toString());
+    const days = [
+      'Pazartesi',
+      'Salı',
+      'Çarşamba',
+      'Perşembe',
+      'Cuma',
+      'Cumartesi',
+      'Pazar',
+    ];
+    final day = date == null ? 'Bugün' : days[date.weekday - 1];
+    final count = matches.length == 1 ? 'tek maç' : '${matches.length} maç';
+    return NewsArticle(
+      kicker: ['GÜNÜN MAÇLARI', if (week != null) '$week. HAFTA'].join(' · '),
+      headline: week == null ? '$day $count' : '$week. Hafta: $day $count',
+      deck: times.isEmpty
+          ? ''
+          : times.length == 1 || times.first == times.last
+          ? 'Başlama saati ${times.first}'
+          : 'İlk düdük ${times.first} · son maç ${times.last}',
+      paragraphs: [
+        for (final m in matches)
+          [
+            if (time(m).isNotEmpty) time(m),
+            '${ArticleTeam(m['home'] as Map?).name} – '
+                '${ArticleTeam(m['away'] as Map?).name}',
+            if ((m['pitch'] ?? '').toString().trim().isNotEmpty)
+              m['pitch'].toString().trim(),
+          ].join(' · '),
+        'Maçları Lig Masası\'ndan canlı takip edebilirsin.',
+      ],
     );
   }
 

@@ -299,18 +299,16 @@ void openNewsGallery(BuildContext context, List<String> urls, int index) {
   );
 }
 
-/// Haberi paylaşır: turnuva adı, metin ve fotoğraf / gönderi bağlantıları.
+/// Haberin linki: uygulama yüklüyse haberi açar, değilse web sayfası.
+String newsLink(NewsItem n) => 'https://ligmasasi.com/haber/${n.id}';
+
+/// Haberi metin olarak paylaşır: turnuva adı, metin ve haberin linki
+/// (Instagram haberinde gönderinin kendisi).
 Future<void> shareNews(NewsItem n) async {
   final title = n.leagueName.isEmpty ? '' : '${n.leagueName}\n\n';
-  // Instagram haberinde görseller yerine gönderinin kendisi paylaşılır.
-  final link = n.externalLink;
-  final images = link != null
-      ? '\n\n$link'
-      : n.imageUrls.isEmpty
-      ? ''
-      : '\n\n${n.imageUrls.join('\n')}';
+  final link = n.externalLink ?? newsLink(n);
   await SharePlus.instance.share(
-    ShareParams(text: '$title${n.content}$images'),
+    ShareParams(text: '$title${n.content}\n\n$link'),
   );
 }
 

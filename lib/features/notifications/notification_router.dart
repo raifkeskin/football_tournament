@@ -13,10 +13,10 @@ import '../../core/services/app_session.dart';
 import '../match/models/match.dart';
 import '../match/widgets/attendance_card.dart';
 import '../match/screens/match_details_screen.dart';
-import '../news/screens/news_feed_screen.dart';
 import '../tournament/screens/admin_penalty_management_screen.dart';
 import '../../screens/admin_pending_actions_screen.dart';
 import '../tournament/screens/tournament_hub_screen.dart';
+import '../news/widgets/news_talk_widgets.dart';
 
 /// Bildirimin açtığı ekran: maç bildirimleri maç detayını, haber Turnuva
 /// Sayfası'nın Haberler sekmesini, onay bekleyen ceza ceza onaylarını açar.
@@ -30,7 +30,8 @@ class NotificationRouter {
   /// Açılış adresindeki ve açıkken gelen bildirim tıklamalarını dinler.
   static void init() {
     if (!kIsWeb) {
-      // ligmasasi://katilim?m=<maç>: katılım sayfasındaki "Lig Masası'nı aç".
+      // ligmasasi://katilim?m=<maç>: katılım sayfasındaki "Lig Masası'nı aç";
+      // ligmasasi.com/haber/<id>: paylaşılan haber.
       // Açılışta gelen bağlantı da bu akıştan gelir.
       AppLinks().uriLinkStream.listen(_openLink, onError: (_) {});
     }
@@ -52,6 +53,15 @@ class NotificationRouter {
   }
 
   static void _openLink(Uri uri) {
+    // Paylaşılan haber: ligmasasi.com/haber/<id> ya da ligmasasi://haber/<id>.
+    final segs = [
+      if (uri.scheme == 'ligmasasi') uri.host,
+      ...uri.pathSegments,
+    ].where((x) => x.isNotEmpty).toList();
+    if (segs.length >= 2 && segs.first == 'haber') {
+      _queue('news-${segs[1]}');
+      return;
+    }
     final path = uri.scheme == 'ligmasasi' ? uri.host : uri.path;
     final match = uri.queryParameters['m'];
     if (!path.contains('katilim') || match == null || match.isEmpty) return;
@@ -91,6 +101,9 @@ class NotificationRouter {
       // Onaya düşen otomatik haber: turnuvanın onay bekleyen haberleri.
       case 'newsreview':
         if (ref != null) await _openNewsReview(context, ref);
+      // Onaya düşen yorum: turnuvanın onay bekleyen yorumları.
+      case 'newscomment':
+        if (ref != null) await NewsCommentReviewScreen.open(context, ref);
       // Kadro talebi, etiketsiz Instagram gönderisi (approval-ig…) ve
       // yayın linki uyuşmazlığı (yt-conflict-…) Bekleyen Onaylar'da.
       case 'approval':
@@ -131,7 +144,7 @@ class NotificationRouter {
         .maybeSingle();
     final leagueId = ((row?['seasons'] as Map?)?['league_id'] ?? '').toString();
     if (!context.mounted || leagueId.isEmpty) return;
-    NewsView.focusNewsId.value = id;
+    NewsListBody.focusNewsId.value = id;
     await TournamentHubScreen.open(
       context,
       leagueId: leagueId,

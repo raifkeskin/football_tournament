@@ -26,6 +26,7 @@ class AppSettings {
   static const _kBiometricLogin = 'biometric_login_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
+  static const _kNewsComments = 'news_comments_enabled';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -96,6 +97,10 @@ class AppSettings {
   /// yalnız admin görür, diğerleri eski haber kartını görür.
   static final newsScreenEnabled = ValueNotifier<bool>(false);
 
+  /// Haberlerde tribün tepkileri ve yorumlar herkese açık mı; kapalıyken
+  /// yalnız admin görür. Veritabanı da aynı kuralı uygular.
+  static final newsCommentsEnabled = ValueNotifier<bool>(false);
+
   /// Oyuncu kartındaki "Mevki" sekmesi (asıl mevki + oynayabildiği en çok 3
   /// mevki) herkese açık mı; kapalıyken yalnız admin görür. Veritabanı da
   /// kaydı aynı anahtarla açar (`positions_tab_allowed`).
@@ -143,6 +148,8 @@ class AppSettings {
           rosterAddShortcutEnabled.value = r['value'] == true;
         } else if (r['key'] == _kNewsScreen) {
           newsScreenEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kNewsComments) {
+          newsCommentsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kBiometricLogin) {
           biometricLoginEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
