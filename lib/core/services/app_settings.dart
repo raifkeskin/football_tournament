@@ -26,6 +26,7 @@ class AppSettings {
   static const _kBiometricLogin = 'biometric_login_enabled';
   static const _kMatchPosterDesigns = 'match_poster_designs_enabled';
   static const _kMatchInsights = 'match_insights_enabled';
+  static const _kRegulations = 'regulations_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -100,6 +101,9 @@ class AppSettings {
   /// Kadro/Diziliş olay ikonları, futbolcu puanı ve "Olay ekle" herkese
   /// açık mı (admin her zaman görür).
   static final matchInsightsEnabled = ValueNotifier<bool>(false);
+
+  /// Turnuva talimatnamesi herkese açık mı (admin her zaman görür).
+  static final regulationsEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -166,6 +170,8 @@ class AppSettings {
           matchPosterDesignsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMatchInsights) {
           matchInsightsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kRegulations) {
+          regulationsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {
