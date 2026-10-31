@@ -755,15 +755,33 @@ class SplitPoster extends StatelessWidget {
 
   final MatchPosterInfo info;
 
+  Widget _splitTeam(PosterSide s, double crest) => SizedBox(
+    width: 190,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PosterLogo(url: s.logo, name: s.name, size: crest, shadow: true),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            s.shortLabel,
+            maxLines: 1,
+            style: _cond(30, italic: true, shadows: _shadow),
+          ),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final st = PosterOptions.of(context);
     final h = info.home, a = info.away;
-    final crest = st.pick(140, 92);
+    final crest = st.pick(112, 84);
     return LayoutBuilder(
       builder: (context, box) {
         final band = st.pick(140.0, 104.0);
-        final area = box.maxHeight - band;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -831,83 +849,52 @@ class SplitPoster extends StatelessWidget {
                 ),
               ),
             ),
-            // Ev sahibi: sol üst, deplasman: sağ alt
-            Positioned(
-              left: 4,
-              width: 170,
-              top: area * st.pick(0.294, 0.27),
-              child: Column(
-                children: [
-                  PosterLogo(
-                    url: h.logo,
-                    name: h.name,
-                    size: crest,
-                    shadow: true,
-                  ),
-                  const SizedBox(height: 6),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      h.shortLabel,
-                      maxLines: 1,
-                      style: _cond(
-                        st.pick(32, 24),
-                        italic: true,
-                        shadows: _shadow,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              right: 8,
-              width: 190,
-              top: area * st.pick(0.614, 0.58),
-              child: Column(
-                children: [
-                  PosterLogo(
-                    url: a.logo,
-                    name: a.name,
-                    size: crest,
-                    shadow: true,
-                  ),
-                  const SizedBox(height: 6),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      a.shortLabel,
-                      maxLines: 1,
-                      style: _cond(
-                        st.pick(32, 24),
-                        italic: true,
-                        shadows: _shadow,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Ev sahibi solda, VS ortada, deplasman sağda; üst üste binmez,
+            // sığmazsa birlikte küçülür.
             Positioned(
               left: 0,
               right: 0,
-              top: area * st.pick(0.666, 0.66) - st.pick(38, 30),
-              child: Center(
-                child: Container(
-                  width: st.pick(76, 60),
-                  height: st.pick(76, 60),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0C101A),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _gold, width: 2.5),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x99000000), blurRadius: 16),
+              top: st.pick(128, 88),
+              bottom: band + st.pick(8, 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(
+                  width: 340,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _splitTeam(h, crest),
+                      ),
+                      SizedBox(height: st.pick(4, 2)),
+                      Container(
+                        width: st.pick(70, 56),
+                        height: st.pick(70, 56),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0C101A),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _gold, width: 2.5),
+                          boxShadow: const [
+                            BoxShadow(color: Color(0x99000000), blurRadius: 16),
+                          ],
+                        ),
+                        child: Text(
+                          'VS',
+                          style: _cond(
+                            st.pick(32, 25),
+                            italic: true,
+                            color: _gold,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: st.pick(4, 2)),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _splitTeam(a, crest),
+                      ),
                     ],
-                  ),
-                  child: Text(
-                    'VS',
-                    style: _cond(st.pick(34, 26), italic: true, color: _gold),
                   ),
                 ),
               ),
@@ -1296,9 +1283,17 @@ Future<String> _savedSlogan(PosterSide s) async {
 }
 
 List<String> _presets(PosterSide s) {
-  String fit(String v) =>
-      v.length <= kPosterSloganMax ? v : v.substring(0, kPosterSloganMax);
-  return [fit('HAYDİ ${s.shortLabel}!'), fit('FORZA ${s.shortLabel}')];
+  // Ad sığmazsa ilk kelimesi ("FORZA GAZİOSMANPAŞA"); o da sığmazsa kesilir.
+  final first = s.shortLabel.split(' ').first;
+  String fit(String Function(String) make) {
+    for (final name in [s.shortLabel, first]) {
+      final v = make(name);
+      if (v.characters.length <= kPosterSloganMax) return v;
+    }
+    return make(first).characters.take(kPosterSloganMax).toString();
+  }
+
+  return [fit((n) => 'HAYDİ $n!'), fit((n) => 'FORZA $n')];
 }
 
 /// İlk adım: dört tasarım küçük önizlemeleriyle (2×2).
@@ -1560,33 +1555,52 @@ class _TeamPosterControlsState extends State<_TeamPosterControls> {
           child: Row(
             children: [
               const Icon(Icons.edit_rounded, color: Colors.white54, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: TextField(
-                  controller: _ctrl,
-                  onChanged: _setSlogan,
-                  textCapitalization: TextCapitalization.characters,
-                  inputFormatters: [
-                    LengthLimitingTextInputFormatter(kPosterSloganMax),
-                    _TrUpperFormatter(),
-                  ],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    labelText: 'SLOGAN',
-                    labelStyle: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'SLOGAN',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      TextField(
+                        controller: _ctrl,
+                        onChanged: _setSlogan,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(kPosterSloganMax),
+                          _TrUpperFormatter(),
+                        ],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                        cursorColor: kAdminAccent,
+                        // Uygulamanın genel kutu stili burada istenmiyor.
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          contentPadding: EdgeInsets.only(top: 2),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
               Text(
                 '${_ctrl.text.characters.length}/$kPosterSloganMax',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),

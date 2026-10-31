@@ -591,17 +591,12 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                           ),
                         ),
                         Text(
-                          widget.backTitle!,
+                          '${widget.backTitle!} Afişi',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'afişi',
-                          style: TextStyle(color: Colors.white60, fontSize: 14),
                         ),
                       ],
                     ),
@@ -892,19 +887,6 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                               ),
                           ],
                         ),
-                        if (instagram)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
-                            child: Text(
-                              'Instagram ${_format == PosterFormat.story ? 'hikâyesi' : 'gönderisi'} '
-                              'olarak açılır; o an açık olan hesaptan paylaşılır.',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: kAdminMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
                       ],
                     );
                   },
