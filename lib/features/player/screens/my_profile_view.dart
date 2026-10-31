@@ -1,5 +1,6 @@
 import '../../identity/verified_badge.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/push/push_card.dart';
 
@@ -8,6 +9,8 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/services/app_session.dart';
+import '../../../core/widgets/photo_crop_screen.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../home/screens/home_screen.dart';
@@ -92,6 +95,9 @@ class _MyProfileViewState extends State<MyProfileView> {
 
   /// İzin verilmediği için gizli bekleyen kendi fotoğrafı.
   String? _heldPhoto;
+
+  /// Profil fotoğrafı yükleniyor (karttaki fotoğrafın üstünde çark).
+  bool _photoBusy = false;
 
   /// Profilde gösterilen sezon yılı (null: en yeni).
   int? _year;
@@ -225,8 +231,12 @@ class _MyProfileViewState extends State<MyProfileView> {
     if (saved != true || !mounted) return;
     _reloadRequests();
     await _refreshPhoto();
+    await _askPhotoConsent();
+  }
+
+  /// Yeni fotoğraf izin olmadan kimseye görünmez: izne yönlendir.
+  Future<void> _askPhotoConsent() async {
     if (!mounted || _heldPhoto == null) return;
-    // Yeni fotoğraf izin olmadan kimseye görünmez: izne yönlendir.
     final go = await showAdminConfirmDialog(
       context: context,
       title: 'Fotoğraf İzni',
@@ -239,6 +249,97 @@ class _MyProfileViewState extends State<MyProfileView> {
       icon: Icons.photo_camera_front_outlined,
     );
     if (go && mounted) await _openConsents();
+  }
+
+  /// Karttaki fotoğrafa dokununca: fotoğrafı değiştir / kadrajı düzenle.
+  Future<void> _photoMenu(String current) async {
+    if (_photoBusy) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_camera_outlined,
+                  color: kAdminAccent,
+                ),
+                title: Text(
+                  current.isEmpty ? 'Fotoğraf ekle' : 'Fotoğrafı değiştir',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx, 'pick'),
+              ),
+              if (current.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.crop_rounded, color: kAdminAccent),
+                  title: const Text(
+                    'Kadrajı düzenle',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'crop'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    final picked = choice == 'crop'
+        ? await cropPortraitPhotoFromUrl(context, current)
+        : await pickAndCropPortraitPhoto(context);
+    if (picked == null || !mounted) return;
+    await _savePhoto(picked);
+  }
+
+  /// Bilgilerim'deki gibi: yükle, kaydet, yerine geçen eskiyi sil.
+  Future<void> _savePhoto(XFile file) async {
+    final session = AppSession.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final old = (_player?.photoUrl ?? '').trim();
+    setState(() => _photoBusy = true);
+    String? uploaded;
+    try {
+      uploaded = await _service.uploadPendingPhoto(file);
+      await _service.submit({ProfileField.photoUrl: uploaded});
+      // Yönetim kartı da futbolcu fotoğrafını gösterir.
+      session.setPhotoUrl(uploaded);
+      if (old.contains('/profile_requests/')) {
+        try {
+          await _service.deletePhoto(old);
+        } catch (_) {}
+      }
+      await _refreshPhoto();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Fotoğrafın güncellendi.')),
+      );
+    } catch (_) {
+      // Kaydedilemediyse yüklenen fotoğraf boşta kalmasın.
+      if (uploaded != null) {
+        try {
+          await _service.deletePhoto(uploaded);
+        } catch (_) {}
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Fotoğraf kaydedilemedi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+    await _askPhotoConsent();
   }
 
   Future<void> _withdraw(ProfileChangeRequest r) async {
@@ -426,25 +527,82 @@ class _MyProfileViewState extends State<MyProfileView> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
             child: Row(
               children: [
-                Container(
-                  width: 88,
-                  height: 88,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: teamColor, width: 3),
-                  ),
-                  child: ClipOval(
-                    child: photo.isEmpty
-                        ? Container(
-                            color: const Color(0xFF334155),
-                            child: const Icon(
-                              Icons.person_rounded,
-                              color: Colors.white54,
-                              size: 44,
+                // Dokununca: fotoğrafı değiştir / kadrajı düzenle.
+                Semantics(
+                  button: true,
+                  label: 'Profil fotoğrafını değiştir',
+                  child: GestureDetector(
+                    onTap: () => _photoMenu(photo),
+                    child: SizedBox(
+                      width: 88,
+                      height: 88,
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 88,
+                            height: 88,
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: teamColor, width: 3),
                             ),
-                          )
-                        : WebSafeImage(url: photo, width: 82, height: 82),
+                            child: ClipOval(
+                              child: photo.isEmpty
+                                  ? Container(
+                                      color: const Color(0xFF334155),
+                                      child: const Icon(
+                                        Icons.person_rounded,
+                                        color: Colors.white54,
+                                        size: 44,
+                                      ),
+                                    )
+                                  : WebSafeImage(
+                                      url: photo,
+                                      width: 82,
+                                      height: 82,
+                                    ),
+                            ),
+                          ),
+                          if (_photoBusy)
+                            const Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.black45,
+                                ),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 26,
+                                    height: 26,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: kAdminAccent,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: _surface, width: 2.5),
+                              ),
+                              child: const Icon(
+                                Icons.photo_camera_rounded,
+                                size: 15,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),

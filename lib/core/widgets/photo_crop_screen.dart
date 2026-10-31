@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -13,9 +14,28 @@ import 'picked_image.dart';
 /// Profil fotoğrafının oranı: oyuncu kartındaki vesikalık (84×108).
 const kPortraitPhotoAspect = 7 / 9;
 
+bool _picking = false;
+
+/// Galeriden tek fotoğraf. Galeri açıkken gelen ikinci dokunuş yeni istek
+/// açmaz (Android already_active / iOS multiple_request hatası); null döner.
+Future<XFile?> _pickFromGallery() async {
+  if (_picking) return null;
+  _picking = true;
+  try {
+    return await ImagePicker().pickImage(source: ImageSource.gallery);
+  } on PlatformException catch (e) {
+    if (e.code == 'already_active' || e.code == 'multiple_request') {
+      return null;
+    }
+    rethrow;
+  } finally {
+    _picking = false;
+  }
+}
+
 /// Galeriden seçer ve kadraj ekranını açar; vazgeçilirse null.
 Future<XFile?> pickAndCropPortraitPhoto(BuildContext context) async {
-  final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+  final picked = await _pickFromGallery();
   if (picked == null) return null;
   final bytes = await picked.readAsBytes();
   if (!context.mounted) return null;
@@ -44,7 +64,7 @@ Future<XFile?> cropPortraitPhotoFromUrl(
 /// Yuvarlak profil resmi (ör. medya künyesi) için kare kadraj; galeriden
 /// seçer, vazgeçilirse null.
 Future<XFile?> pickAndCropAvatarPhoto(BuildContext context) async {
-  final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+  final picked = await _pickFromGallery();
   if (picked == null) return null;
   final bytes = await picked.readAsBytes();
   if (!context.mounted) return null;
