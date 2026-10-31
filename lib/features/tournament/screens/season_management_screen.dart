@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../match/insights/rating_settings_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -700,6 +702,41 @@ class SeasonManagementScreen extends StatelessWidget {
                               (v) => setSheetState(() => isDefault = v),
                             ),
                           ],
+                        ),
+                      ),
+                    // Futbolcu puanlama (yeni özellik: şimdilik yalnız admin).
+                    if (tab == 0 && isEdit && isAdmin)
+                      AdminFormSection(
+                        title: 'Futbolcu Puanlama',
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          leading: const Icon(
+                            Icons.star_half_rounded,
+                            color: Colors.white70,
+                          ),
+                          title: const Text(
+                            'Puanlama kuralları',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Maç kadrosunda futbolcu puanı, kurallar ve '
+                            'Olay ekle puanları',
+                            style: TextStyle(color: Colors.white60),
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.white60,
+                          ),
+                          onTap: () => RatingSettingsScreen.open(
+                            context,
+                            season.id,
+                            season.name,
+                          ),
                         ),
                       ),
                   ],
