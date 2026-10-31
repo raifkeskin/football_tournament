@@ -536,7 +536,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             _WideTile(
                               title: 'Tribün',
                               subtitle:
-                                  'Girişe gerek olmadan, tüm turnuvaları takip et',
+                                  'Misafir girişi yaparak, tüm turnuvaları takip et',
                               icon: Icons.stadium_rounded,
                               colors: const [
                                 Color(0xFF1E3A8A),

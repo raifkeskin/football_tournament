@@ -81,8 +81,11 @@ def _center(d, y, s, f, fill, alpha):
     d.text(((W - w) / 2, y), s, font=f, fill=fill + (alpha,))
 
 
-def outro_frame(t):
-    """t saniyedeki bitiş karesi (RGB). Öğeler sırayla belirir (~1.4 sn)."""
+def outro_frame(t, headline='ÇOK YAKINDA', url='ligmasasi.com'):
+    """t saniyedeki bitiş karesi (RGB). Öğeler sırayla belirir (~1.4 sn).
+
+    Markete çıktıktan sonra: headline='ŞİMDİ İNDİR', url='ligmasasi.com/indir'.
+    """
     c = BG.copy()
     k = ease_out(t / 0.6)
     c.alpha_composite(_fade(CREST_IMG, k), ((W - CREST_IMG.width) // 2, 330 + round((1 - k) * 30)))
@@ -95,7 +98,7 @@ def outro_frame(t):
     _center(d, 1002, 'Veteran • Halısaha • Okul • Şirket', font('Barlow-Medium.ttf', 44), MUTED, a2)
     d.line([W / 2 - 150, 1100, W / 2 + 150, 1100], fill=WHITE + (int(220 * k2),), width=4)
     k3 = ease_out((t - 0.45) / 0.5)
-    _center(d, 1140 + (1 - k3) * 30, 'ÇOK YAKINDA', font('BarlowCondensed-ExtraBoldItalic.ttf', 150),
+    _center(d, 1140 + (1 - k3) * 30, headline, font('BarlowCondensed-ExtraBoldItalic.ttf', 150),
             WHITE, int(255 * k3))
     c = Image.alpha_composite(c, layer)
     k4 = ease_out((t - 0.7) / 0.5)
@@ -107,7 +110,7 @@ def outro_frame(t):
     layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
     k5 = ease_out((t - 0.95) / 0.5)
-    _center(d, 1500, 'ligmasasi.com', font('Barlow-Bold.ttf', 64), GOLD, int(255 * k5))
+    _center(d, 1500, url, font('Barlow-Bold.ttf', 64), GOLD, int(255 * k5))
     return Image.alpha_composite(c, layer).convert('RGB')
 
 
