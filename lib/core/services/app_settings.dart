@@ -24,6 +24,7 @@ class AppSettings {
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
   static const _kBiometricLogin = 'biometric_login_enabled';
+  static const _kMatchPosterDesigns = 'match_poster_designs_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -90,6 +91,10 @@ class AppSettings {
 
   /// Yüz tanıma / parmak izi ile giriş teklifi herkese açık mı (admin her zaman).
   static final biometricLoginEnabled = ValueNotifier<bool>(false);
+
+  /// Maç afişinde Formalar / Çapraz / Takım tasarımları herkese açık mı
+  /// (admin her zaman görür).
+  static final matchPosterDesignsEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -152,6 +157,8 @@ class AppSettings {
           newsCommentsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kBiometricLogin) {
           biometricLoginEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kMatchPosterDesigns) {
+          matchPosterDesignsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

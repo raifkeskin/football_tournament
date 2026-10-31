@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gal/gal.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -46,13 +47,23 @@ const _kPrefScorers = 'poster_scorers';
 /// [formats]: afişin desteklediği boyutlar (birden fazlaysa sekme çıkar).
 /// [scorersOption]: "Gol atanlar" anahtarı gösterilsin mi.
 ///
+/// [backTitle] verilirse pencerenin üstünde geri oku ve bu başlık çıkar;
+/// geri okuna basılınca pencere kapanır ve `true` döner (ör. tasarım
+/// seçimine dönmek için). [controls] boyut seçiminin altına eklenen ek
+/// seçimlerdir (ör. Takım afişinde takım ve slogan).
+///
+/// Maç afişlerinde ([PosterKind.match]) zemin seçilmez: turnuvanın afiş
+/// görseli varsa o, yoksa sade zemin kullanılır.
+///
 /// [photoPoster] verilirse afiş seçilen fotoğrafla çizilir ve pencerede
 /// "Fotoğraf seç" çıkar: galeriden seçilen fotoğraf yalnız bu afişte
 /// kullanılır, hiçbir yere kaydedilmez. Başlangıçta [photoUrl] (ör.
 /// oyuncunun profil fotoğrafı) kullanılır. Önizlemede fotoğraf sürüklenerek
 /// kaydırılır, iki parmakla yakınlaştırılır ([PhotoFrame]).
-Future<void> showPosterPreview({
+Future<bool?> showPosterPreview({
   required BuildContext context,
+  String? backTitle,
+  Widget? controls,
   Widget? poster,
   Widget Function(ImageProvider? photo, PhotoFrame frame)? photoPoster,
   String? photoUrl,
@@ -66,9 +77,11 @@ Future<void> showPosterPreview({
   List<PosterFormat> formats = const [PosterFormat.story],
   bool scorersOption = false,
 }) {
-  return showDialog<void>(
+  return showDialog<bool>(
     context: context,
     builder: (_) => _PosterPreviewDialog(
+      backTitle: backTitle,
+      controls: controls,
       poster: poster,
       photoPoster: photoPoster,
       photoUrl: photoUrl,
@@ -118,8 +131,12 @@ class _PosterPreviewDialog extends StatefulWidget {
     this.leagueId,
     this.seasonId,
     this.kind,
+    this.backTitle,
+    this.controls,
   });
 
+  final String? backTitle;
+  final Widget? controls;
   final Widget? poster;
   final Widget Function(ImageProvider? photo, PhotoFrame frame)? photoPoster;
   final String? photoUrl;
@@ -230,7 +247,9 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   /// Turnuvanın afiş arka planı; yoksa afiş kendi zeminini çizer.
   ImageProvider? _background;
 
-  bool get _plainOption => widget.kind != null;
+  /// Sade / Fotoğraf seçimi: maç afişlerinde yok (zemin varsa o, yoksa sade).
+  bool get _plainOption =>
+      widget.kind != null && widget.kind != PosterKind.match;
 
   Future<void> _prepare() async {
     final (_, bgUrl, _) = await (
@@ -262,6 +281,7 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     if (!mounted) return;
     setState(() {
       if (bg != null && ok) _background = bg;
+      if (widget.kind == PosterKind.match) _plain = _background == null;
     });
   }
 
@@ -404,58 +424,55 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     }
   }
 
-  /// Pencerenin alt düğmeleri (İndir, Paylaş, Instagram) — dar, yan yana.
+  /// Pencerenin alt düğmeleri (İndir, Paylaş, Instagram): kartvizitteki
+  /// gibi renkli, yuvarlak köşeli uygulama ikonu ve altında yazı.
   Widget _actionButton({
     required String label,
-    required IconData icon,
+    required Widget glyph,
     required bool busy,
     required VoidCallback onTap,
-    required BoxDecoration decoration,
+    required Gradient gradient,
   }) {
     return Opacity(
       opacity: _busy && !busy ? 0.5 : 1,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: Ink(
-          height: 46,
-          decoration: decoration,
-          child: InkWell(
-            onTap: _busy ? null : onTap,
-            child: Center(
-              child: busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(icon, color: Colors.white, size: 18),
-                            const SizedBox(width: 6),
-                            Text(
-                              label,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _busy ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: gradient,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
                         ),
-                      ),
-                    ),
-            ),
+                      )
+                    : glyph,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -534,7 +551,11 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     final size = _format.size;
     final maxH =
         MediaQuery.sizeOf(context).height *
-        (widget.formats.length > 1 || _plainOption ? 0.42 : 0.6);
+        (widget.controls != null
+            ? 0.36
+            : widget.formats.length > 1 || _plainOption
+            ? 0.42
+            : 0.6);
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -548,8 +569,43 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Başlık yok; sağ üstteki kapat düğmesine yer.
-                const SizedBox(height: 34),
+                // Başlık yok; sağ üstteki kapat düğmesine yer. Tasarım
+                // seçiminden gelindiyse geri oku ve tasarımın adı.
+                if (widget.backTitle == null)
+                  const SizedBox(height: 34)
+                else
+                  SizedBox(
+                    height: 40,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          onPressed: _busy
+                              ? null
+                              : () => Navigator.pop(context, true),
+                          icon: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        Text(
+                          widget.backTitle!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'afişi',
+                          style: TextStyle(color: Colors.white60, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (widget.formats.length > 1) ...[
                   _segment<PosterFormat>(
                     values: widget.formats,
@@ -559,6 +615,10 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                     onChanged: (f) => _set(() => _format = f),
                   ),
                   const SizedBox(height: 10),
+                ],
+                if (widget.controls != null) ...[
+                  widget.controls!,
+                  const SizedBox(height: 4),
                 ],
                 if (_plainOption) ...[
                   _segment<bool>(
@@ -765,55 +825,71 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                           children: [
                             Expanded(
                               child: _actionButton(
-                                label: _saved ? 'KAYDEDİLDİ' : 'İNDİR',
-                                icon: _saved
-                                    ? Icons.check_circle_rounded
-                                    : Icons.download_rounded,
+                                label: _saved ? 'Kaydedildi' : 'İndir',
+                                glyph: Icon(
+                                  _saved
+                                      ? Icons.check_rounded
+                                      : Icons.download_rounded,
+                                  color: Colors.white,
+                                  size: 26,
+                                ),
                                 busy: _saving,
                                 onTap: _download,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.04),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0xFF3B82F6),
+                                    Color(0xFF1D4ED8),
+                                  ],
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
                             Expanded(
                               child: _actionButton(
-                                label: 'PAYLAŞ',
-                                icon: Icons.ios_share_rounded,
+                                label: 'Paylaş',
+                                glyph: const Icon(
+                                  Icons.share_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
                                 busy: _sharing,
                                 onTap: _share,
-                                decoration: BoxDecoration(
-                                  color: kAdminAccent,
-                                  borderRadius: BorderRadius.circular(12),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0xFF5BE374),
+                                    Color(0xFF1FB94A),
+                                  ],
                                 ),
                               ),
                             ),
-                            if (instagram) ...[
-                              const SizedBox(width: 8),
+                            if (instagram)
                               Expanded(
                                 child: _actionButton(
-                                  label: 'INSTAGRAM',
-                                  icon: Icons.camera_alt_outlined,
+                                  label: 'Instagram',
+                                  glyph: const FaIcon(
+                                    FontAwesomeIcons.instagram,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
                                   busy: _instagramBusy,
                                   onTap: _shareInstagram,
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFF58529),
-                                        Color(0xFFDD2A7B),
-                                        Color(0xFF8134AF),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
+                                  gradient: const RadialGradient(
+                                    center: Alignment(-0.6, 1.2),
+                                    radius: 1.5,
+                                    colors: [
+                                      Color(0xFFFEDA75),
+                                      Color(0xFFFA7E1E),
+                                      Color(0xFFD62976),
+                                      Color(0xFF962FBF),
+                                      Color(0xFF4F5BD5),
+                                    ],
+                                    stops: [0, 0.25, 0.5, 0.75, 1],
                                   ),
                                 ),
                               ),
-                            ],
                           ],
                         ),
                         if (instagram)
