@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/utils/string_utils.dart';
 import '../../../core/services/active_tournament.dart';
@@ -741,6 +743,95 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     }
   }
 
+  /// Paylaş: görsel + link (önerilen), Instagram hikâyesi, linki kopyala.
+  /// Küpürü olmayan ya da onay bekleyen haber doğrudan metin paylaşılır.
+  Future<void> _shareMenu(NewsItem n) async {
+    if (_pending || NewsArticle.of(n) == null) return shareNews(n);
+    final ig = await _ig;
+    if (!mounted) return;
+    Widget option(
+      IconData icon,
+      Color color,
+      String title,
+      String sub,
+      String value,
+    ) => ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        child: Icon(icon, size: 20),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Text(sub, style: const TextStyle(color: _muted)),
+      onTap: () => Navigator.pop(context, value),
+    );
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              option(
+                Icons.image_outlined,
+                const Color(0xFF128C7E),
+                'Görsel olarak paylaş',
+                'WhatsApp ve diğer uygulamalar · görsel + link',
+                'card',
+              ),
+              if (ig)
+                option(
+                  Icons.camera_alt_outlined,
+                  const Color(0xFFDD2A7B),
+                  'Instagram hikâyesi',
+                  'Dikey küpür',
+                  'story',
+                ),
+              option(
+                Icons.link,
+                const Color(0xFF475569),
+                'Linki kopyala',
+                newsLink(n).replaceFirst('https://', ''),
+                'link',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'link') {
+      await Clipboard.setData(ClipboardData(text: newsLink(n)));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Link kopyalandı.')));
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'NewsStoryScreen'),
+        builder: (_) => _NewsStoryScreen(
+          item: n,
+          article: _current(n),
+          initialPhoto: _page,
+          card: choice == 'card',
+        ),
+      ),
+    );
+  }
+
   Future<void> _editHeadline(NewsArticle current) async {
     final n = widget.item;
     final result = await showModalBottomSheet<(String, String)>(
@@ -1161,7 +1252,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         square(
           const Icon(Icons.send_outlined, color: Colors.white, size: 21),
           'Paylaş',
-          () => shareNews(widget.item),
+          () => _shareMenu(n),
         ),
       ],
     );
@@ -1674,11 +1765,15 @@ class _NewsStoryScreen extends StatefulWidget {
     required this.item,
     required this.article,
     this.initialPhoto = 0,
+    this.card = false,
   });
 
   final NewsItem item;
   final NewsArticle article;
   final int initialPhoto;
+
+  /// true: WhatsApp vb. için 4:5 görsel, altında manşet ve haber linki.
+  final bool card;
 
   @override
   State<_NewsStoryScreen> createState() => _NewsStoryScreenState();
@@ -1706,10 +1801,20 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
       );
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) throw StateError('Görsel oluşturulamadı.');
-      final ok = await InstagramShare.share(
-        data.buffer.asUint8List(),
-        story: true,
-      );
+      final bytes = data.buffer.asUint8List();
+      if (widget.card) {
+        final n = widget.item;
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile.fromData(bytes, mimeType: 'image/png', name: 'haber.png'),
+            ],
+            text: '${widget.article.headline}\n${newsLink(n)}',
+          ),
+        );
+        return;
+      }
+      final ok = await InstagramShare.share(bytes, story: true);
       if (!ok) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Instagram açılamadı.')),
@@ -1732,7 +1837,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Instagram hikâyesi'),
+        title: Text(
+          widget.card ? 'Görsel olarak paylaş' : 'Instagram hikâyesi',
+        ),
       ),
       body: SafeArea(
         top: false,
@@ -1744,7 +1851,11 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 child: FittedBox(
                   child: RepaintBoundary(
                     key: _shot,
-                    child: SizedBox(width: 360, height: 640, child: _story(n)),
+                    child: SizedBox(
+                      width: 360,
+                      height: widget.card ? 450 : 640,
+                      child: widget.card ? _shareCard(n) : _story(n),
+                    ),
                   ),
                 ),
               ),
@@ -1757,16 +1868,24 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 height: 50,
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFDD2A7B),
+                    backgroundColor: widget.card
+                        ? const Color(0xFF128C7E)
+                        : const Color(0xFFDD2A7B),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   onPressed: _busy ? null : _share,
-                  icon: const Icon(Icons.camera_alt_outlined),
+                  icon: Icon(
+                    widget.card
+                        ? Icons.send_outlined
+                        : Icons.camera_alt_outlined,
+                  ),
                   label: Text(
-                    _busy ? 'Hazırlanıyor…' : 'HİKÂYEDE PAYLAŞ',
+                    _busy
+                        ? 'Hazırlanıyor…'
+                        : (widget.card ? 'PAYLAŞ' : 'HİKÂYEDE PAYLAŞ'),
                     style: const TextStyle(
                       fontFamily: 'BarlowCondensed',
                       fontWeight: FontWeight.w800,
@@ -1777,11 +1896,13 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
-                'Instagram\'da o an açık olan hesaptan paylaşılır.',
-                style: TextStyle(color: _muted, fontSize: 12.5),
+                widget.card
+                    ? 'Görsel, manşet ve haberin linkiyle gider.'
+                    : 'Instagram\'da o an açık olan hesaptan paylaşılır.',
+                style: const TextStyle(color: _muted, fontSize: 12.5),
               ),
             ),
           ],
@@ -1842,8 +1963,103 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     ),
   );
 
-  Widget _story(NewsItem n) {
+  /// Üstteki fotoğraf: takım fotoğrafı kırpılmaz (kenardaki oyuncular da
+  /// görünür); boşluğu aynı fotoğrafın bulanık hâli doldurur.
+  Widget _photoHeader(NewsItem n) => n.imageUrls.isEmpty
+      ? NewsVisual(item: n)
+      : Stack(
+          fit: StackFit.expand,
+          children: [
+            ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: WebSafeImage(url: n.imageUrls[_photo], fit: BoxFit.cover),
+            ),
+            ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
+            Align(
+              alignment: Alignment.topCenter,
+              child: WebSafeImage(
+                url: n.imageUrls[_photo],
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        );
+
+  /// Alt satır: turnuva logosu ve adı (görselde ayrıca site adresi).
+  Widget _footer(NewsItem n, {bool site = false}) {
     final logo = (n.leagueLogoUrl ?? '').trim();
+    return Row(
+      children: [
+        if (logo.isNotEmpty) ...[
+          WebSafeImage(url: logo, width: 26, height: 26),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            n.leagueName.trUpper,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
+          ),
+        ),
+        if (site)
+          Text(
+            'ligmasasi.com',
+            style: _cond(13, color: _muted).copyWith(letterSpacing: 0.4),
+          ),
+      ],
+    );
+  }
+
+  /// WhatsApp görseli (4:5): fotoğraf, üzerinde küpür, altta turnuva.
+  Widget _shareCard(NewsItem n) => DecoratedBox(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF0B1220), Color(0xFF0F172A)],
+      ),
+    ),
+    child: Stack(
+      children: [
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 190,
+          child: _photoHeader(n),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 150,
+          bottom: 44,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: 360,
+              child: _Clipping(
+                item: n,
+                article: widget.article,
+                maxParagraphs: 1,
+                tilt: false,
+                brand: true,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 18,
+          right: 18,
+          bottom: 10,
+          child: _footer(n, site: true),
+        ),
+      ],
+    ),
+  );
+
+  Widget _story(NewsItem n) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1859,33 +2075,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             right: 0,
             top: 0,
             height: 300,
-            child: n.imageUrls.isEmpty
-                ? NewsVisual(item: n)
-                // Takım fotoğrafı kırpılmaz (kenardaki oyuncular da görünür);
-                // boşluğu aynı fotoğrafın bulanık hâli doldurur.
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ImageFiltered(
-                        imageFilter: ui.ImageFilter.blur(
-                          sigmaX: 18,
-                          sigmaY: 18,
-                        ),
-                        child: WebSafeImage(
-                          url: n.imageUrls[_photo],
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: WebSafeImage(
-                          url: n.imageUrls[_photo],
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ],
-                  ),
+            child: _photoHeader(n),
           ),
           Positioned(
             left: 0,
@@ -1907,27 +2097,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
               ),
             ),
           ),
-          Positioned(
-            left: 18,
-            right: 18,
-            bottom: 14,
-            child: Row(
-              children: [
-                if (logo.isNotEmpty) ...[
-                  WebSafeImage(url: logo, width: 26, height: 26),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    n.leagueName.trUpper,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Positioned(left: 18, right: 18, bottom: 14, child: _footer(n)),
         ],
       ),
     );
