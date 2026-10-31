@@ -96,7 +96,7 @@ as $$
            end)
 $$;
 
--- Oy ver / değiştir. Aynı seçim: değişiklik yok.
+-- Oy ver / değiştir; aynı seçim ya da null: oyu geri alır (null döner).
 create or replace function public.match_predict(p_match_id uuid, p_pick text)
 returns text
 language plpgsql
@@ -105,6 +105,7 @@ set search_path to ''
 as $$
 declare
   v_uid uuid := auth.uid();
+  v_old text;
 begin
   if v_uid is null then
     raise exception 'Oy vermek için giriş yapın.';
@@ -112,17 +113,23 @@ begin
   if not public.news_comments_on() then
     raise exception 'Bu özellik henüz açık değil.';
   end if;
-  if p_pick not in ('home', 'draw', 'away') then
-    raise exception 'Geçersiz seçim.';
-  end if;
   if not public.match_poll_open(p_match_id) then
     raise exception 'Maç başladı, oylama kapandı.';
+  end if;
+  select pick into v_old from public.match_predictions
+   where match_id = p_match_id and user_id = v_uid;
+  if p_pick is null or v_old = p_pick then
+    delete from public.match_predictions
+     where match_id = p_match_id and user_id = v_uid;
+    return null;
+  end if;
+  if p_pick not in ('home', 'draw', 'away') then
+    raise exception 'Geçersiz seçim.';
   end if;
   insert into public.match_predictions (match_id, user_id, pick)
   values (p_match_id, v_uid, p_pick)
   on conflict (match_id, user_id)
-  do update set pick = excluded.pick, created_at = now()
-  where public.match_predictions.pick <> excluded.pick;
+  do update set pick = excluded.pick, created_at = now();
   return p_pick;
 end;
 $$;
