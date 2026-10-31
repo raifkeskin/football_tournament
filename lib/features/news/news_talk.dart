@@ -87,9 +87,8 @@ List<NewsReaction> newsReactionsFor(NewsItem n) {
   if (n.isWeeklyPick) {
     return of([('👑', 'Hak etti'), ('🔥', 'Efsane'), ('🐐', 'GOAT')]);
   }
-  if (n.isDayPreview) {
-    return of([('🔥', 'Heyecanlı'), ('⚽', 'Gol olur'), ('👏', 'Bol şans')]);
-  }
+  // Bugünün maçları: tribün tepkisi yok (yalnız yorumlar).
+  if (n.isDayPreview) return const [];
   return of([('👍', 'Beğendim'), ('❤️', 'Süper'), ('💯', 'Harika')]);
 }
 
