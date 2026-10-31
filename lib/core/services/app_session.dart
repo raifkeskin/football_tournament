@@ -9,8 +9,6 @@ import 'package:supabase_flutter/supabase_flutter.dart'
     as sb; // Supabase çakışmasını önlemek için alias
 import '../push/push_service.dart';
 import 'error_reporter.dart';
-import '../../features/auth/biometric_login.dart';
-import '../../features/auth/session_dropped_dialog.dart';
 
 const _kRememberMeKey = 'auth_remember_me';
 
@@ -181,22 +179,9 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         ),
       ) {
     // Akışı Supabase Auth değişikliklerine kaydırdık
-    _sub = _supabase.auth.onAuthStateChange.listen(
-      (data) {
-        // Kullanıcı çıkmadan oturum kapandı (yenileme anahtarı reddedildi):
-        // hemen misafire düşmeden önce sessizce yeniden giriş denenir.
-        if (data.event == sb.AuthChangeEvent.signedOut &&
-            data.signOutReason != null &&
-            !_signingOut &&
-            value.user != null) {
-          unawaited(_recoverSession(data.signOutReason!));
-          return;
-        }
-        _onAuthChanged(data.session?.user);
-      },
-      // Ağ hataları akışa hata olarak gelir; oturum yerinde kalır.
-      onError: (_) {},
-    );
+    _sub = _supabase.auth.onAuthStateChange.listen((data) {
+      _onAuthChanged(data.session?.user);
+    });
 
     // İlk açılışta mevcut kullanıcıyı kontrol et
     _onAuthChanged(_supabase.auth.currentUser);
@@ -228,54 +213,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     } catch (_) {}
   }
 
-  /// Kullanıcının kendi çıkışı sürüyor (kendiliğinden kapanmadan ayırmak için).
-  bool _signingOut = false;
-
-  /// Oturum kendiliğinden kapandı: "Beni Hatırla" açık ve biyometrik giriş
-  /// bilgileri kayıtlıysa aynı hesapla sessizce yeniden girilir (yetkiler
-  /// bu arada korunur); olmazsa misafire düşülür ve tekrar giriş istenir.
-  /// Her olay adminlere Telegram'dan bildirilir.
-  Future<void> _recoverSession(sb.SignOutReason reason) async {
-    final uid = value.user?.id;
-    final current = value.user?.email ?? '';
-    var remember = false;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      remember = prefs.getBool(_kRememberMeKey) ?? false;
-    } catch (_) {}
-    final creds = remember ? await BiometricLogin.read() : null;
-    var recovered = false;
-    if (creds != null && current == '${creds.phone}@masterclass.com') {
-      try {
-        await _supabase.auth.signInWithPassword(
-          email: current,
-          password: creds.password,
-        );
-        recovered = true; // signedIn olayı profili yeniden yükler.
-      } catch (_) {}
-    }
-    // Adminlere Telegram'dan haber (o an misafir de olsa çağrılabilir).
-    unawaited(
-      _supabase
-          .rpc(
-            'report_session_drop',
-            params: {
-              'p_user_id': uid,
-              'p_reason': reason.name,
-              'p_recovered': recovered,
-              'p_platform': ErrorReporter.platform,
-              'p_app_version': ErrorReporter.version,
-            },
-          )
-          .then((_) {}, onError: (_) {}),
-    );
-    if (recovered) return;
-    _onAuthChanged(null);
-    unawaited(showSessionDroppedDialog());
-  }
-
   Future<void> signOut() async {
-    _signingOut = true;
     await setRememberMe(false);
     // Oturum kapanmadan (yetki varken) bu cihazın bildirim kaydı silinir.
     await PushService.onSignOut();
@@ -284,7 +222,6 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     } catch (e) {
       // ignore
     } finally {
-      _signingOut = false;
       _onAuthChanged(null);
     }
   }
