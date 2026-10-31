@@ -300,58 +300,61 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
             NewsPollBox(item: n)
           else ...[
             if (n.isMatchResult) _PollVerdict(item: n),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1A2A46), Color(0xFF141F33)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'TRİBÜN',
-                        style: _cond(17).copyWith(letterSpacing: 0.8),
-                      ),
-                      const Spacer(),
-                      Text(
-                        total == 0 ? 'İlk tepkiyi sen ver' : '$total tepki',
-                        style: const TextStyle(
-                          color: _muted,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+            if (reactions.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1A2A46), Color(0xFF141F33)],
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      for (final r in reactions) ...[
-                        if (r.slot > 1) const SizedBox(width: 6),
-                        Expanded(
-                          child: _ReactionBox(
-                            emoji: r.emoji,
-                            label: r.label,
-                            count: _counts[r.slot] ?? 0,
-                            selected: _mine == r.slot,
-                            accent: accent,
-                            onTap: () => _react(r.slot),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'TRİBÜN',
+                          style: _cond(17).copyWith(letterSpacing: 0.8),
+                        ),
+                        const Spacer(),
+                        Text(
+                          total == 0 ? 'İlk tepkiyi sen ver' : '$total tepki',
+                          style: const TextStyle(
+                            color: _muted,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        for (final r in reactions) ...[
+                          if (r.slot > 1) const SizedBox(width: 6),
+                          Expanded(
+                            child: _ReactionBox(
+                              emoji: r.emoji,
+                              label: r.label,
+                              count: _counts[r.slot] ?? 0,
+                              selected: _mine == r.slot,
+                              accent: accent,
+                              onTap: () => _react(r.slot),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
           const SizedBox(height: 10),
           Material(
