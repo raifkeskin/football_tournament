@@ -653,7 +653,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     for (final teamId in {m.homeTeamId, m.awayTeamId}) {
       if (teamId.isEmpty) continue;
       _teamService
-          .watchPlayers(teamId: teamId, tournamentId: m.seasonId)
+          .watchPlayers(teamId: teamId, tournamentId: m.seasonId, matchId: m.id)
           .last
           .ignore();
     }
@@ -4928,6 +4928,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     _playersStream = ServiceLocator.teamService.watchPlayers(
       teamId: widget.teamId,
       tournamentId: widget.match.seasonId,
+      matchId: widget.match.id,
     );
     _rostersStream = ServiceLocator.matchService.watchMatchRosters(
       widget.match.id,
@@ -6995,7 +6996,7 @@ Future<void> shareLineupPoster(
     final db = Supabase.instance.client;
     final results = await Future.wait([
       ServiceLocator.teamService
-          .watchPlayers(teamId: teamId, tournamentId: m.seasonId)
+          .watchPlayers(teamId: teamId, tournamentId: m.seasonId, matchId: m.id)
           .first,
       ServiceLocator.matchService.watchMatchRosters(m.id, teamId).first,
       db
