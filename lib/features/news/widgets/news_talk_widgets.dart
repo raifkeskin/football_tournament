@@ -359,45 +359,6 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
     final reviewer = session.canManageRegion(n.tournamentId, n.regionId);
     final list = _comments;
     return [
-      const SizedBox(height: 8),
-      Material(
-        color: _tile,
-        borderRadius: BorderRadius.circular(22),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(22),
-          onTap: _write,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 11, 8, 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _uid == null ? 'Yorum yazmak için giriş yap' : 'Yorum yaz…',
-                    style: const TextStyle(color: _muted, fontSize: 14),
-                  ),
-                ),
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: _accent(),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.edit_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
       if (list == null && !_loadFailed)
         const Padding(
           padding: EdgeInsets.all(20),
@@ -463,6 +424,45 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
               },
             ),
           ),
+      const SizedBox(height: 8),
+      Material(
+        color: _tile,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: _write,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 11, 8, 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _uid == null ? 'Yorum yazmak için giriş yap' : 'Yorum yaz…',
+                    style: const TextStyle(color: _muted, fontSize: 14),
+                  ),
+                ),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: _accent(),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.edit_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     ];
   }
 }
