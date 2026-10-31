@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../tournament/models/league_extras.dart';
 import '../news_talk.dart';
@@ -52,13 +55,17 @@ class NewsTalkSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!newsTalkOn(context)) return const SizedBox.shrink();
-    final labels = {for (final r in newsReactionsFor(item)) r.slot: r.emoji};
+    final hasPoll = newsHasPoll(item);
+    final votes = hasPoll ? newsPollTotal(item.poll) : 0;
+    final labels = hasPoll
+        ? const <int, String>{}
+        : {for (final r in newsReactionsFor(item)) r.slot: r.emoji};
     final counts =
         item.reactions.entries
             .where((e) => e.value > 0 && labels.containsKey(e.key))
             .toList()
           ..sort((a, b) => b.value.compareTo(a.value));
-    if (counts.isEmpty && item.commentCount == 0) {
+    if (counts.isEmpty && item.commentCount == 0 && votes == 0) {
       return const SizedBox.shrink();
     }
     Widget chip(String emoji, int n, {bool outline = false}) => Container(
@@ -86,6 +93,10 @@ class NewsTalkSummary extends StatelessWidget {
         spacing: 5,
         runSpacing: 4,
         children: [
+          if (votes > 0) ...[
+            _PollBar(poll: item.poll, height: 6),
+            chip('🗳️', votes),
+          ],
           for (final e in counts) chip(labels[e.key]!, e.value),
           if (item.commentCount > 0)
             chip('💬', item.commentCount, outline: true),
@@ -241,58 +252,63 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1A2A46), Color(0xFF141F33)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'TRİBÜN',
-                      style: _cond(17).copyWith(letterSpacing: 0.8),
-                    ),
-                    const Spacer(),
-                    Text(
-                      total == 0 ? 'İlk tepkiyi sen ver' : '$total tepki',
-                      style: const TextStyle(
-                        color: _muted,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+          if (newsHasPoll(n))
+            NewsPollBox(item: n)
+          else ...[
+            if (n.isMatchResult) _PollVerdict(item: n),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1A2A46), Color(0xFF141F33)],
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    for (final r in reactions) ...[
-                      if (r.slot > 1) const SizedBox(width: 6),
-                      Expanded(
-                        child: _ReactionBox(
-                          emoji: r.emoji,
-                          label: r.label,
-                          count: _counts[r.slot] ?? 0,
-                          selected: _mine == r.slot,
-                          accent: accent,
-                          onTap: () => _react(r.slot),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'TRİBÜN',
+                        style: _cond(17).copyWith(letterSpacing: 0.8),
+                      ),
+                      const Spacer(),
+                      Text(
+                        total == 0 ? 'İlk tepkiyi sen ver' : '$total tepki',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      for (final r in reactions) ...[
+                        if (r.slot > 1) const SizedBox(width: 6),
+                        Expanded(
+                          child: _ReactionBox(
+                            emoji: r.emoji,
+                            label: r.label,
+                            count: _counts[r.slot] ?? 0,
+                            selected: _mine == r.slot,
+                            accent: accent,
+                            onTap: () => _react(r.slot),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 10),
           Material(
             color: _card,
@@ -494,7 +510,8 @@ class _ReactionBox extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 '$emoji $label',
-                maxLines: 1,
+                maxLines: 2,
+                textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: selected ? Colors.white : _muted,
@@ -1051,6 +1068,486 @@ class _NewsCommentReviewScreenState extends State<NewsCommentReviewScreen> {
                   );
                 },
               ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Maç önü anketi
+// ---------------------------------------------------------------------------
+
+const _pollKeys = ['home', 'draw', 'away'];
+const _drawColor = Color(0xFF64748B);
+
+/// Takımın armadaki rengi (yoksa gri-mavi).
+Color _teamColor(Map? t, Color fallback) {
+  final hex = (t?['color'] ?? '').toString().replaceAll('#', '');
+  final v = int.tryParse(hex, radix: 16);
+  return v == null || hex.length != 6 ? fallback : Color(0xFF000000 | v);
+}
+
+/// Yüzdeler; hiç oy yoksa eşit bölünür.
+Map<String, int> _percents(Map<String, int> poll) {
+  final total = newsPollTotal(poll);
+  if (total == 0) return {for (final k in _pollKeys) k: 33};
+  return {for (final k in _pollKeys) k: ((poll[k] ?? 0) * 100 / total).round()};
+}
+
+/// Seçeneklerin oranını gösteren ince çubuk (oy yoksa eşit).
+class _PollBar extends StatelessWidget {
+  const _PollBar({required this.poll, this.height = 8, this.home, this.away});
+
+  final Map<String, int> poll;
+  final double height;
+  final Map? home;
+  final Map? away;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = newsPollTotal(poll);
+    int flex(String k) => total == 0 ? 1 : (poll[k] ?? 0);
+    final colors = {
+      'home': _accent(),
+      'draw': _drawColor,
+      'away': _teamColor(away, const Color(0xFF3B82F6)),
+    };
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(height / 2),
+      child: SizedBox(
+        height: height,
+        child: Row(
+          children: [
+            for (final k in _pollKeys)
+              if (flex(k) > 0)
+                Expanded(
+                  flex: flex(k),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    color: colors[k]!.withValues(alpha: total == 0 ? 0.35 : 1),
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Maç önü haberinde "Kim kazanır?" kutusu. Maç başlayana kadar oy verilir
+/// (değiştirilebilir); sonuçlar baştan görünür, açıkken kısa aralıkla
+/// yenilenir. Maç başlamış ve hiç oy yoksa görünmez.
+class NewsPollBox extends StatefulWidget {
+  const NewsPollBox({super.key, required this.item});
+
+  final NewsItem item;
+
+  @override
+  State<NewsPollBox> createState() => _NewsPollBoxState();
+}
+
+class _NewsPollBoxState extends State<NewsPollBox> {
+  late Map<String, int> _poll = Map.of(widget.item.poll);
+  late final bool _open = newsPollOpen(widget.item);
+  String? _mine;
+  bool _busy = false;
+  Timer? _timer;
+
+  String? get _matchId => widget.item.matchId;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = _matchId;
+    if (id != null) {
+      NewsTalkService.myPick(id).then((v) {
+        if (mounted) setState(() => _mine = v);
+      }, onError: (_) {});
+    }
+    _refresh();
+    if (_open) {
+      _timer = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    if (_busy) return;
+    try {
+      final p = await NewsTalkService.poll(widget.item.id);
+      if (mounted && !_busy) setState(() => _poll = p);
+    } catch (_) {}
+  }
+
+  Future<void> _vote(String pick) async {
+    final id = _matchId;
+    if (id == null || _busy || _mine == pick) return;
+    if (AppSession.of(context).value.user == null) {
+      _snack(context, 'Oy vermek için giriş yap.');
+      return;
+    }
+    final before = (_mine, Map.of(_poll));
+    setState(() {
+      _busy = true;
+      final old = _mine;
+      if (old != null) _poll[old] = ((_poll[old] ?? 1) - 1).clamp(0, 1 << 30);
+      _poll[pick] = (_poll[pick] ?? 0) + 1;
+      _mine = pick;
+    });
+    try {
+      await NewsTalkService.predict(id, pick);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _mine = before.$1;
+        _poll = before.$2;
+      });
+      _snack(context, NewsTalkService.message(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = newsPollTotal(_poll);
+    if (!_open && total == 0) return const SizedBox.shrink();
+    final d = widget.item.autoData;
+    final home = d?['home'] is Map ? d!['home'] as Map : null;
+    final away = d?['away'] is Map ? d!['away'] as Map : null;
+    final pct = _percents(_poll);
+    final accent = _accent();
+    final foot = total == 0
+        ? 'Henüz oy yok · İlk tahmini sen yap'
+        : '$total oy${!_open
+              ? ''
+              : _mine == null
+              ? ' · Tahminini seç'
+              : ' · Oyunu değiştirmek için kutuya dokun'}';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1A2A46), Color(0xFF141F33)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                'KİM KAZANIR?',
+                style: _cond(17).copyWith(letterSpacing: 0.8),
+              ),
+              const Spacer(),
+              if (_open) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: _green,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'CANLI',
+                  style: TextStyle(
+                    color: _green,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ] else
+                const Text(
+                  'OYLAMA KAPANDI',
+                  style: TextStyle(
+                    color: _amber,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final k in _pollKeys) ...[
+                  if (k != 'home') const SizedBox(width: 6),
+                  Expanded(
+                    child: _PollChoice(
+                      team: k == 'home'
+                          ? home
+                          : k == 'away'
+                          ? away
+                          : null,
+                      label: k == 'draw'
+                          ? 'Berabere'
+                          : ((k == 'home' ? home : away)?['name'] ?? '')
+                                .toString(),
+                      percent: pct[k]!,
+                      selected: _mine == k,
+                      accent: accent,
+                      onTap: _open ? () => _vote(k) : null,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          _PollBar(poll: _poll, height: 8, home: home, away: away),
+          const SizedBox(height: 8),
+          Text(
+            foot,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PollChoice extends StatelessWidget {
+  const _PollChoice({
+    required this.team,
+    required this.label,
+    required this.percent,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final Map? team;
+  final String label;
+  final int percent;
+  final bool selected;
+  final Color accent;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = (team?['logo'] ?? '').toString().trim();
+    final Widget mark;
+    if (team == null) {
+      mark = Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: Color(0xFF334155),
+          shape: BoxShape.circle,
+        ),
+        child: Text('X', style: _cond(15)),
+      );
+    } else if (logo.isNotEmpty) {
+      mark = WebSafeImage(
+        url: logo,
+        width: 30,
+        height: 30,
+        fit: BoxFit.contain,
+      );
+    } else {
+      final words = label.trim().split(RegExp(r'\s+'));
+      final initials = words
+          .take(2)
+          .map((w) => w.isEmpty ? '' : w.characters.first)
+          .join()
+          .toUpperCase();
+      mark = Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _teamColor(team, const Color(0xFF475569)),
+          shape: BoxShape.circle,
+        ),
+        child: Text(initials, style: _cond(12)),
+      );
+    }
+    return Material(
+      color: selected ? accent.withValues(alpha: 0.12) : _tile,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: selected
+            ? BorderSide(color: accent, width: 2)
+            : BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 10, 6, 8),
+          child: Column(
+            children: [
+              mark,
+              const SizedBox(height: 6),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '%$percent',
+                style: _cond(
+                  26,
+                  color: selected ? accent : Colors.white,
+                ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+              ),
+              if (selected) ...[
+                const SizedBox(height: 3),
+                Text(
+                  'SENİN OYUN',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Maç sonucu haberinde anketin sonucu: tribün bildi mi. Ankette oy yoksa
+/// görünmez.
+class _PollVerdict extends StatefulWidget {
+  const _PollVerdict({required this.item});
+
+  final NewsItem item;
+
+  @override
+  State<_PollVerdict> createState() => _PollVerdictState();
+}
+
+class _PollVerdictState extends State<_PollVerdict> {
+  String? _mine;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.item.matchId;
+    if (id != null && newsPollTotal(widget.item.poll) > 0) {
+      NewsTalkService.myPick(id).then((v) {
+        if (mounted) setState(() => _mine = v);
+      }, onError: (_) {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final poll = widget.item.poll;
+    final total = newsPollTotal(poll);
+    final d = widget.item.autoData;
+    final hs = (d?['hs'] as num?)?.toInt();
+    final as = (d?['as'] as num?)?.toInt();
+    if (total == 0 || hs == null || as == null) return const SizedBox.shrink();
+    final result = hs > as
+        ? 'home'
+        : hs < as
+        ? 'away'
+        : 'draw';
+    String name(String k) => k == 'draw'
+        ? 'beraberlik'
+        : (((d?[k] as Map?)?['name']) ?? '').toString();
+    final sorted = [..._pollKeys]
+      ..sort((a, b) => (poll[b] ?? 0).compareTo(poll[a] ?? 0));
+    final top = sorted.first;
+    final split = (poll[sorted[1]] ?? 0) == (poll[top] ?? 0);
+    final right = poll[result] ?? 0;
+    final pct = ((poll[top] ?? 0) * 100 / total).round();
+    final knew = !split && top == result;
+    final text = split
+        ? 'Tribün ikiye bölünmüştü. $right kişi doğru tahmin etti.'
+        : 'Tribünün çoğu (%$pct) ${name(top)} dedi ve '
+              '${knew ? 'bildi' : 'yanıldı'}. $right kişi doğru tahmin etti.';
+    final color = knew ? _green : _amber;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'TAHMİN',
+                  style: _cond(15, color: color).copyWith(letterSpacing: 0.8),
+                ),
+                const Spacer(),
+                Text(
+                  '$total oy',
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              text,
+              style: const TextStyle(
+                color: _soft,
+                fontSize: 13.5,
+                height: 1.35,
+              ),
+            ),
+            if (_mine != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _mine == result ? 'Sen de bildin ✓' : 'Bu sefer olmadı',
+                style: TextStyle(
+                  color: _mine == result ? _green : _muted,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

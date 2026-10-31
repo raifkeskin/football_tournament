@@ -71,18 +71,54 @@ List<NewsReaction> newsReactionsFor(NewsItem n) {
       (slot: i + 1, emoji: x[i].$1, label: x[i].$2),
   ];
   if (n.isMatchResult) {
-    return of([('👏', 'Hak etti'), ('😮', 'Sürpriz'), ('🟨', 'Hakem')]);
+    return of([
+      ('👏', 'Hak etti'),
+      ('🔥', 'Maç gibi maç'),
+      ('🏆', 'Zirve kokusu'),
+    ]);
   }
   if (n.isWeekResults) {
-    return of([('🔥', 'Gol yağmuru'), ('⚽', 'Haftanın maçı'), ('😴', 'Sakin')]);
+    return of([
+      ('🍿', 'Nefes kesti'),
+      ('📈', 'Yarış kızıştı'),
+      ('👏', 'Güzel hafta'),
+    ]);
   }
   if (n.isWeeklyPick) {
-    return of([('👑', 'Hak etti'), ('🤔', 'Başkası'), ('🔥', 'Efsane')]);
+    return of([('👑', 'Hak etti'), ('🔥', 'Efsane'), ('🐐', 'GOAT')]);
   }
-  if (n.isMatchPreview || n.isDayPreview) {
-    return of([('🔥', 'Heyecanlı'), ('⚽', 'Gol olur'), ('🤝', 'Berabere')]);
+  if (n.isDayPreview) {
+    return of([('🔥', 'Heyecanlı'), ('⚽', 'Gol olur'), ('👏', 'Bol şans')]);
   }
-  return of([('👍', 'Beğendim'), ('❤️', 'Süper'), ('😮', 'Vay')]);
+  return of([('👍', 'Beğendim'), ('❤️', 'Süper'), ('💯', 'Harika')]);
+}
+
+/// Maç önü haberinde tepkiler yerine "Kim kazanır?" anketi.
+bool newsHasPoll(NewsItem n) => n.isMatchPreview && n.matchId != null;
+
+/// Anketin oy toplamı.
+int newsPollTotal(Map<String, int> poll) =>
+    (poll['home'] ?? 0) + (poll['draw'] ?? 0) + (poll['away'] ?? 0);
+
+/// Haberdeki tarih/saate göre maç başlamadı mı (oylama açık mı). Kesin
+/// denetim veritabanında; bu yalnız görünüm için.
+bool newsPollOpen(NewsItem n) {
+  final d = n.autoData;
+  final date = DateTime.tryParse((d?['date'] ?? '').toString());
+  if (date == null) return false;
+  final m = RegExp(
+    r'^(\d{1,2}):(\d{2})$',
+  ).firstMatch((d?['time'] ?? '').toString().trim());
+  final kickoff = m == null
+      ? DateTime(date.year, date.month, date.day + 1)
+      : DateTime(
+          date.year,
+          date.month,
+          date.day,
+          int.parse(m.group(1)!),
+          int.parse(m.group(2)!),
+        );
+  return DateTime.now().isBefore(kickoff);
 }
 
 /// Tepki ve yorum işlemleri (yazma yalnız veritabanı fonksiyonlarıyla).
@@ -114,6 +150,37 @@ class NewsTalkService {
       params: {'p_news_id': newsId, 'p_slot': slot},
     );
     return (r as num?)?.toInt();
+  }
+
+  static Future<String?> myPick(String matchId) async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) return null;
+    final row = await _sb
+        .from('match_predictions')
+        .select('pick')
+        .eq('match_id', matchId)
+        .eq('user_id', uid)
+        .maybeSingle();
+    return row?['pick']?.toString();
+  }
+
+  /// Ankete oy verir ya da oyu değiştirir ('home' | 'draw' | 'away').
+  static Future<void> predict(String matchId, String pick) =>
+      _sb.rpc('match_predict', params: {'p_match_id': matchId, 'p_pick': pick});
+
+  /// Haberin güncel anket sayıları.
+  static Future<Map<String, int>> poll(String newsId) async {
+    final row = await _sb
+        .from('news')
+        .select('poll')
+        .eq('id', newsId)
+        .maybeSingle();
+    final p = row?['poll'];
+    return {
+      if (p is Map)
+        for (final e in p.entries)
+          if (e.value is num) e.key.toString(): (e.value as num).toInt(),
+    };
   }
 
   static Future<List<NewsComment>> comments(String newsId) async {
