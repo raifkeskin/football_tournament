@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Diziliş sahasında oyuncunun gösterimi: yuvarlak veya forma.
-enum PitchTokenStyle { circle, shirt }
+/// Diziliş işareti: yuvarlak, forma ya da profil fotoğrafı.
+enum PitchTokenStyle { circle, shirt, photo }
 
 /// Cihazda saklanan diziliş gösterimi tercihi; diziliş sekmesi ve diziliş
 /// afişi aynı tercihi kullanır.
@@ -20,9 +21,10 @@ class PitchTokenStylePref {
     _loaded = true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getString(_key) == PitchTokenStyle.shirt.name) {
-        notifier.value = PitchTokenStyle.shirt;
-      }
+      final saved = PitchTokenStyle.values
+          .where((e) => e.name == prefs.getString(_key))
+          .firstOrNull;
+      if (saved != null) notifier.value = saved;
     } catch (_) {}
   }
 
@@ -109,10 +111,17 @@ class _JerseyPainter extends CustomPainter {
 
 /// Diziliş sekmesindeki "Yuvarlak / Forma" seçici.
 class PitchTokenStyleToggle extends StatelessWidget {
-  const PitchTokenStyleToggle({super.key, this.compact = false});
+  const PitchTokenStyleToggle({
+    super.key,
+    this.compact = false,
+    this.showPhoto = false,
+  });
 
   /// Yalnız ikonlar (dar satırlar için).
   final bool compact;
+
+  /// "Profil" (oyuncu fotoğrafı) seçeneği gösterilsin mi.
+  final bool showPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -187,6 +196,16 @@ class PitchTokenStyleToggle extends StatelessWidget {
                   borderColor: Colors.white,
                 ),
               ),
+              if (showPhoto)
+                item(
+                  PitchTokenStyle.photo,
+                  'Profil',
+                  const Icon(
+                    Icons.account_circle_outlined,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
             ],
           ),
         );

@@ -39,6 +39,8 @@ import '../../share/poster_background.dart';
 import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
 import '../../share/match_poster_designs.dart';
+import '../insights/insight_widgets.dart';
+import '../insights/match_insights.dart';
 import '../../share/match_result_poster.dart';
 import '../../share/poster_share.dart';
 import '../../share/pre_match_video.dart';
@@ -4373,6 +4375,81 @@ class _LineupTabState extends State<_LineupTab>
   Widget build(BuildContext context) {
     super.build(context);
     final m = widget.match;
+    return MatchInsightsBuilder(
+      match: m,
+      builder: (context, insights) {
+        _insights = insights;
+        return _body(context, m);
+      },
+    );
+  }
+
+  /// Olay ikonları ve futbolcu puanı (yeni özellik; kapalıysa null).
+  MatchInsights? _insights;
+
+  /// Maçın iki kadrosu (Olay ekle'de futbolcu seçimi için).
+  Future<List<MomentPlayer>> _momentPlayers(MatchModel m) async {
+    final rows = await Supabase.instance.client
+        .from('match_rosters')
+        .select('player_id, team_id, jersey_number, players(name, surname)')
+        .eq('match_id', m.id);
+    String name(Map r) {
+      final p = r['players'];
+      if (p is! Map) return '-';
+      return '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim();
+    }
+
+    final list =
+        [
+          for (final r in rows)
+            MomentPlayer(
+              id: '${r['player_id']}',
+              name: name(r),
+              number: '${r['jersey_number'] ?? ''}',
+              teamId: '${r['team_id']}',
+              teamName: shortTeamName(
+                r['team_id'] == m.homeTeamId
+                    ? widget.homeName
+                    : widget.awayName,
+              ),
+            ),
+        ]..sort((a, b) {
+          final t = (a.teamId == m.homeTeamId ? 0 : 1).compareTo(
+            b.teamId == m.homeTeamId ? 0 : 1,
+          );
+          return t != 0
+              ? t
+              : _jerseyValue(a.number).compareTo(_jerseyValue(b.number));
+        });
+    return list;
+  }
+
+  Future<void> _openMoments(MatchModel m, MatchInsights insights) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final players = await _momentPlayers(m);
+      if (!mounted) return;
+      if (players.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Önce esame (kadro) girilmeli.')),
+        );
+        return;
+      }
+      final live = MatchClock.liveMinuteParts(m);
+      await showMomentSheet(
+        context: context,
+        match: m,
+        insights: insights,
+        players: players,
+        minute: live?.minute,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Kadro okunamadı: $e')));
+    }
+  }
+
+  Widget _body(BuildContext context, MatchModel m) {
+    final insights = _insights;
     final list = ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
       children: [
@@ -4407,6 +4484,29 @@ class _LineupTabState extends State<_LineupTab>
         ],
         _viewSwitch(m),
         const SizedBox(height: 10),
+        // Olay ekle: puana etki eden anlar (yetkililer, maç başladıktan sonra).
+        if (insights != null && widget.isSuperAdmin && !_beforeKickoff(m)) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: () => _openMoments(m, insights),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+              label: Text(
+                insights.moments.isEmpty
+                    ? 'Olay ekle'
+                    : 'Olay ekle (${insights.moments.length})',
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         if (_view == null) ...[
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
@@ -4420,7 +4520,9 @@ class _LineupTabState extends State<_LineupTab>
             match: m,
             teamId: _view!,
             color: _view == m.homeTeamId ? _green : _blue,
-            sideBySide: true,
+            // Olay ikonlarıyla tek takım tam genişlik liste.
+            sideBySide: insights == null,
+            insights: insights,
           ),
       ],
     );
@@ -4438,7 +4540,13 @@ class _LineupTabState extends State<_LineupTab>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (head) _columnHead(name, color, teamId),
-          _TeamLineupColumn(match: m, teamId: teamId, color: color, only: only),
+          _TeamLineupColumn(
+            match: m,
+            teamId: teamId,
+            color: color,
+            only: only,
+            insights: _insights,
+          ),
         ],
       ),
     );
@@ -4769,11 +4877,16 @@ class _TeamLineupColumn extends StatefulWidget {
     required this.color,
     this.sideBySide = false,
     this.only,
+    this.insights,
   });
 
   final MatchModel match;
   final String teamId;
   final Color color;
+
+  /// Verilirse satırlar olay ikonları ve puanla, sabit yükseklikte çizilir
+  /// (yan yana görünümde iki takımın satırları hizalı kalır).
+  final MatchInsights? insights;
 
   /// Tek takım görünümü: kadro solda, yedekler sağda.
   final bool sideBySide;
@@ -4905,6 +5018,30 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             final subs = rosters.where((r) => !r.isStarting).toList()
               ..sort(hasOrder ? byList : order);
 
+            // Puan için hat: ilk 11'de sahadaki kaleci 0, diğerleri mevkisi.
+            int ratingLine(MatchRosterModel r) {
+              if (r.isStarting && r.playerId == gkId) return 0;
+              final l = lineOf(r);
+              return l == 0 ? 1 : l;
+            }
+
+            final ins = widget.insights;
+            final ratings = <String, double>{};
+            if (ins != null) {
+              for (final r in rosters) {
+                final v = ins.ratingFor(
+                  playerId: r.playerId,
+                  teamId: teamId,
+                  starter: r.isStarting,
+                  line: ratingLine(r),
+                );
+                if (v != null) ratings[r.playerId] = v;
+              }
+            }
+            final best = ratings.isEmpty
+                ? null
+                : ratings.values.reduce((a, b) => a > b ? a : b);
+
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
                 for (final r in list)
@@ -4915,6 +5052,10 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                     // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
                     line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
                     isCaptain: r.isCaptain,
+                    rating: ratings[r.playerId],
+                    best:
+                        ratings[r.playerId] != null &&
+                        ratings[r.playerId] == best,
                   ),
               ];
             }
@@ -5023,9 +5164,12 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     required String name,
     required int line,
     bool isCaptain = false,
+    double? rating,
+    bool best = false,
   }) {
     final isGk = line == 0;
     final badge = isGk ? const Color(0xFFF59E0B) : color;
+    final ins = widget.insights;
     // İsme dokununca oyuncu kartı açılır.
     return Builder(
       builder: (context) => InkWell(
@@ -5034,7 +5178,96 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             ? null
             : () =>
                   showPlayerCard(context, playerKey: playerId, number: jersey),
-        child: _rowBody(jersey, name, badge, isCaptain),
+        child: ins == null
+            ? _rowBody(jersey, name, badge, isCaptain)
+            : _insightRow(
+                jersey,
+                name,
+                badge,
+                isCaptain,
+                ins.of(playerId),
+                rating,
+                best,
+              ),
+      ),
+    );
+  }
+
+  /// Olaylı satır: sabit yükseklik, altta ince ayırıcı; adın altında
+  /// gol/değişiklik/kart, sağda puan.
+  Widget _insightRow(
+    String jersey,
+    String name,
+    Color badge,
+    bool isCaptain,
+    PlayerMarks marks,
+    double? rating,
+    bool best,
+  ) {
+    return Container(
+      height: 50,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: badge.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              jersey.isEmpty ? '-' : jersey,
+              style: TextStyle(
+                color: badge,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                    if (isCaptain) ...[
+                      const SizedBox(width: 5),
+                      const CaptainBadge(size: 14),
+                    ],
+                  ],
+                ),
+                if (marks.hasLineEvents) ...[
+                  const SizedBox(height: 3),
+                  PlayerEventLine(marks: marks),
+                ],
+              ],
+            ),
+          ),
+          if (rating != null) ...[
+            const SizedBox(width: 6),
+            RatingBadge(value: rating, best: best),
+          ],
+        ],
       ),
     );
   }
