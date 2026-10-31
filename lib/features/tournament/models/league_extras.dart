@@ -43,6 +43,7 @@ class NewsItem {
     this.pendingUntil,
     this.reactions = const {},
     this.commentCount = 0,
+    this.poll = const {},
   });
 
   /// Tribün tepkileri: yuva (1-3) → sayı. Etiketler haber türüne göre.
@@ -50,6 +51,10 @@ class NewsItem {
 
   /// Yayındaki yorum sayısı.
   final int commentCount;
+
+  /// Maç önü anketinin oyları: 'home' | 'draw' | 'away' → sayı (maç önü ve
+  /// maç sonucu haberlerinde). Boşsa ankette oy yok.
+  final Map<String, int> poll;
 
   /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
   final String? linkUrl;
