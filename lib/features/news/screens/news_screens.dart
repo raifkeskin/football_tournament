@@ -1219,10 +1219,14 @@ class _Clipping extends StatelessWidget {
     this.onEdit,
     this.maxParagraphs,
     this.tilt = true,
+    this.brand = false,
   });
 
   final NewsItem item;
   final NewsArticle article;
+
+  /// Instagram hikâyesinde üst satırın sağında Lig Masası arması ve adı.
+  final bool brand;
 
   /// Instagram hikâyesinde metnin ilk paragrafları.
   final int? maxParagraphs;
@@ -1265,9 +1269,29 @@ class _Clipping extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              a.kicker,
-              style: _cond(12.5, color: _kickRed).copyWith(letterSpacing: 1.6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    a.kicker,
+                    style: _cond(
+                      12.5,
+                      color: _kickRed,
+                    ).copyWith(letterSpacing: 1.6),
+                  ),
+                ),
+                if (brand) ...[
+                  Image.asset(AppLogo.asset, width: 22, height: 22),
+                  const SizedBox(width: 5),
+                  Text(
+                    'LİG MASASI',
+                    style: _cond(
+                      13,
+                      color: _ink,
+                    ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.8),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 6),
             Row(
@@ -1878,6 +1902,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                   article: widget.article,
                   maxParagraphs: 2,
                   tilt: false,
+                  brand: true,
                 ),
               ),
             ),
@@ -1899,13 +1924,6 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: _cond(14, color: _soft).copyWith(letterSpacing: 0.8),
                   ),
-                ),
-                Text(
-                  'LİG MASASI',
-                  style: _cond(
-                    14,
-                    color: _accent(),
-                  ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 0.8),
                 ),
               ],
             ),
