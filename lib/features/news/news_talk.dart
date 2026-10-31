@@ -184,6 +184,67 @@ class NewsTalkService {
     };
   }
 
+  /// Engellediğim kişiler: kullanıcı kimliği → yorumdaki adı. Oturum
+  /// boyunca önbellekte.
+  static Future<Map<String, String>>? _blocks;
+  static String? _blocksUid;
+  static String? _termsUid;
+
+  static Future<Map<String, String>> blocks() {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) return Future.value(const {});
+    if (_blocksUid != uid) _blocks = null;
+    _blocksUid = uid;
+    return _blocks ??= _sb
+        .from('news_comment_blocks')
+        .select('blocked_user_id, blocked_name')
+        .eq('user_id', uid)
+        .then(
+          (rows) => {
+            for (final r in rows)
+              r['blocked_user_id'].toString(): (r['blocked_name'] ?? '')
+                  .toString(),
+          },
+          onError: (_) {
+            _blocks = null;
+            return const <String, String>{};
+          },
+        );
+  }
+
+  /// Yorumun yazarını engeller; yorum ayrıca şikâyet edilir.
+  static Future<void> block(String commentId) async {
+    await _sb.rpc('news_comment_block', params: {'p_comment_id': commentId});
+    _blocks = null;
+  }
+
+  static Future<void> unblock(String userId) async {
+    await _sb.rpc('news_comment_unblock', params: {'p_user_id': userId});
+    _blocks = null;
+  }
+
+  static bool _termsOk = false;
+
+  /// Yorum kurallarını kabul etti mi.
+  static Future<bool> termsAccepted() async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) return false;
+    if (_termsOk && _termsUid == uid) return true;
+    _termsUid = uid;
+    final row = await _sb
+        .from('news_comment_terms')
+        .select('user_id')
+        .eq('user_id', uid)
+        .maybeSingle();
+    return _termsOk = row != null;
+  }
+
+  static Future<void> acceptTerms() async {
+    await _sb.rpc('news_comment_accept_terms');
+    _termsOk = true;
+    _termsUid = _sb.auth.currentUser?.id;
+  }
+
   static Future<List<NewsComment>> comments(String newsId) async {
     final rows = await _sb
         .from('news_comments')

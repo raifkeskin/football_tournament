@@ -126,6 +126,9 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
   List<NewsComment>? _comments;
   bool _loadFailed = false;
 
+  /// Engellediğim kişiler (yorumları gösterilmez).
+  Map<String, String> _blocked = const {};
+
   String? get _uid => AppSession.of(context).value.user?.id;
 
   @override
@@ -168,9 +171,11 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
     setState(() => _loadFailed = false);
     try {
       final list = await NewsTalkService.comments(widget.item.id);
+      final blocked = await NewsTalkService.blocks();
       if (!mounted) return;
       setState(() {
-        _comments = list;
+        _blocked = blocked;
+        _comments = list.where((c) => !blocked.containsKey(c.userId)).toList();
         _commentCount = list.where((c) => !c.isPending).length;
       });
     } catch (_) {
@@ -188,6 +193,8 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
       _snack(context, 'Yorum yazmak için giriş yap.');
       return;
     }
+    if (!await _ensureTerms()) return;
+    if (!mounted) return;
     final status = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -206,6 +213,43 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
     );
     setState(() => _open = true);
     await _load();
+  }
+
+  /// İlk yorumdan önce bir kez yorum kurallarını onaylatır.
+  Future<bool> _ensureTerms() async {
+    try {
+      if (await NewsTalkService.termsAccepted()) return true;
+    } catch (_) {}
+    if (!mounted) return false;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _TermsSheet(),
+    );
+    if (ok != true) return false;
+    try {
+      await NewsTalkService.acceptTerms();
+      return true;
+    } catch (e) {
+      if (mounted) _snack(context, NewsTalkService.message(e));
+      return false;
+    }
+  }
+
+  Future<void> _manageBlocks() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _BlocksSheet(initial: _blocked),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _act(Future<void> Function() run, String done) async {
@@ -391,6 +435,22 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
             mine: c.userId == _uid,
             reviewer: reviewer,
             canReport: _uid != null && c.userId != _uid && !c.isPending,
+            canBlock: _uid != null && c.userId != _uid,
+            onBlock: () async {
+              if (!await _confirm(
+                '${c.authorName} engellensin mi?',
+                'Bu kişinin yorumlarını artık görmezsin. Yorumu da '
+                    'incelenmek üzere şikâyet edilir. Engeli yorumların '
+                    'altındaki "Engellediklerin" bölümünden kaldırabilirsin.',
+                'Engelle',
+              )) {
+                return;
+              }
+              await _act(
+                () => NewsTalkService.block(c.id),
+                'Engellendi; yorumlarını artık görmeyeceksin.',
+              );
+            },
             onDelete: () async {
               if (!await _confirm(
                 'Yorumu sil',
@@ -463,6 +523,16 @@ class _NewsTalkSectionState extends State<NewsTalkSection> {
           ),
         ),
       ),
+      if (_blocked.isNotEmpty)
+        Center(
+          child: TextButton(
+            onPressed: _manageBlocks,
+            child: Text(
+              'Engellediklerin (${_blocked.length})',
+              style: const TextStyle(color: _muted, fontSize: 12.5),
+            ),
+          ),
+        ),
     ];
   }
 }
@@ -533,8 +603,10 @@ class _CommentTile extends StatelessWidget {
     required this.mine,
     required this.reviewer,
     required this.canReport,
+    required this.canBlock,
     required this.onDelete,
     required this.onReport,
+    required this.onBlock,
     required this.onReview,
   });
 
@@ -542,6 +614,8 @@ class _CommentTile extends StatelessWidget {
   final bool mine;
   final bool reviewer;
   final bool canReport;
+  final bool canBlock;
+  final VoidCallback onBlock;
   final VoidCallback onDelete;
   final VoidCallback onReport;
   final void Function(String action) onReview;
@@ -606,13 +680,17 @@ class _CommentTile extends StatelessWidget {
                   const SizedBox(height: 6),
                   CommentReviewButtons(onReview: onReview),
                 ],
-                if (!pending && (mine || canReport || reviewer))
+                if (!pending && (mine || canReport || reviewer || canBlock))
                   Row(
                     children: [
                       if (mine || reviewer)
                         _link('Sil', onDelete)
                       else if (canReport)
                         _link('Şikâyet et', onReport),
+                      if (canBlock) ...[
+                        const SizedBox(width: 14),
+                        _link('Engelle', onBlock),
+                      ],
                     ],
                   ),
                 if (pending && mine && !reviewer)
@@ -1548,6 +1626,171 @@ class _PollVerdictState extends State<_PollVerdict> {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// İlk yorumdan önce gösterilen yorum kuralları.
+class _TermsSheet extends StatelessWidget {
+  const _TermsSheet();
+
+  static const _rules = [
+    'Küfür, hakaret ve aşağılama yok.',
+    'Irk, din, cinsiyet, memleket ya da takım üzerinden nefret söylemi yok.',
+    'Telefon, adres gibi kişisel bilgi, reklam ve bağlantı paylaşma.',
+    'Hakeme, oyunculara ve yöneticilere saygılı ol: eleştiri serbest, '
+        'hakaret değil.',
+    'Kurallara uymayan yorumlar kaldırılır; tekrarında yorum yazman '
+        'kapatılır.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'YORUM KURALLARI',
+              style: _cond(20).copyWith(letterSpacing: 0.8),
+            ),
+            const SizedBox(height: 12),
+            for (final r in _rules)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6, right: 10),
+                      child: Icon(Icons.circle, size: 6, color: _muted),
+                    ),
+                    Expanded(
+                      child: Text(
+                        r,
+                        style: const TextStyle(
+                          color: _soft,
+                          fontSize: 14,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 4),
+            const Text(
+              'Yorumunda futbolcu profilindeki adın ve soyadın görünür. '
+              'Uygunsuz bir yorumu şikâyet edebilir, yazanı engelleyebilirsin.',
+              style: TextStyle(color: _muted, fontSize: 12.5, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: _accent(),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Kabul ediyorum',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Vazgeç', style: TextStyle(color: _muted)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Engellediğim kişiler; engel buradan kaldırılır.
+class _BlocksSheet extends StatefulWidget {
+  const _BlocksSheet({required this.initial});
+
+  final Map<String, String> initial;
+
+  @override
+  State<_BlocksSheet> createState() => _BlocksSheetState();
+}
+
+class _BlocksSheetState extends State<_BlocksSheet> {
+  late final Map<String, String> _list = Map.of(widget.initial);
+  final Set<String> _busy = {};
+
+  Future<void> _unblock(String id) async {
+    setState(() => _busy.add(id));
+    try {
+      await NewsTalkService.unblock(id);
+      if (mounted) setState(() => _list.remove(id));
+    } catch (e) {
+      if (mounted) _snack(context, NewsTalkService.message(e));
+    } finally {
+      if (mounted) setState(() => _busy.remove(id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'ENGELLEDİKLERİN',
+              style: _cond(20).copyWith(letterSpacing: 0.8),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Bu kişilerin yorumlarını görmüyorsun.',
+              style: TextStyle(color: _muted, fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            if (_list.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Engellediğin kimse yok.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _muted),
+                ),
+              ),
+            for (final e in _list.entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        e.value.isEmpty ? 'İsimsiz' : e.value,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _busy.contains(e.key)
+                          ? null
+                          : () => _unblock(e.key),
+                      child: const Text('Engeli kaldır'),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
