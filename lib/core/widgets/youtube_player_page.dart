@@ -154,7 +154,11 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
   // YouTube'a geçiş videonun içindeki YouTube logosundan.
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerFrame(controller: _controller, title: 'Maç Yayını');
+    return YoutubePlayerFrame(
+      controller: _controller,
+      title: 'Maç Yayını',
+      youtubeUrl: widget.url,
+    );
   }
 }
 
@@ -328,7 +332,13 @@ class YoutubePlayerFrame extends StatefulWidget {
     this.actions = const [],
     this.overlay,
     this.footer,
+    this.youtubeUrl,
   });
+
+  /// Verilirse üstte "YouTube'da aç" düğmesi çıkar; video gömülerek
+  /// oynatılamıyorsa (kanal izin vermiyor, video yok) ortada açıklama ve
+  /// aynı düğme gösterilir.
+  final String? youtubeUrl;
 
   final YoutubePlayerController controller;
   final String title;
@@ -342,6 +352,22 @@ class YoutubePlayerFrame extends StatefulWidget {
 
 class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   bool _full = false;
+
+  /// Oynatıcı hatası (gömme izni yok, video bulunamadı).
+  YoutubeError _error = YoutubeError.none;
+  StreamSubscription<YoutubePlayerValue>? _errorSub;
+
+  Future<void> _openExternally() async {
+    final uri = Uri.tryParse((widget.youtubeUrl ?? '').trim());
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('YouTube açılamadı.')));
+    }
+  }
+
   bool? _immersive;
 
   /// Tam ekranda uygulamanın ortak (turnuva) bandı gizlenir.
@@ -361,6 +387,9 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   @override
   void initState() {
     super.initState();
+    _errorSub = widget.controller.stream.listen((v) {
+      if (v.error != _error && mounted) setState(() => _error = v.error);
+    });
     landscapeOnFullscreen(
       widget.controller,
       onChanged: (full) {
@@ -371,6 +400,7 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
 
   @override
   void dispose() {
+    _errorSub?.cancel();
     resetPlayerOrientation();
     LeagueSwitchScope.setBandHidden(_route, false);
     super.dispose();
@@ -404,6 +434,49 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
     );
   }
 
+  /// Video gömülerek oynatılamıyor: açıklama ve YouTube'a geçiş.
+  Widget _errorCover() {
+    final embed = const {
+      YoutubeError.notEmbeddable,
+      YoutubeError.sameAsNotEmbeddable,
+    }.contains(_error);
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.82),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                embed
+                    ? 'Yayının sahibi bu videonun uygulama içinde '
+                          'oynatılmasına izin vermiyor.'
+                    : 'Video şu an burada oynatılamıyor.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, height: 1.35),
+              ),
+              if ((widget.youtubeUrl ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF0000),
+                  ),
+                  onPressed: _openExternally,
+                  icon: const Icon(Icons.smart_display_rounded),
+                  label: const Text(
+                    "YouTube'da izle",
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _scaffold(BuildContext context, bool fill) {
     return Scaffold(
       backgroundColor: Colors.black,
@@ -420,6 +493,21 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
               title: Text(widget.title, style: const TextStyle(fontSize: 16)),
               actions: [
                 ...widget.actions,
+                if ((widget.youtubeUrl ?? '').trim().isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _openExternally,
+                    icon: const Icon(
+                      Icons.smart_display_rounded,
+                      color: Color(0xFFFF3B30),
+                    ),
+                    label: const Text(
+                      "YouTube'da aç",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 // Telefonda YouTube'un tam ekran düğmesi gizli; yerine bu.
                 if (!kIsWeb)
                   IconButton(
@@ -457,6 +545,7 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
                                 : const SizedBox.shrink(),
                           ),
                           if (widget.overlay != null) widget.overlay!,
+                          if (_error != YoutubeError.none) _errorCover(),
                         ],
                       ),
                     ),

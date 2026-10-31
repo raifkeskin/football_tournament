@@ -53,7 +53,7 @@ const _kPrefScorers = 'poster_scorers';
 /// seçimlerdir (ör. Takım afişinde takım ve slogan).
 ///
 /// Maç afişlerinde ([PosterKind.match]) zemin seçilmez: turnuvanın afiş
-/// görseli varsa o, yoksa sade zemin kullanılır.
+/// görseli varsa o, yoksa varsayılan stadyum fotoğrafı kullanılır.
 ///
 /// [photoPoster] verilirse afiş seçilen fotoğrafla çizilir ve pencerede
 /// "Fotoğraf seç" çıkar: galeriden seçilen fotoğraf yalnız bu afişte
@@ -247,7 +247,7 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   /// Turnuvanın afiş arka planı; yoksa afiş kendi zeminini çizer.
   ImageProvider? _background;
 
-  /// Sade / Fotoğraf seçimi: maç afişlerinde yok (zemin varsa o, yoksa sade).
+  /// Sade / Fotoğraf seçimi: maç afişlerinde yok (her zaman fotoğraflı).
   bool get _plainOption =>
       widget.kind != null && widget.kind != PosterKind.match;
 
@@ -281,7 +281,8 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     if (!mounted) return;
     setState(() {
       if (bg != null && ok) _background = bg;
-      if (widget.kind == PosterKind.match) _plain = _background == null;
+      // Maç afişleri her zaman fotoğraflı: turnuvanın zemini, yoksa stadyum.
+      if (widget.kind == PosterKind.match) _plain = false;
     });
   }
 
