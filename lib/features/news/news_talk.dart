@@ -164,7 +164,8 @@ class NewsTalkService {
     return row?['pick']?.toString();
   }
 
-  /// Ankete oy verir ya da oyu değiştirir ('home' | 'draw' | 'away').
+  /// Ankete oy verir ya da oyu değiştirir ('home' | 'draw' | 'away'); aynı
+  /// seçim oyu geri alır.
   static Future<void> predict(String matchId, String pick) =>
       _sb.rpc('match_predict', params: {'p_match_id': matchId, 'p_pick': pick});
 

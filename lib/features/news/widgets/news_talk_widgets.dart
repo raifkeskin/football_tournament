@@ -1186,7 +1186,7 @@ class _NewsPollBoxState extends State<NewsPollBox> {
 
   Future<void> _vote(String pick) async {
     final id = _matchId;
-    if (id == null || _busy || _mine == pick) return;
+    if (id == null || _busy) return;
     if (AppSession.of(context).value.user == null) {
       _snack(context, 'Oy vermek için giriş yap.');
       return;
@@ -1196,8 +1196,10 @@ class _NewsPollBoxState extends State<NewsPollBox> {
       _busy = true;
       final old = _mine;
       if (old != null) _poll[old] = ((_poll[old] ?? 1) - 1).clamp(0, 1 << 30);
-      _poll[pick] = (_poll[pick] ?? 0) + 1;
-      _mine = pick;
+      // Seçili kutuya yeniden dokunmak oyu geri alır.
+      final next = old == pick ? null : pick;
+      if (next != null) _poll[next] = (_poll[next] ?? 0) + 1;
+      _mine = next;
     });
     try {
       await NewsTalkService.predict(id, pick);
@@ -1228,7 +1230,7 @@ class _NewsPollBoxState extends State<NewsPollBox> {
               ? ''
               : _mine == null
               ? ' · Tahminini seç'
-              : ' · Oyunu değiştirmek için kutuya dokun'}';
+              : ' · Değiştirmek için başka kutuya, geri almak için aynı kutuya dokun'}';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
