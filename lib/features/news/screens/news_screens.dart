@@ -409,67 +409,131 @@ class NewsListScreen extends StatefulWidget {
 }
 
 class _NewsListScreenState extends State<NewsListScreen> {
-  late final Stream<List<NewsItem>> _stream = ServiceLocator.leagueService
-      .watchNewsFeed(leagueId: widget.leagueId, pending: widget.pending);
-
   @override
   Widget build(BuildContext context) {
-    final accent = _accent();
     // Üst bantta turnuva adı, altında küçük puntoyla "Haberler".
     return BandBackPage(
       theme: ActiveTournament.theme.value,
       subtitle: widget.pending ? 'Onay Bekleyen Haberler' : 'Haberler',
       child: Scaffold(
         backgroundColor: _bg,
-        body: StreamBuilder<List<NewsItem>>(
-          stream: _stream,
-          builder: (context, snap) {
-            if (snap.hasError && !snap.hasData) {
-              return const _Empty('Haberler yüklenemedi.');
-            }
-            if (!snap.hasData) {
-              return Center(child: CircularProgressIndicator(color: accent));
-            }
-            final all = snap.data!
-                .where(
-                  (n) =>
-                      n.liveDrawId == null &&
-                      LeagueScope.allows(n.tournamentId) &&
-                      n.tournamentId == widget.leagueId &&
-                      (widget.regionId == null ||
-                          n.regionId == null ||
-                          n.regionId == widget.regionId),
-                )
-                .toList();
-            final items = all;
-            return CustomScrollView(
-              slivers: [
-                if (items.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _Empty(
-                      widget.pending
-                          ? 'Onay bekleyen haber yok.'
-                          : 'Henüz haber yok.',
-                    ),
-                  )
-                else if (widget.pending) ...[
-                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  SliverList.list(
-                    children: [for (final n in items) _Row(item: n)],
-                  ),
-                ] else ...[
-                  SliverToBoxAdapter(child: _Featured(item: items.first)),
-                  SliverList.list(
-                    children: [for (final n in items.skip(1)) _Row(item: n)],
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                ],
-              ],
-            );
-          },
+        body: NewsListBody(
+          leagueId: widget.leagueId,
+          regionId: widget.regionId,
+          pending: widget.pending,
         ),
       ),
+    );
+  }
+}
+
+/// Haber listesinin gövdesi (başlık çubuğu yok): Haberler ekranında ve
+/// Turnuva Sayfası'nın Haberler sekmesinde. [seasonId] verilirse yalnız o
+/// sezonun haberleri.
+class NewsListBody extends StatefulWidget {
+  const NewsListBody({
+    super.key,
+    required this.leagueId,
+    this.seasonId,
+    this.regionId,
+    this.pending = false,
+  });
+
+  final String leagueId;
+  final String? seasonId;
+  final String? regionId;
+  final bool pending;
+
+  /// Açılınca detayı açılacak haber (ör. bildirimden gelinen).
+  static final focusNewsId = ValueNotifier<String?>(null);
+
+  @override
+  State<NewsListBody> createState() => _NewsListBodyState();
+}
+
+class _NewsListBodyState extends State<NewsListBody> {
+  late final Stream<List<NewsItem>> _stream = ServiceLocator.leagueService
+      .watchNewsFeed(leagueId: widget.leagueId, pending: widget.pending);
+
+  List<NewsItem> _last = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    NewsListBody.focusNewsId.addListener(_onFocus);
+  }
+
+  @override
+  void dispose() {
+    NewsListBody.focusNewsId.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  /// Bekleyen haber listede varsa detayını açar.
+  void _onFocus() {
+    final id = NewsListBody.focusNewsId.value;
+    if (id == null || !mounted) return;
+    for (final n in _last) {
+      if (n.id == id) {
+        NewsListBody.focusNewsId.value = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) openNewsDetail(context, n);
+        });
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accent();
+    return StreamBuilder<List<NewsItem>>(
+      stream: _stream,
+      builder: (context, snap) {
+        if (snap.hasError && !snap.hasData) {
+          return const _Empty('Haberler yüklenemedi.');
+        }
+        if (!snap.hasData) {
+          return Center(child: CircularProgressIndicator(color: accent));
+        }
+        final items = snap.data!
+            .where(
+              (n) =>
+                  n.liveDrawId == null &&
+                  LeagueScope.allows(n.tournamentId) &&
+                  n.tournamentId == widget.leagueId &&
+                  (widget.seasonId == null || n.seasonId == widget.seasonId) &&
+                  (widget.regionId == null ||
+                      n.regionId == null ||
+                      n.regionId == widget.regionId),
+            )
+            .toList();
+        _last = items;
+        if (NewsListBody.focusNewsId.value != null) _onFocus();
+        return CustomScrollView(
+          slivers: [
+            if (items.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _Empty(
+                  widget.pending
+                      ? 'Onay bekleyen haber yok.'
+                      : 'Henüz haber yok.',
+                ),
+              )
+            else if (widget.pending) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              SliverList.list(children: [for (final n in items) _Row(item: n)]),
+            ] else ...[
+              SliverToBoxAdapter(child: _Featured(item: items.first)),
+              SliverList.list(
+                children: [for (final n in items.skip(1)) _Row(item: n)],
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          ],
+        );
+      },
     );
   }
 }
