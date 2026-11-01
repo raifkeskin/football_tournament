@@ -72,6 +72,11 @@ Future<void> showQuickScoreDialog(
 
         Future<void> save() async {
           if (saving) return;
+          // Skor kutuları yazarken pencereyi yeniden çizmiyor: değerler
+          // burada okunur (yukarıdakiler son çizimden kalma, 0-0 olabilir).
+          final homeScore = int.tryParse(homeScoreCtrl.text) ?? 0;
+          final awayScore = int.tryParse(awayScoreCtrl.text) ?? 0;
+          final needsPens = match.isKnockout && homeScore == awayScore;
           final hp = int.tryParse(homePensCtrl.text);
           final ap = int.tryParse(awayPensCtrl.text);
           if (needsPens && (hp == null || ap == null || hp == ap)) {
