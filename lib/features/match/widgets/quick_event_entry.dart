@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_name.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../models/match.dart';
 import '../utils/match_clock.dart';
@@ -641,6 +642,65 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
   }
 
   /// Dakika saatten gelir; −1 / +1 ile düzeltilir (uzatmada uzatma değişir).
+  Future<void> _typeMinute() async {
+    final ctrl = TextEditingController(text: '$_minute');
+    final v = await showDialog<int>(
+      context: context,
+      builder: (ctx) {
+        void done() => Navigator.pop(ctx, int.tryParse(ctrl.text.trim()));
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 48),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Dakika',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 3,
+                  onSubmitted: (_) => done(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  decoration: const InputDecoration(counterText: ''),
+                ),
+                const SizedBox(height: 14),
+                AdminPrimaryButton(
+                  label: 'TAMAM',
+                  icon: Icons.check_rounded,
+                  onPressed: done,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (v == null || v < 1 || !mounted) return;
+    setState(() {
+      _minute = v.clamp(1, 200);
+      _added = null;
+    });
+  }
+
   Widget _clock() {
     void shift(int d) => setState(() {
       if (_added != null) {
@@ -672,12 +732,24 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
             style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
           ),
           const SizedBox(width: 8),
-          Text(
-            minuteLabel(_minute, _added),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
+          // Dokununca dakika yazılır (bitmiş maça sonradan girişte).
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _saving ? null : _typeMinute,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kAdminAccent.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                minuteLabel(_minute, _added),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 10),

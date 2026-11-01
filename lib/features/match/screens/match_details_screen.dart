@@ -640,6 +640,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   /// Maçın bölgesinin sorumlusu mu (Medya sekmesindeki menü için).
   bool _matchRegionOwner = false;
 
+  /// Bitmiş maçta "Maç Detayı Gir": alttaki hızlı giriş çubuğu açık mı.
+  bool _detailEntry = false;
+
   void _checkRegionOwner() {
     final session = AppSession.of(context).value;
     final m = widget.match;
@@ -1326,15 +1329,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       if (match.status == MatchStatus.finished) {
         if (!canQuickScore) return null;
         return _SpeedDialFab(
-          key: ValueKey('fab_finished_${match.detailsPending}'),
+          key: ValueKey('fab_finished_${match.detailsPending}_$_detailEntry'),
           actions: [
             _SpeedDialAction(
-              label: 'Maç Detayı Gir',
-              icon: Icons.edit_note_rounded,
-              onTap: () => showDialog<void>(
-                context: context,
-                builder: (_) => AdminMatchEventScreen(match: match),
-              ),
+              label: _detailEntry ? 'Detay Girişini Kapat' : 'Maç Detayı Gir',
+              icon: _detailEntry
+                  ? Icons.close_rounded
+                  : Icons.edit_note_rounded,
+              onTap: () => setState(() => _detailEntry = !_detailEntry),
             ),
             _SpeedDialAction(
               label: 'Skoru Düzelt',
@@ -1386,7 +1388,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       // Skor ve olay girişi "Maçı yönet" şeridiyle birlikte (maçtan 1 saat
       // önce) açılır; öncesinde yalnız tarih girişi.
       return _SpeedDialFab(
-        key: ValueKey('fab_detail_$beforeWindow'),
+        key: ValueKey('fab_detail_${beforeWindow}_$_detailEntry'),
         actions: [
           if (!beforeWindow &&
               canQuickScore &&
@@ -1405,12 +1407,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             ),
           if (!beforeWindow)
             _SpeedDialAction(
-              label: 'Maç Detayı Gir',
-              icon: Icons.edit_note_rounded,
-              onTap: () => showDialog<void>(
-                context: context,
-                builder: (_) => AdminMatchEventScreen(match: match),
-              ),
+              label: _detailEntry ? 'Detay Girişini Kapat' : 'Maç Detayı Gir',
+              icon: _detailEntry
+                  ? Icons.close_rounded
+                  : Icons.edit_note_rounded,
+              onTap: () => setState(() => _detailEntry = !_detailEntry),
             ),
           if (_canAssignReferees(match))
             _SpeedDialAction(
@@ -1700,13 +1701,16 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       homeName: homeName,
                       awayName: awayName,
                     ),
-              // Canlı maçta yöneten yetkiliye hızlı olay girişi (Detay).
+              // Canlı maçta yöneten yetkiliye hızlı olay girişi (Detay);
+              // bitmiş maçta ☰ › Maç Detayı Gir ile açılır.
               bottomNavigationBar:
-                  isSuperAdmin &&
-                      canControl &&
-                      _tab == 0 &&
-                      (m.status == MatchStatus.live ||
-                          m.status == MatchStatus.halftime)
+                  _tab == 0 &&
+                      ((isSuperAdmin &&
+                              canControl &&
+                              (m.status == MatchStatus.live ||
+                                  m.status == MatchStatus.halftime)) ||
+                          // Menüyü görebilen açar; canlıda zaten açık.
+                          _detailEntry)
                   ? MatchInsightsBuilder(
                       key: ValueKey('quick_insights_${m.id}'),
                       match: m,
