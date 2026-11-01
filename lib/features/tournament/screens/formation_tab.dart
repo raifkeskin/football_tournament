@@ -1290,10 +1290,75 @@ class _PlayerToken extends StatelessWidget {
     ],
   );
 
+  static const _shadow = [
+    Shadow(color: Colors.black87, blurRadius: 3, offset: Offset(0, 1)),
+  ];
+
+  static String _trUpper(String v) =>
+      v.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
+  List<Widget> _nameLines(String full) {
+    final parts = full.trim().split(RegExp(r'\s+'));
+    final last = parts.length > 1 ? parts.removeLast() : '';
+    final first = parts.join(' ');
+    Widget line(String t, TextStyle st) => FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(t, maxLines: 1, style: st),
+    );
+    return [
+      if (first.isNotEmpty)
+        line(
+          last.isEmpty ? _trUpper(first) : first,
+          TextStyle(
+            color: Colors.white.withValues(alpha: last.isEmpty ? 1 : 0.88),
+            fontSize: last.isEmpty ? 12 : 9.5,
+            fontFamily: last.isEmpty ? 'BarlowCondensed' : null,
+            fontWeight: last.isEmpty ? FontWeight.w800 : FontWeight.w500,
+            height: 1.1,
+            shadows: _shadow,
+          ),
+        ),
+      if (last.isNotEmpty)
+        line(
+          _trUpper(last),
+          const TextStyle(
+            color: Colors.white,
+            fontFamily: 'BarlowCondensed',
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            height: 1.05,
+            letterSpacing: 0.2,
+            shadows: _shadow,
+          ),
+        ),
+    ];
+  }
+
   List<Widget> _eventCorners() {
     final m = marks;
     if (m == null) return const [];
     final goals = m.goals.length + m.penGoals.length;
+    final card = m.yellows.isNotEmpty || m.reds.isNotEmpty;
+    // Asist: oyuncu kartındaki tepside top ikonu.
+    final assist = _corner(
+      Image.asset('assets/images/assist.png', width: 14, height: 14),
+      count: m.assists.length,
+    );
+    final assistLeft = card && goals > 0 && m.assists.isNotEmpty;
+    final right = <Widget>[
+      if (card)
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: Center(child: CardIcon(red: m.reds.isNotEmpty, size: 12)),
+        ),
+      if (goals > 0)
+        _corner(
+          const Icon(Icons.sports_soccer, size: 13, color: Colors.white),
+          count: goals,
+        ),
+      if (m.assists.isNotEmpty && !assistLeft) assist,
+    ];
     return [
       if (m.subbedOut)
         Positioned(
@@ -1326,31 +1391,23 @@ class _PlayerToken extends StatelessWidget {
             ],
           ),
         ),
-      if (m.yellows.isNotEmpty || m.reds.isNotEmpty)
+      // Sağ sütun alt alta: kart, gol, asist. Üçü birden varsa asist sola,
+      // çıkış okunun altına geçer (sütun formadan taşmasın).
+      if (right.isNotEmpty)
         Positioned(
-          right: -2,
-          top: 12,
-          child: CardIcon(red: m.reds.isNotEmpty, size: 12),
-        ),
-      if (goals > 0)
-        Positioned(
-          right: -6,
-          bottom: -4,
-          child: _corner(
-            const Icon(Icons.sports_soccer, size: 13, color: Colors.white),
-            count: goals,
+          right: -12,
+          top: 9,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < right.length; i++) ...[
+                if (i > 0) const SizedBox(height: 2),
+                right[i],
+              ],
+            ],
           ),
         ),
-      if (m.assists.isNotEmpty)
-        Positioned(
-          left: -6,
-          bottom: -4,
-          // Asist: oyuncu kartındaki tepside top ikonu.
-          child: _corner(
-            Image.asset('assets/images/assist.png', width: 14, height: 14),
-            count: m.assists.length,
-          ),
-        ),
+      if (assistLeft) Positioned(left: -10, top: 14, child: assist),
     ];
   }
 
@@ -1418,25 +1475,9 @@ class _PlayerToken extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 3),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            shortPlayerName(player.name),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+        const SizedBox(height: 2),
+        // Afişteki gibi: küçük ad, altında kalın büyük soyad (gölgeli).
+        ..._nameLines(player.name),
       ],
     );
   }
