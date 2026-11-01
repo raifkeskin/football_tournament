@@ -1345,15 +1345,9 @@ class _PlayerToken extends StatelessWidget {
         Positioned(
           left: -6,
           bottom: -4,
+          // Asist: oyuncu kartındaki tepside top ikonu.
           child: _corner(
-            const Text(
-              'A',
-              style: TextStyle(
-                color: Color(0xFF10B981),
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            Image.asset('assets/images/assist.png', width: 14, height: 14),
             count: m.assists.length,
           ),
         ),
