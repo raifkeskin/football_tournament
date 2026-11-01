@@ -536,24 +536,23 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                         ),
                       // Kura: grupta maç yoksa fikstür kurası; canlı
                       // kuraların yönetimi (iptal / geri alma) yalnız admin.
-                      if (_tab == 0 &&
-                          ((groupChosen && _groupHasMatches == false) ||
-                              session.isAdmin))
+                      // Turnuva/sezon/grup seçilmeden ve grupta maç varken
+                      // kura seçenekleri görünmez.
+                      if (_tab == 0 && groupChosen && _groupHasMatches == false)
                         AdminFormSection(
                           title: 'Kura',
                           child: AdminFieldGroup(
                             children: [
-                              if (groupChosen && _groupHasMatches == false)
-                                AdminSelectRow(
-                                  icon: Icons.shuffle_rounded,
-                                  label: 'Fikstür kurası',
-                                  value: null,
-                                  placeholder: _teams.length < 2
-                                      ? 'Grupta en az 2 takım olmalı'
-                                      : 'Tüm lig maçlarını kurayla oluştur',
-                                  loading: _loadingTeams,
-                                  onTap: _teams.length < 2 ? null : _openDraw,
-                                ),
+                              AdminSelectRow(
+                                icon: Icons.shuffle_rounded,
+                                label: 'Fikstür kurası',
+                                value: null,
+                                placeholder: _teams.length < 2
+                                    ? 'Grupta en az 2 takım olmalı'
+                                    : 'Tüm lig maçlarını kurayla oluştur',
+                                loading: _loadingTeams,
+                                onTap: _teams.length < 2 ? null : _openDraw,
+                              ),
                               if (session.isAdmin)
                                 AdminSelectRow(
                                   icon: Icons.casino_rounded,
