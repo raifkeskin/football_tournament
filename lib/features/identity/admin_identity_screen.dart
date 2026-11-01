@@ -5,8 +5,8 @@ import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import 'verified_badge.dart';
 
-/// Kimlik Yönetimi (yalnız admin): kimlik doğrulama admin dışında hangi
-/// rollere açık. Sunucu da aynı ayara bakar (identity_allowed).
+/// Kimlik Yönetimi (yalnız admin): kimlik doğrulama Aktif/Pasif. Sunucu da
+/// aynı ayara bakar (identity_allowed).
 class AdminIdentityScreen extends StatefulWidget {
   const AdminIdentityScreen({super.key});
 
@@ -15,45 +15,17 @@ class AdminIdentityScreen extends StatefulWidget {
 }
 
 class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
-  /// (anahtar, ad, açıklama, ikon)
-  static const _roles = [
-    (
-      'league_owner',
-      'Kurucu Başkan',
-      'Oyuncuların kimliğini okutup profillerini onaylar.',
-      Icons.workspace_premium_rounded,
-    ),
-    (
-      'region_owner',
-      'Bölge Sorumlusu',
-      'Oyuncuların kimliğini okutup profillerini onaylar.',
-      Icons.map_rounded,
-    ),
-    (
-      'team_manager',
-      'Takım Sorumlusu',
-      'Oyuncuların kimliğini okutup profillerini onaylar.',
-      Icons.shield_rounded,
-    ),
-    (
-      'player',
-      'Futbolcu',
-      'Profili onaysızken kendi kimliğini okutur.',
-      Icons.person_rounded,
-    ),
-  ];
+  bool _saving = false;
 
-  final Set<String> _saving = {};
-
-  Future<void> _set(String role, bool on) async {
+  Future<void> _set(bool on) async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _saving.add(role));
+    setState(() => _saving = true);
     try {
-      await AppSettings.setIdentityRole(role, on);
+      await AppSettings.setIdentityVerificationEnabled(on);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
     } finally {
-      if (mounted) setState(() => _saving.remove(role));
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -61,53 +33,65 @@ class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
   Widget build(BuildContext context) {
     return AdminPageScaffold(
       title: 'Kimlik Yönetimi',
-      body: ValueListenableBuilder<Set<String>>(
-        valueListenable: AppSettings.identityVerificationRoles,
-        builder: (context, roles, _) => ListView(
+      body: ValueListenableBuilder<bool>(
+        valueListenable: AppSettings.identityVerificationEnabled,
+        builder: (context, on, _) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
             AdminFormSection(
-              title: 'Kimlik doğrulamayı görebilen roller',
+              title: 'Kimlik doğrulama',
               child: AdminFieldGroup(
                 children: [
-                  for (final (key, name, hint, icon) in _roles)
-                    AdminFieldRow(
-                      icon: icon,
-                      label: name,
-                      onTap: _saving.contains(key)
-                          ? null
-                          : () => _set(key, !roles.contains(key)),
-                      trailing: _saving.contains(key)
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Switch.adaptive(
-                              value: roles.contains(key),
-                              activeTrackColor: kVerifiedBlue,
-                              onChanged: (v) => _set(key, v),
-                            ),
-                      child: Text(
-                        roles.contains(key) ? 'Aktif · $hint' : 'Pasif',
-                        style: TextStyle(
-                          color: roles.contains(key)
-                              ? Colors.white
-                              : kAdminMuted,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  AdminFieldRow(
+                    icon: Icons.verified_user_rounded,
+                    label: 'Durum',
+                    onTap: _saving ? null : () => _set(!on),
+                    trailing: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Switch.adaptive(
+                            value: on,
+                            activeTrackColor: kVerifiedBlue,
+                            onChanged: _set,
+                          ),
+                    child: Text(
+                      on ? 'Aktif' : 'Pasif',
+                      style: TextStyle(
+                        color: on ? Colors.white : kAdminMuted,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
               child: Text(
-                'Admin her zaman görür. Değişiklik hemen geçerli olur; '
-                'açık uygulamalarda bir sonraki açılışta görünür. Kimlik '
-                'okuma yalnız uygulamada (Android / iPhone) yapılır.',
+                on
+                    ? 'Futbolcu profilini kendi doğrular (doğrulayınca menüdeki '
+                          'düğme gizlenir). Kurucu başkan, bölge ve takım '
+                          'sorumluları kadrolarını doğrular ve esamede kimlik '
+                          'okutur.'
+                    : 'Admin dışında kimse kimlik doğrulama, esamede kimlik '
+                          'okutma ve sezondaki kimlik zorunluluğunu görmez. '
+                          'Mavi tikler görünmeye devam eder.',
+                style: const TextStyle(
+                  color: kAdminMuted,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
+              child: Text(
+                'Kayıt Ol › Futbolcu Profili her durumda kimlik çipiyle '
+                'yapılır. Kimlik okuma yalnız uygulamada (Android / iPhone).',
                 style: TextStyle(color: kAdminMuted, fontSize: 12, height: 1.4),
               ),
             ),

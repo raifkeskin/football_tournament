@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'identity_access.dart';
 import 'identity_service.dart';
 
 /// Onaylı profil rengi (mavi tik).
@@ -74,9 +73,8 @@ class _VerifiedBadgeForState extends State<VerifiedBadgeFor> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ok || !IdentityAccess.visibleIn(context)) {
-      return const SizedBox.shrink();
-    }
+    // Mavi tik kimlik doğrulama pasifken de görünür (bir kez doğrulanmış).
+    if (!_ok) return const SizedBox.shrink();
     return Padding(
       padding: EdgeInsets.only(left: widget.leading),
       child: VerifiedBadge(size: widget.size),
