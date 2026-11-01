@@ -609,9 +609,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   /// Hakem Ata: özellik açıksa (kapalıyken admin), başlamamış maçta.
   bool _canAssignReferees(MatchModel m) =>
-      RefereeService.enabledFor(
-        isAdmin: AppSession.of(context).value.isAdmin,
-      ) &&
+      RefereeService.enabledFor(AppSession.of(context).value) &&
       (m.status == MatchStatus.notStarted || m.status == MatchStatus.postponed);
 
   bool _regionOwnerChecked = false;

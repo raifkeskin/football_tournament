@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../match/insights/rating_settings_screen.dart';
+import '../../match/insights/match_insights.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -551,7 +552,7 @@ class SeasonManagementScreen extends StatelessWidget {
                               (v) => setSheetState(() => trackGoalMinutes = v),
                             ),
                             if (RefereeService.enabledFor(
-                              isAdmin: AppSession.of(context).value.isAdmin,
+                              AppSession.of(context).value,
                             ))
                               switchRow(
                                 Icons.flag_outlined,
@@ -704,8 +705,8 @@ class SeasonManagementScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                    // Futbolcu puanlama (yeni özellik: şimdilik yalnız admin).
-                    if (tab == 0 && isEdit && isAdmin)
+                    // Futbolcu puanlama (yeni özellik: admin ve kurucu başkan).
+                    if (tab == 0 && isEdit && matchInsightsVisible(context))
                       AdminFormSection(
                         title: 'Futbolcu Puanlama',
                         child: ListTile(

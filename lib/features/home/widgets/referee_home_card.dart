@@ -32,9 +32,7 @@ class _RefereeHomeCardState extends State<RefereeHomeCard> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final s = AppSession.of(context).value;
-    final id = RefereeService.enabledFor(isAdmin: s.isAdmin)
-        ? s.refereeId
-        : null;
+    final id = RefereeService.enabledFor(s) ? s.refereeId : null;
     if (id != _refereeId) {
       _refereeId = id;
       _matches = id == null ? null : _cache[id];

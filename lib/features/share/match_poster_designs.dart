@@ -1037,51 +1037,24 @@ class TeamDayPoster extends StatelessWidget {
           child: Column(
             children: [
               _LeagueHead(info: info),
-              SizedBox(
-                height: st.pick(150, 92),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Dev, dış çizgili takım adı
-                    Positioned(
-                      top: st.pick(4, 0),
-                      left: 0,
-                      right: 0,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          t.shortLabel,
-                          maxLines: 1,
-                          style: GoogleFonts.barlowCondensed(
-                            fontSize: st.pick(100, 64),
-                            fontWeight: FontWeight.w800,
-                            fontStyle: FontStyle.italic,
-                            height: 1,
-                            foreground: Paint()
-                              ..style = PaintingStyle.stroke
-                              ..strokeWidth = 1.3
-                              ..color = t.second.withValues(alpha: 0.45),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      child: Text(
-                        'MAÇ GÜNÜ',
-                        style: _cond(
-                          st.pick(60, 40),
-                          italic: true,
-                          shadows: _shadow,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              SizedBox(height: st.pick(18, 6)),
+              Text(
+                'MAÇ GÜNÜ',
+                style: _cond(st.pick(60, 40), italic: true, shadows: _shadow),
               ),
               SizedBox(height: st.pick(8, 2)),
               Expanded(
                 child: FittedBox(child: _HungJersey(side: t, width: 180)),
+              ),
+              SizedBox(height: st.pick(10, 4)),
+              // Afişi paylaşan takım: kutunun hemen üstünde, rakip adından büyük.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  t.fullLabel,
+                  maxLines: 1,
+                  style: _cond(st.pick(30, 20), italic: true, shadows: _shadow),
+                ),
               ),
               SizedBox(height: st.pick(8, 4)),
               Container(
