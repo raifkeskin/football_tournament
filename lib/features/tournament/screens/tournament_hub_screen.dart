@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../regulations/regulations_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/team_colors.dart';
@@ -390,14 +389,6 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                                 selectedId: group.id,
                                 accent: accent,
                                 onSelect: (id) => setState(() => _groupId = id),
-                              ),
-                            // Turnuva talimatnamesi (sezona bağlı).
-                            if (season != null)
-                              RegulationsButton(
-                                leagueId: widget.leagueId,
-                                seasonId: season.id,
-                                leagueName: league?.name ?? '',
-                                seasonName: season.name,
                               ),
                             _HubTabBar(
                               controller: _tabs,
