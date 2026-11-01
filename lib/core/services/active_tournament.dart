@@ -110,6 +110,11 @@ class ActiveTournament {
   /// Giriş yapmış kişinin bantta seçtiği turnuva (kullanıcıya göre).
   static String _kChosen(String uid) => 'chosen_league_$uid';
 
+  /// Giriş yapmış kişinin bu oturumda baktığı, kendi turnuvası olmayan
+  /// (herkese açık) turnuva: kalıcı seçim olmaz, yeniden açılışta kişi kendi
+  /// turnuvasıyla gelir. Oturum içindeki refresh'lerde ise korunur.
+  static ({String uid, String id})? _sessionPick;
+
   /// Üst üste gelen refresh çağrılarında yalnızca sonuncusu uygulanır.
   static int _generation = 0;
 
@@ -197,10 +202,16 @@ class ActiveTournament {
         final uid = _sb.auth.currentUser!.id;
         final choices = await _loadMyLeagues();
         if (gen == _generation) myLeagues.value = choices;
-        // Bantta seçtiği turnuva hâlâ onun turnuvasıysa o; yoksa en yakın
-        // maçı olan kendi turnuvası.
+        // Bu oturumda baktığı açık turnuva; yoksa bantta seçtiği kendi
+        // turnuvası; o da yoksa en yakın maçı olan kendi turnuvası.
+        final pick = _sessionPick;
         final chosen = prefs.getString(_kChosen(uid));
-        if (chosen != null && choices.any((c) => c.id == chosen)) {
+        if (pick != null &&
+            pick.uid == uid &&
+            choices.any((c) => c.id == pick.id)) {
+          id = pick.id;
+        } else if (chosen != null &&
+            choices.any((c) => c.id == chosen && c.isOwn)) {
           id = chosen;
         } else {
           final res = await _sb.rpc('my_preferred_league');
@@ -255,7 +266,11 @@ class ActiveTournament {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_isRealUser) {
-        await prefs.setString(_kChosen(_sb.auth.currentUser!.id), id);
+        final uid = _sb.auth.currentUser!.id;
+        final own = myLeagues.value.any((c) => c.id == id && c.isOwn);
+        // Kendi turnuvası kalıcı seçim; diğerine bakmak yalnız bu oturumda.
+        _sessionPick = own ? null : (uid: uid, id: id);
+        if (own) await prefs.setString(_kChosen(uid), id);
       } else {
         // Misafirin son turnuvası (açılışta bu turnuvayla gelir).
         await prefs.setString(_kGuestLeague, id);
@@ -268,18 +283,25 @@ class ActiveTournament {
 
   /// Kişinin turnuvaları: admin ve misafir tüm aktif turnuvalar (gizli
   /// turnuvalar veritabanı kuralıyla misafire gelmez), diğerleri
-  /// my_league_ids (oyuncu, sorumlu, kurucu, bölge, gözlemci, takipçi).
+  /// my_league_ids: kendi turnuvaları (my_own_league_ids: oyuncu, sorumlu,
+  /// kurucu, bölge, gözlemci, takipçi) üstte, herkese açık olanlar altta.
   static Future<List<LeagueChoice>> _loadMyLeagues({bool guest = false}) async {
     final all = guest || await _sb.rpc('is_admin') == true;
     var query = _sb
         .from('leagues')
         .select('id, name, short_name, logo_url, status');
+    Set<String>? own;
     if (!all) {
-      final ids = ((await _sb.rpc('my_league_ids')) as List? ?? const [])
-          .map((e) => e.toString())
-          .toList();
-      if (ids.length < 2) return const [];
-      query = query.inFilter('id', ids);
+      List<String> ids(dynamic res) =>
+          (res as List? ?? const []).map((e) => e.toString()).toList();
+      final res = await Future.wait([
+        _sb.rpc('my_league_ids'),
+        _sb.rpc('my_own_league_ids'),
+      ]);
+      final visible = ids(res[0]);
+      own = ids(res[1]).toSet();
+      if (visible.length < 2) return const [];
+      query = query.inFilter('id', visible);
     }
     final rows = await query.order('name');
     final list = [
@@ -289,9 +311,15 @@ class ActiveTournament {
             id: r['id'].toString(),
             name: (r['name'] ?? '').toString(),
             logoUrl: (r['logo_url'] ?? '').toString(),
+            isOwn: own == null || own.contains(r['id'].toString()),
           ),
     ];
-    return list.length < 2 ? const [] : list;
+    // Kendi turnuvaları önce (sıralama kararlı: kendi içinde ada göre).
+    final sorted = [
+      ...list.where((c) => c.isOwn),
+      ...list.where((c) => !c.isOwn),
+    ];
+    return sorted.length < 2 ? const [] : sorted;
   }
 
   /// Misafir bir turnuvayı seçip baktığında: uygulama o turnuvaya bürünür.
@@ -354,9 +382,14 @@ class LeagueChoice {
     required this.id,
     required this.name,
     required this.logoUrl,
+    this.isOwn = true,
   });
 
   final String id;
   final String name;
   final String logoUrl;
+
+  /// Kişinin kendi turnuvası mı (false: yalnız herkese açık olduğu için
+  /// listede; seçicide "Diğer turnuvalar" altında).
+  final bool isOwn;
 }
