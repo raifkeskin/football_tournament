@@ -6318,9 +6318,14 @@ class _DetailEventTile extends StatelessWidget {
             name,
             maxLines: 1,
             style: isIn
-                ? const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)
+                ? const TextStyle(
+                    fontSize: 13,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                  )
                 : const TextStyle(
                     fontSize: 12,
+                    height: 1.15,
                     color: Color(0xFF94A3B8),
                     fontWeight: FontWeight.w500,
                   ),
@@ -6342,7 +6347,6 @@ class _DetailEventTile extends StatelessWidget {
           : CrossAxisAlignment.end,
       children: [
         line(subInName, true),
-        const SizedBox(height: 2),
         line(title.isEmpty ? '-' : title, false),
       ],
     );
@@ -6367,6 +6371,7 @@ class _DetailEventTile extends StatelessWidget {
         maxLines: 1,
         style: TextStyle(
           fontSize: 13,
+          height: 1.15,
           fontWeight: FontWeight.w700,
           color: cancelled ? const Color(0xFF94A3B8) : null,
           decoration: cancelled ? TextDecoration.lineThrough : null,
@@ -6397,18 +6402,16 @@ class _DetailEventTile extends StatelessWidget {
                   ],
           ),
         if (sub.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Text(
-              sub,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                color: cancelled
-                    ? const Color(0xFFF87171)
-                    : const Color(0xFF94A3B8),
-                fontWeight: cancelled ? FontWeight.w800 : FontWeight.w500,
-              ),
+          Text(
+            sub,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.15,
+              color: cancelled
+                  ? const Color(0xFFF87171)
+                  : const Color(0xFF94A3B8),
+              fontWeight: cancelled ? FontWeight.w800 : FontWeight.w500,
             ),
           ),
       ],
@@ -6550,40 +6553,45 @@ class _DetailEventTile extends StatelessWidget {
               ],
             )
           // Ortada dakika rozeti; ev sahibi olayları solda (dakikaya
-          // yaslı), deplasman olayları sağda.
-          : Row(
-              children: [
-                Expanded(
-                  child: isHome
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Flexible(
-                              child: _titleBlock(CrossAxisAlignment.end),
-                            ),
-                            const SizedBox(width: 4),
-                            icon,
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                // Rozetle iki yandaki yazı arasında az boşluk; dar tutulur
-                // ki oyuncu adlarına yer kalsın.
-                SizedBox(width: 44, child: Center(child: _minuteBadge(min))),
-                Expanded(
-                  child: isHome
-                      ? const SizedBox.shrink()
-                      : Row(
-                          children: [
-                            icon,
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: _titleBlock(CrossAxisAlignment.start),
-                            ),
-                          ],
-                        ),
-                ),
-              ],
+          // yaslı), deplasman olayları sağda. Satırlar eşit aralıklı:
+          // tek satırlı olay da iki satırlık (asistli gol, değişiklik)
+          // boyunda.
+          : ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 34),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: isHome
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Flexible(
+                                child: _titleBlock(CrossAxisAlignment.end),
+                              ),
+                              const SizedBox(width: 4),
+                              icon,
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  // Rozetle iki yandaki yazı arasında az boşluk; dar tutulur
+                  // ki oyuncu adlarına yer kalsın.
+                  SizedBox(width: 44, child: Center(child: _minuteBadge(min))),
+                  Expanded(
+                    child: isHome
+                        ? const SizedBox.shrink()
+                        : Row(
+                            children: [
+                              icon,
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: _titleBlock(CrossAxisAlignment.start),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
             ),
     );
     // Akışın ortasından geçen dikey çizgi (rozetler üstünde durur).
