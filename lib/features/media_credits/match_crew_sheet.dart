@@ -77,12 +77,13 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
 
   Future<void> _add(MediaCreditKind kind) async {
-    final saved = await showAdminPopup<bool>(
-      context: context,
-      builder: (_) =>
-          MediaCreditForm(leagueId: _leagueId, kind: kind, credit: null),
+    final added = await showMediaCreditPicker(
+      context,
+      leagueId: _leagueId,
+      kind: kind,
+      exclude: {for (final c in _credits ?? const <MediaCredit>[]) c.id},
     );
-    if (saved == true) await _load();
+    if (added != null) await _load();
   }
 
   Future<void> _save(Set<String>? ids) async {
@@ -108,14 +109,15 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
       trailing: TextButton.icon(
         onPressed: _saving ? null : () => _add(kind),
         icon: const Icon(Icons.add_rounded, size: 18),
-        label: const Text('Yeni ekle'),
+        label: const Text('Ekle'),
         style: TextButton.styleFrom(foregroundColor: kAdminAccent),
       ),
       child: list.isEmpty
           ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Text(
-                'Turnuvada kayıtlı ${kind.label.toLowerCase()} yok.',
+                'Turnuvanın listesinde ${kind.label.toLowerCase()} yok; '
+                'Ekle ile rehberden seç.',
                 style: const TextStyle(color: kAdminMuted),
               ),
             )
