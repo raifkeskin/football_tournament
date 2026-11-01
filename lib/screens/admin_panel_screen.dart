@@ -166,9 +166,9 @@ class AdminPanelWidget extends StatelessWidget {
             );
           },
         ),
-      // Hakemler: admin ve kurucu başkan (özellik açılana dek yalnız admin).
+      // Hakemler: admin ve kurucu başkan.
       if ((isAdmin || session.isLeagueOwner) &&
-          RefereeService.enabledFor(isAdmin: isAdmin))
+          RefereeService.enabledFor(session))
         _AdminMenuData(
           baslik: 'Hakemler',
           renkler: const [Color(0xFFFDE047), Color(0xFFCA8A04)],

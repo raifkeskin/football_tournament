@@ -384,7 +384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     // Hakem hesabı: hakem profili; aynı zamanda futbolcuysa
     // Futbolcu | Hakem sekmesi.
-    final refereeId = RefereeService.enabledFor(isAdmin: sessionValue.isAdmin)
+    final refereeId = RefereeService.enabledFor(sessionValue)
         ? sessionValue.refereeId
         : null;
     if (refereeId != null) {
