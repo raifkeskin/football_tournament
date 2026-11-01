@@ -1078,26 +1078,15 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       Navigator.pop(context);
       return;
     }
-    final leave = await showDialog<bool>(
+    final leave = await showAdminConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Değişiklik kaydedilmedi'),
-        content: const Text(
-          'Girdiğiniz bilgiler kaydedilmedi. Çıkmak istiyor musunuz?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Vazgeç'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Çık'),
-          ),
-        ],
-      ),
+      title: 'Değişiklik kaydedilmedi',
+      message: 'Girdiğiniz bilgiler kaydedilmedi. Çıkmak istiyor musunuz?',
+      confirmLabel: 'ÇIK',
+      cancelLabel: 'VAZGEÇ',
+      icon: Icons.warning_amber_rounded,
     );
-    if (leave == true && mounted) Navigator.pop(context);
+    if (leave && mounted) Navigator.pop(context);
   }
 
   /// Ortak popup çerçevesi; klavye açılınca içerik kaydırılabilir.
