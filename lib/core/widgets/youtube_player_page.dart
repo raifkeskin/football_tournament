@@ -232,6 +232,9 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
       // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
       // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
       showFullscreenButton: kIsWeb,
+      // YouTube'un çizelgesi tüm yayını (2 saat) gösterip kesitin dışına
+      // atlatıyor; yerine yalnız kesiti gösteren _ClipControls.
+      showControls: false,
       strictRelatedVideos: true,
       origin: youtubePlayerOrigin,
     ),
@@ -280,6 +283,13 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     return YoutubePlayerFrame(
       controller: _controller,
       title: widget.title,
+      controls: _ClipControls(
+        controller: _controller,
+        startSec: widget.startSec,
+        endSec: widget.endSec,
+        ended: _ended,
+        onReplay: _replay,
+      ),
       actions: [
         IconButton(
           tooltip: 'Tekrar izle',
@@ -334,7 +344,12 @@ class YoutubePlayerFrame extends StatefulWidget {
     this.overlay,
     this.footer,
     this.youtubeUrl,
+    this.controls,
   });
+
+  /// YouTube düğmeleri kapalıyken oynatıcının üstüne çizilen kendi
+  /// düğmelerimiz (tam ekranda da görünür).
+  final Widget? controls;
 
   /// Video uygulama içinde oynatılamıyorsa (kanal gömmeye izin vermiyor,
   /// video yok) ortada açıklama ve "YouTube'da izle" düğmesi çıkar.
@@ -548,12 +563,16 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
                             controller: widget.controller,
                             // Tam ekranda oynatıcı sayfanın üstündeki ayrı
                             // katmanda çizilir; çıkış düğmesi de oraya.
-                            controlsBuilder: (context, isFullscreen) =>
-                                isFullscreen
-                                ? _FullscreenExit(
+                            controlsBuilder: (context, isFullscreen) => Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (widget.controls != null) widget.controls!,
+                                if (isFullscreen)
+                                  _FullscreenExit(
                                     onExit: widget.controller.exitFullScreen,
-                                  )
-                                : const SizedBox.shrink(),
+                                  ),
+                              ],
+                            ),
                           ),
                           if (widget.overlay != null) widget.overlay!,
                           if (_error != YoutubeError.none) _errorCover(),
@@ -658,6 +677,162 @@ class _FullscreenExitState extends State<_FullscreenExit> {
                     style: TextStyle(color: Colors.white, fontSize: 13.5),
                   ),
                 ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Gol kesitinin kendi düğmeleri: oynat/duraklat, yalnız kesit süresini
+/// gösteren çubuk (kesit içinde ileri/geri sarılır) ve süre. Videoya
+/// dokunmak oynatır/duraklatır; YouTube'a dokunuş gitmez.
+class _ClipControls extends StatefulWidget {
+  const _ClipControls({
+    required this.controller,
+    required this.startSec,
+    required this.endSec,
+    required this.ended,
+    required this.onReplay,
+  });
+
+  final YoutubePlayerController controller;
+  final int startSec;
+  final int endSec;
+  final bool ended;
+  final VoidCallback onReplay;
+
+  @override
+  State<_ClipControls> createState() => _ClipControlsState();
+}
+
+class _ClipControlsState extends State<_ClipControls> {
+  StreamSubscription<YoutubeVideoState>? _posSub;
+  StreamSubscription<YoutubePlayerValue>? _stateSub;
+  double _pos = 0;
+  double? _drag;
+  bool _playing = false;
+
+  double get _len => (widget.endSec - widget.startSec).clamp(1, 36000) * 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _posSub = widget.controller.videoStateStream.listen((v) {
+      final p = (v.position.inMilliseconds / 1000 - widget.startSec).clamp(
+        0.0,
+        _len,
+      );
+      if (mounted && (p - _pos).abs() > 0.05) setState(() => _pos = p);
+    });
+    _stateSub = widget.controller.stream.listen((v) {
+      final playing =
+          v.playerState == PlayerState.playing ||
+          v.playerState == PlayerState.buffering;
+      if (mounted && playing != _playing) setState(() => _playing = playing);
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _stateSub?.cancel();
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (widget.ended) return widget.onReplay();
+    _playing ? widget.controller.pauseVideo() : widget.controller.playVideo();
+  }
+
+  Future<void> _seek(double v) async {
+    setState(() {
+      _pos = v;
+      _drag = null;
+    });
+    await widget.controller.seekTo(
+      seconds: widget.startSec + v,
+      allowSeekAhead: true,
+    );
+    if (!_playing) await widget.controller.playVideo();
+  }
+
+  static String _fmt(double s) {
+    final t = s.round();
+    return '${t ~/ 60}:${(t % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (_drag ?? _pos).clamp(0.0, _len);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggle,
+          child: const SizedBox.expand(),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Color(0xB3000000), Color(0x00000000)],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 14, 12, 2),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: _playing ? 'Duraklat' : 'Oynat',
+                    color: Colors.white,
+                    onPressed: _toggle,
+                    icon: Icon(
+                      widget.ended
+                          ? Icons.replay_rounded
+                          : _playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                    ),
+                  ),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.white30,
+                        thumbColor: Colors.white,
+                        overlayShape: SliderComponentShape.noOverlay,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                      ),
+                      child: Slider(
+                        value: value,
+                        max: _len,
+                        onChanged: (v) => setState(() => _drag = v),
+                        onChangeEnd: _seek,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${_fmt(value)} / ${_fmt(_len)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
