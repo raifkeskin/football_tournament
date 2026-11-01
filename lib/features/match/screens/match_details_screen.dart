@@ -5530,6 +5530,9 @@ class _DetailTabView extends StatelessWidget {
           {'minute': period, 'type': 'status', 'title': 'İlk Yarı Bitti'},
         ];
       case MatchStatus.finished:
+        // Detaylar işlenirken akış boş: 0-0 ilk yarı / eksik golle sonuç
+        // satırı yanıltıyor; yalnız girilmiş olaylar görünür.
+        if (match.detailsPending) return const <Map<String, dynamic>>[];
         return <Map<String, dynamic>>[
           {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
           {'minute': period, 'type': 'status', 'title': 'İlk Yarı Bitti'},
