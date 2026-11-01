@@ -1160,6 +1160,20 @@ class _MatchCard extends StatelessWidget {
                                 scoreBox: !cancelled,
                                 pens: showScore ? match.awayPens : null,
                               ),
+                              // Hızlı skorla bitti, olaylar sonradan girilecek.
+                              if (match.status == MatchStatus.finished &&
+                                  match.detailsPending)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 5),
+                                  child: Text(
+                                    'Maç detayları işleniyor...',
+                                    style: TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontStyle: FontStyle.italic,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),

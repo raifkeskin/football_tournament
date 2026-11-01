@@ -12,6 +12,10 @@ import '../models/match.dart';
 /// kutusu odaklı gelir, klavye doğrudan rakam klavyesidir. Skor varsa
 /// kutuya dokununca tamamı seçilir, yazılan rakam üstüne yazılır. Boş
 /// bırakılan kutu 0 sayılır.
+///
+/// "Maç detayları sonra girilecek" işaretliyse maçta "Maç detayları
+/// işleniyor..." görünür; olaylar sonradan girilir, skor korunur. Yeni
+/// skorda işaretli gelir, bitmiş maçın düzeltmesinde maçtaki değerle.
 Future<void> showQuickScoreDialog(
   BuildContext context, {
   required MatchModel match,
@@ -41,6 +45,8 @@ Future<void> showQuickScoreDialog(
     text: match.awayPens?.toString() ?? '',
   );
   var saving = false;
+  var detailsPending =
+      match.status != MatchStatus.finished || match.detailsPending;
 
   void selectAllOnFocus(FocusNode node, TextEditingController ctrl) {
     node.addListener(() {
@@ -85,6 +91,7 @@ Future<void> showQuickScoreDialog(
               matchId: match.id,
               homeScore: homeScore,
               awayScore: awayScore,
+              detailsPending: detailsPending,
             );
             if (match.isKnockout) {
               await matchService.setPenaltyScore(
@@ -270,7 +277,41 @@ Future<void> showQuickScoreDialog(
                         fontSize: 12,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 14),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: saving
+                          ? null
+                          : () => setDialogState(
+                              () => detailsPending = !detailsPending,
+                            ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              detailsPending
+                                  ? Icons.check_box_rounded
+                                  : Icons.check_box_outline_blank_rounded,
+                              color: detailsPending ? accent : Colors.white54,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Maç detayları sonra girilecek',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
                     SizedBox(
                       height: 50,
                       child: ElevatedButton(
