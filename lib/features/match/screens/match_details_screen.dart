@@ -331,16 +331,39 @@ class _MatchPhaseLabel extends StatelessWidget {
           MatchStatus.notStarted => (null, Colors.transparent),
         };
         if (text == null) return const SizedBox.shrink();
-        return Text(
+        const shadows = [
+          Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
+        ];
+        final label = Text(
           text,
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.w800,
             fontSize: 13,
-            shadows: const [
-              Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
-            ],
+            shadows: shadows,
           ),
+        );
+        // Hızlı skorla bitti, olaylar sonradan girilecek.
+        if (match.status != MatchStatus.finished || !match.detailsPending) {
+          return label;
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            label,
+            const SizedBox(height: 3),
+            const Text(
+              'Maç detayları işleniyor...',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white70,
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                shadows: shadows,
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1270,6 +1293,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     return time == null ? date : '$date · $time';
   }
 
+  Future<void> _setDetailsPending(MatchModel match, bool pending) async {
+    try {
+      await _matchService.setDetailsPending(match.id, pending);
+      _triggerRefresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Widget? _buildTabFab({
     required MatchModel match,
     required int tabIndex,
@@ -1286,11 +1321,45 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     if (match.status == MatchStatus.cancelled) return null;
 
     if (tabIndex == 0) {
-      // Canlı ve bitmiş maçta menü yok: olaylar alttaki hızlı girişten, devre
-      // ve Geri Al skorun altındaki butonlardan; düzeltme olaya uzun basarak.
+      // Bitmiş maçta admin / kurucu başkan: hızlı skorla bitirilen maçın
+      // olaylarını sonradan girer, skoru düzeltir.
+      if (match.status == MatchStatus.finished) {
+        if (!canQuickScore) return null;
+        return _SpeedDialFab(
+          key: ValueKey('fab_finished_${match.detailsPending}'),
+          actions: [
+            _SpeedDialAction(
+              label: 'Maç Detayı Gir',
+              icon: Icons.edit_note_rounded,
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (_) => AdminMatchEventScreen(match: match),
+              ),
+            ),
+            _SpeedDialAction(
+              label: 'Skoru Düzelt',
+              icon: Icons.scoreboard_outlined,
+              onTap: () => showQuickScoreDialog(
+                context,
+                match: match,
+                homeName: homeName,
+                awayName: awayName,
+                onSaved: _triggerRefresh,
+              ),
+            ),
+            if (match.detailsPending)
+              _SpeedDialAction(
+                label: 'Detaylar Tamamlandı',
+                icon: Icons.task_alt_rounded,
+                onTap: () => _setDetailsPending(match, false),
+              ),
+          ],
+        );
+      }
+      // Canlı maçta menü yok: olaylar alttaki hızlı girişten, devre ve Geri
+      // Al skorun altındaki butonlardan; düzeltme olaya uzun basarak.
       if (match.status == MatchStatus.live ||
-          match.status == MatchStatus.halftime ||
-          match.status == MatchStatus.finished) {
+          match.status == MatchStatus.halftime) {
         return null;
       }
       // Maçın bölge sorumlusu yalnızca tarih, saat ve stadı girer.

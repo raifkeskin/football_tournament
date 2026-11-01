@@ -161,10 +161,19 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> setDetailsPending(String matchId, bool pending) async {
+    await _supabase
+        .from('matches')
+        .update({'details_pending': pending})
+        .eq('id', matchId);
+  }
+
+  @override
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,
     required int awayScore,
+    bool detailsPending = false,
   }) async {
     await _supabase.from('matches').upsert({
       'id': matchId,
@@ -172,6 +181,7 @@ class SupabaseMatchService implements IMatchService {
       'away_score': awayScore,
       'is_completed': true,
       'status': 'finished',
+      'details_pending': detailsPending,
     }, onConflict: 'id');
 
     final matchData = await _supabase
