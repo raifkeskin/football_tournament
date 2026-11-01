@@ -3,12 +3,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_name.dart';
-import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../models/match.dart';
 import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
 import '../utils/season_match_settings.dart';
+import 'minute_input_dialog.dart';
 
 /// Canlı maçta olay girişi: alttaki takım butonuyla (GOL / KART / DEĞ.)
 /// olay ve takım tek dokunuşta seçilir; sonra her ekranda tek soru gelir
@@ -643,64 +643,20 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
 
   /// Dakika saatten gelir; −1 / +1 ile düzeltilir (uzatmada uzatma değişir).
   Future<void> _typeMinute() async {
-    final ctrl = TextEditingController(text: '$_minute');
-    final v = await showDialog<int>(
-      context: context,
-      builder: (ctx) {
-        void done() => Navigator.pop(ctx, int.tryParse(ctrl.text.trim()));
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 48),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: adminDialogDecoration(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Dakika',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: ctrl,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  maxLength: 3,
-                  onSubmitted: (_) => done(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                  ),
-                  decoration: const InputDecoration(counterText: ''),
-                ),
-                const SizedBox(height: 14),
-                AdminPrimaryButton(
-                  label: 'TAMAM',
-                  icon: Icons.check_rounded,
-                  onPressed: done,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    final v = await showMinuteInputDialog(
+      context,
+      title: 'Dakika',
+      minute: _minute,
+      added: _added,
     );
-    if (v == null || v < 1 || !mounted) return;
+    if (v == null || !mounted) return;
     setState(() {
-      _minute = v.clamp(1, 200);
-      _added = null;
+      _minute = v.minute;
+      _added = v.added;
     });
   }
 
+  /// Dakika: ±1 ya da dokununca elle yazılır (canlıda sayaçtan gelir).
   Widget _clock() {
     void shift(int d) => setState(() {
       if (_added != null) {
@@ -732,7 +688,6 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
             style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
           ),
           const SizedBox(width: 8),
-          // Dokununca dakika yazılır (bitmiş maça sonradan girişte).
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: _saving ? null : _typeMinute,
@@ -742,13 +697,20 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: kAdminAccent.withValues(alpha: 0.5)),
               ),
-              child: Text(
-                minuteLabel(_minute, _added),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    minuteLabel(_minute, _added),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.edit_rounded, size: 14, color: kAdminAccent),
+                ],
               ),
             ),
           ),

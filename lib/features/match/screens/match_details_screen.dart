@@ -50,6 +50,7 @@ import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
+import '../widgets/minute_input_dialog.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
 import '../../media_credits/media_credit.dart';
@@ -466,6 +467,13 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
         widget.canUndo &&
         m.status != MatchStatus.notStarted &&
         m.status != MatchStatus.postponed;
+    // Sayaç yanlışlıkla sıfırlanırsa dakikayı elle düzeltme (admin + kurucu).
+    final clock =
+        widget.canUndo &&
+        m.status == MatchStatus.live &&
+        m.kickoffAt != null &&
+        m.extraTimeAt == null &&
+        m.shootout == null;
     if (next == null && !undo) return const SizedBox.shrink();
 
     Widget pill({
@@ -538,6 +546,16 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
             outlined: true,
             onTap: () => _run('undo'),
           ),
+        if (clock) ...[
+          const SizedBox(width: 6),
+          pill(
+            label: 'Sayaç',
+            icon: Icons.timer_outlined,
+            color: Colors.transparent,
+            outlined: true,
+            onTap: () => _run('clock'),
+          ),
+        ],
       ],
     );
   }
@@ -2203,6 +2221,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   /// Akış adımını uygular; maç sonu için skor onayı ister.
   Future<void> _runPhaseAction(MatchModel m, String action) async {
+    if (action == 'clock') return _setClock(m);
     if (action == 'finish' || action == 'undo') {
       final ok = await showAdminConfirmDialog(
         context: context,
@@ -2225,6 +2244,43 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
     try {
       await _matchService.advanceMatchPhase(matchId: m.id, action: action);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is PostgrestException ? e.message : '$e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  /// Canlı sayacı elle düzeltir: girilen dakika şu an olacak şekilde
+  /// başlama ya da 2. yarı saati kaydırılır (match_set_clock).
+  Future<void> _setClock(MatchModel m) async {
+    await MatchClock.ensureLoaded();
+    if (!mounted) return;
+    final period = MatchClock.periodOf(m.seasonId);
+    final now = MatchClock.liveMinuteParts(m);
+    final v = await showMinuteInputDialog(
+      context,
+      title: 'Sayacı Düzelt',
+      minute: now?.minute,
+      added: now?.added,
+      hint: m.secondHalfAt == null
+          ? '1. yarı · şu an kaçıncı dakikadayız?'
+          : '2. yarı · ${period + 1}. dakikadan başlar',
+    );
+    if (v == null || !mounted) return;
+    try {
+      await Supabase.instance.client.rpc(
+        'match_set_clock',
+        params: {'p_match_id': m.id, 'p_minute': v.minute + (v.added ?? 0)},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Sayaç ${minuteLabel(v.minute, v.added)} olarak düzeltildi.',
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       final msg = e is PostgrestException ? e.message : '$e';
