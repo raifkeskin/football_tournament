@@ -167,24 +167,37 @@ class _RatingSettingsScreenState extends State<RatingSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final r = _rules;
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        title: Text('Futbolcu Puanlama · ${widget.seasonName}'),
-        actions: [
-          TextButton(
-            onPressed: r == null ? null : _reset,
-            child: const Text('Varsayılan'),
-          ),
-        ],
-      ),
+    return AdminPageScaffold(
+      title: 'Futbolcu Puanlama',
+      bottomBar: r == null
+          ? null
+          : AdminPrimaryButton(
+              label: _saving ? 'KAYDEDİLİYOR…' : 'KAYDET',
+              icon: Icons.check_rounded,
+              onPressed: _saving ? null : _save,
+            ),
       body: r == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.seasonName,
+                        style: const TextStyle(
+                          color: kAdminMuted,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _reset,
+                      child: const Text('Varsayılana dön'),
+                    ),
+                  ],
+                ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   activeTrackColor: kAdminAccent,
@@ -232,21 +245,6 @@ class _RatingSettingsScreenState extends State<RatingSettingsScreen> {
                     _row('m_${k.key}', k.label),
                 ],
               ],
-            ),
-      bottomNavigationBar: r == null
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: kAdminAccent,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  onPressed: _saving ? null : _save,
-                  child: Text(_saving ? 'Kaydediliyor…' : 'KAYDET'),
-                ),
-              ),
             ),
     );
   }

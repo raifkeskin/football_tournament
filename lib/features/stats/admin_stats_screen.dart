@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const _bg = Color(0xFF0F172A);
+import '../../core/widgets/admin_page.dart';
+
 const _card = Color(0xFF1E293B);
 const _muted = Color(0xFF94A3B8);
 const _soft = Color(0xFFE2E8F0);
@@ -32,13 +33,9 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D1729),
-        foregroundColor: Colors.white,
-        title: const Text('İstatistikler'),
-      ),
+    // Diğer yönetim ekranları gibi: geri tuşu üst bantta, başlık altında.
+    return AdminPageScaffold(
+      title: 'İstatistikler',
       body: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snap) {
