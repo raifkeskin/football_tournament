@@ -1525,12 +1525,33 @@ class _ScoreBox extends StatelessWidget {
           if (!end) _crest(t),
           if (!end) const SizedBox(width: 8),
           Flexible(
-            child: Text(
-              t.name.trUpper,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: end ? TextAlign.right : TextAlign.left,
-              style: _cond(14, color: _ink).copyWith(letterSpacing: 0.3),
+            // Uzun tek kelime (GAZİOSMANPAŞA) satırda bölünmesin: en uzun
+            // kelime sığana kadar yazı küçülür.
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final name = t.name.trUpper;
+                var style = _cond(14, color: _ink).copyWith(letterSpacing: 0.3);
+                final longest = name
+                    .split(RegExp(r'\s+'))
+                    .fold('', (a, w) => w.length > a.length ? w : a);
+                final width = (TextPainter(
+                  text: TextSpan(text: longest, style: style),
+                  textDirection: TextDirection.ltr,
+                  textScaler: MediaQuery.textScalerOf(context),
+                )..layout()).width;
+                if (width > box.maxWidth && box.maxWidth > 0) {
+                  style = style.copyWith(
+                    fontSize: (14 * box.maxWidth / width).clamp(9.0, 14.0),
+                  );
+                }
+                return Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: end ? TextAlign.right : TextAlign.left,
+                  style: style,
+                );
+              },
             ),
           ),
           if (end) const SizedBox(width: 8),
