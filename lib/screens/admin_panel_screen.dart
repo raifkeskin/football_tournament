@@ -277,9 +277,9 @@ class AdminPanelWidget extends StatelessWidget {
                   for (final m in menuItems)
                     if (_categoryOf(m.baslik) == cat)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: SizedBox(
-                          height: 68,
+                          height: 56,
                           child: _ModernImageMenuCard(data: m),
                         ),
                       ),
@@ -754,7 +754,7 @@ class _ModernImageMenuCard extends StatelessWidget {
         onTap: data.onPressed,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
@@ -762,17 +762,17 @@ class _ModernImageMenuCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: data.renkler,
                   ),
                 ),
-                child: Icon(data.ikon, color: Colors.white, size: 22),
+                child: Icon(data.ikon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -781,7 +781,7 @@ class _ModernImageMenuCard extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 16,
+                    fontSize: 14.5,
                   ),
                 ),
               ),
