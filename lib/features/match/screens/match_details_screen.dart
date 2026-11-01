@@ -3213,6 +3213,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                       MediaCreditChip(
                         leagueId: widget.match.leagueId,
                         kind: MediaCreditKind.broadcast,
+                        matchId: widget.match.id,
                       ),
                     MatchHighlightsStrip(
                       match: widget.match,
@@ -3240,6 +3241,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
             MediaCreditChip(
               leagueId: widget.match.leagueId,
               kind: MediaCreditKind.photo,
+              matchId: widget.match.id,
             ),
           for (final a in albums) _albumCard(context, a),
           if (widget.isSuperAdmin)
