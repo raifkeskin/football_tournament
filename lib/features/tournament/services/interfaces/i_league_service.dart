@@ -38,6 +38,7 @@ abstract class ILeagueService {
     String? city,
     String? country,
     String? location,
+    String? photoUrl,
   });
 
   Future<void> updatePitch({
@@ -46,6 +47,7 @@ abstract class ILeagueService {
     String? city,
     String? country,
     String? location,
+    String? photoUrl,
   });
 
   Future<void> deletePitch(String pitchId);

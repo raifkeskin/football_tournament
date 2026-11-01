@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../../core/services/image_upload_service.dart';
+import '../../../core/widgets/picked_image.dart';
+import '../../../core/widgets/web_safe_image.dart';
 
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/admin_page.dart';
@@ -370,6 +375,9 @@ class _AdminPitchManagementScreenState
     var selectedCity = (editing?.city ?? '').trim();
     var selectedDistrict = (editing?.country ?? '').trim();
     var saving = false;
+    // Saha fotoğrafı: yeni seçilen dosya ya da kayıtlı adres.
+    XFile? newPhoto;
+    var photoUrl = editing?.photoUrl;
 
     Future<void> save(BuildContext ctx, StateSetter setLocal) async {
       final name = nameController.text.trim();
@@ -382,7 +390,20 @@ class _AdminPitchManagementScreenState
         return;
       }
       setLocal(() => saving = true);
+      final upload = SupabaseImageUploadService();
       try {
+        // Önce fotoğraf: yükleme başarısız olursa kayıt değişmez.
+        if (newPhoto != null) {
+          final url = (await upload.uploadImage(
+            newPhoto!,
+            folder: MediaFolder.leagues,
+            subfolder: 'pitches',
+          ))?.trim();
+          if ((url ?? '').isEmpty) {
+            throw Exception('Fotoğraf yüklenemedi, lütfen tekrar deneyin.');
+          }
+          photoUrl = url;
+        }
         if (isEdit) {
           await _leagueService.updatePitch(
             pitchId: editing.id,
@@ -390,13 +411,18 @@ class _AdminPitchManagementScreenState
             city: selectedCity,
             country: district,
             location: loc,
+            photoUrl: photoUrl,
           );
+          if (editing.photoUrl != null && editing.photoUrl != photoUrl) {
+            await upload.deleteImageByUrl(editing.photoUrl);
+          }
         } else {
           await _leagueService.addPitch(
             name: name,
             city: selectedCity.isEmpty ? null : selectedCity,
             country: district.isEmpty ? null : district,
             location: loc.isEmpty ? null : loc,
+            photoUrl: photoUrl,
           );
         }
         if (ctx.mounted) Navigator.pop(ctx);
@@ -448,6 +474,88 @@ class _AdminPitchManagementScreenState
                 isEdit ? Icons.edit_location_alt_outlined : Icons.stadium,
                 isEdit ? 'Sahayı Düzenle' : 'Saha Ekle',
               ),
+              // Saha fotoğrafı (yatay); dokununca galeriden seçilir.
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: saving
+                        ? null
+                        : () async {
+                            final picked = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 1920,
+                              imageQuality: 85,
+                            );
+                            if (picked != null) {
+                              setLocal(() => newPhoto = picked);
+                            }
+                          },
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (newPhoto != null)
+                          Image(
+                            image: pickedImageProvider(newPhoto!),
+                            fit: BoxFit.cover,
+                          )
+                        else if (photoUrl != null)
+                          WebSafeImage(url: photoUrl!)
+                        else
+                          const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_photo_alternate_outlined,
+                                color: _accent,
+                                size: 32,
+                              ),
+                              SizedBox(height: 6),
+                              Text(
+                                'Saha fotoğrafı ekle',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        if (newPhoto != null || photoUrl != null)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: IconButton.filled(
+                              tooltip: 'Fotoğrafı kaldır',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.black54,
+                              ),
+                              onPressed: saving
+                                  ? null
+                                  : () => setLocal(() {
+                                      newPhoto = null;
+                                      photoUrl = null;
+                                    }),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: nameController,
                 enabled: !saving,
@@ -632,11 +740,14 @@ class _AdminPitchManagementScreenState
           Container(
             width: 44,
             height: 44,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: _accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.stadium_outlined, color: _accent),
+            child: p.photoUrl == null
+                ? const Icon(Icons.stadium_outlined, color: _accent)
+                : WebSafeImage(url: p.photoUrl!, width: 44, height: 44),
           ),
           const SizedBox(width: 12),
           Expanded(
