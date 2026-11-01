@@ -5,6 +5,7 @@ class Pitch {
     required this.city,
     required this.country,
     required this.location,
+    this.photoUrl,
   });
 
   final String id;
@@ -12,6 +13,9 @@ class Pitch {
   final String city;
   final String country;
   final String location;
+
+  /// Saha fotoğrafı (Saha Yönetimi'nden yüklenir).
+  final String? photoUrl;
 }
 
 class NewsItem {

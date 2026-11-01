@@ -560,6 +560,9 @@ class SupabaseLeagueService implements ILeagueService {
             city: (r['city'] ?? '').toString(),
             country: (r['country'] ?? '').toString(),
             location: (r['location'] ?? '').toString(),
+            photoUrl: (r['photo_url'] ?? '').toString().trim().isEmpty
+                ? null
+                : r['photo_url'].toString(),
           );
         }).toList();
       });
@@ -575,6 +578,7 @@ class SupabaseLeagueService implements ILeagueService {
     String? city,
     String? country,
     String? location,
+    String? photoUrl,
   }) async {
     final n = name.trim();
     if (n.isEmpty) return;
@@ -592,6 +596,7 @@ class SupabaseLeagueService implements ILeagueService {
         'city': c.isEmpty ? null : c,
         'country': co.isEmpty ? null : co,
         'location': loc.isEmpty ? null : loc,
+        'photo_url': (photoUrl ?? '').trim().isEmpty ? null : photoUrl,
       });
       AppConfig.sqlLogResult(table: 'pitches', operation: 'INSERT', count: 1);
     } catch (e) {
@@ -607,6 +612,7 @@ class SupabaseLeagueService implements ILeagueService {
     String? city,
     String? country,
     String? location,
+    String? photoUrl,
   }) async {
     final id = pitchId.trim();
     final n = name.trim();
@@ -625,6 +631,7 @@ class SupabaseLeagueService implements ILeagueService {
             'city': clean(city),
             'country': clean(country),
             'location': clean(location),
+            'photo_url': clean(photoUrl),
           })
           .eq('id', id)
           .select('id');
