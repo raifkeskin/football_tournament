@@ -268,13 +268,16 @@ _Layout? _computeLayout(
     outfieldCount,
   );
 
-  var f = (formation ?? '').trim().isEmpty ? autoFormation : formation!.trim();
+  // 11'li maçta kayıtlı diziliş yoksa 4-2-3-1 (sahada en yaygın dizilim);
+  // küçük sahada mevkilerden çıkan diziliş.
+  final fallback = outfieldCount == 10 ? '4-2-3-1' : autoFormation;
+  var f = (formation ?? '').trim().isEmpty ? fallback : formation!.trim();
   var counts = _parseFormation(f);
   final options = _formationOptions(outfieldCount);
   if (counts.fold<int>(0, (a, b) => a + b) != outfieldCount ||
       (options.isNotEmpty && !options.contains(f))) {
-    // Kadro değiştiyse ya da kayıtlı diziliş geçersizse otomatik olan.
-    f = autoFormation;
+    // Kadro değiştiyse ya da kayıtlı diziliş geçersizse varsayılan.
+    f = fallback;
     counts = _parseFormation(f);
   }
 
