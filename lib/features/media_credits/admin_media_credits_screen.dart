@@ -124,8 +124,31 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
     }
   }
 
-  /// Künyeyi yönetilen başka bir turnuvaya kopyalar (oradaki aynı türdeki
-  /// künyenin yerine geçer); her turnuvada yeniden girmek gerekmez.
+  /// Türün varsayılanı: ekibi ayrıca seçilmemiş maçlarda bu kişi görünür.
+  Future<void> _makeDefault(MediaCredit c) async {
+    setState(() => _busy = true);
+    try {
+      await _sb
+          .from('media_credits')
+          .update({'is_default': false})
+          .eq('league_id', c.leagueId)
+          .eq('kind', c.kind.name)
+          .eq('is_default', true);
+      await _sb
+          .from('media_credits')
+          .update({'is_default': true})
+          .eq('id', c.id);
+      MediaCreditFeed.notifyChanged(c.leagueId);
+      await _loadCredits();
+    } catch (e) {
+      _snack('Kaydedilemedi: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Künyeyi yönetilen başka bir turnuvaya kopyalar (oradaki listeye
+  /// eklenir); her turnuvada yeniden girmek gerekmez.
   Future<void> _copyTo(MediaCredit c) async {
     final targets = [
       for (final l in _leagues ?? const <LeagueChoice>[])
@@ -141,33 +164,20 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
     if (target == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final existing = await _sb
+      // Hedefte aynı türden kimse yoksa varsayılan olur.
+      final same = await _sb
           .from('media_credits')
-          .select('id, name, avatar_url')
+          .select('id')
           .eq('league_id', target.id)
           .eq('kind', c.kind.name)
-          .maybeSingle();
-      if (existing != null && mounted) {
-        final ok = await showAdminConfirmDialog(
-          context: context,
-          title: 'Künye Değişsin mi?',
-          message:
-              '${target.name} turnuvasında ${c.kind.label.toLowerCase()} '
-              'olarak "${existing['name']}" kayıtlı. Yerine "${c.name}" '
-              'yazılacak.',
-        );
-        if (!ok) return;
-      }
+          .limit(1);
       final row = c.toMap()
         ..remove('id')
         ..remove('created_at')
         ..remove('updated_at')
-        ..['league_id'] = target.id;
-      await _sb.from('media_credits').upsert(row, onConflict: 'league_id,kind');
-      final oldAvatar = existing?['avatar_url'] as String?;
-      if (oldAvatar != null && oldAvatar != c.avatarUrl) {
-        await deleteCreditAvatarIfUnused(oldAvatar);
-      }
+        ..['league_id'] = target.id
+        ..['is_default'] = same.isEmpty;
+      await _sb.from('media_credits').insert(row);
       MediaCreditFeed.notifyChanged(target.id);
       _snack('"${c.name}" ${target.name} turnuvasına aktarıldı.');
     } catch (e) {
@@ -183,7 +193,7 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
     final saved = await showAdminPopup<bool>(
       context: context,
       builder: (_) =>
-          _MediaCreditForm(leagueId: leagueId, kind: kind, credit: credit),
+          MediaCreditForm(leagueId: leagueId, kind: kind, credit: credit),
     );
     if (saved == true) {
       await _loadCredits();
@@ -222,18 +232,19 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
       );
     } else {
       Widget section(MediaCreditKind kind) {
-        final c = credits!.where((x) => x.kind == kind).firstOrNull;
+        final list = [
+          for (final x in credits!)
+            if (x.kind == kind) x,
+        ]..sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
         return AdminFormSection(
           title: kind.label,
-          trailing: c != null
-              ? null
-              : TextButton.icon(
-                  onPressed: _busy ? null : () => _edit(kind, null),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Ekle'),
-                  style: TextButton.styleFrom(foregroundColor: kAdminAccent),
-                ),
-          child: c == null
+          trailing: TextButton.icon(
+            onPressed: _busy ? null : () => _edit(kind, null),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Ekle'),
+            style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+          ),
+          child: list.isEmpty
               ? Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
@@ -251,14 +262,18 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
                 )
               : AdminFieldGroup(
                   children: [
-                    _CreditRow(
-                      credit: c,
-                      busy: _busy,
-                      onEdit: () => _edit(kind, c),
-                      onPreview: () => showMediaCreditCard(context, c),
-                      onDelete: () => _delete(c),
-                      onCopy: leagues.length > 1 ? () => _copyTo(c) : null,
-                    ),
+                    for (final c in list)
+                      _CreditRow(
+                        credit: c,
+                        busy: _busy,
+                        onEdit: () => _edit(kind, c),
+                        onPreview: () => showMediaCreditCard(context, c),
+                        onDelete: () => _delete(c),
+                        onCopy: leagues.length > 1 ? () => _copyTo(c) : null,
+                        onMakeDefault: c.isDefault || list.length < 2
+                            ? null
+                            : () => _makeDefault(c),
+                      ),
                   ],
                 ),
         );
@@ -285,8 +300,10 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
               padding: EdgeInsets.fromLTRB(4, 6, 4, 18),
               child: Text(
                 'Maç detayının Bilgi sekmesinde (kâğıt ikonu) ve Medya '
-                'sekmesinde görünür; dokununca kartvizit açılır. Başka '
-                'turnuvaya aktarmak için satırdaki aktar düğmesini kullanın.',
+                'sekmesinde görünür; dokununca kartvizit açılır. Her türden '
+                'birden çok kişi eklenebilir; ekibi ayrıca seçilmemiş '
+                'maçlarda varsayılan (★) görünür. Maçın ekibi maç detayındaki '
+                'Düzenle ile değiştirilir.',
                 style: TextStyle(
                   color: kAdminMuted,
                   fontSize: 12,
@@ -312,9 +329,13 @@ class _CreditRow extends StatelessWidget {
     required this.onPreview,
     required this.onDelete,
     this.onCopy,
+    this.onMakeDefault,
   });
 
   final MediaCredit credit;
+
+  /// Türün varsayılanı yap (aynı türden birden çok kişi varsa).
+  final VoidCallback? onMakeDefault;
   final bool busy;
   final VoidCallback onEdit;
   final VoidCallback onPreview;
@@ -369,6 +390,7 @@ class _CreditRow extends StatelessWidget {
                     ),
                     Text(
                       [
+                        if (c.isDefault) 'Varsayılan',
                         c.displayTitle,
                         if (!c.isActive) 'Gizli',
                         if (c.contactConsent && c.phone != null)
@@ -381,6 +403,13 @@ class _CreditRow extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onMakeDefault != null)
+                AdminSmallAction(
+                  icon: Icons.star_outline_rounded,
+                  tooltip: 'Varsayılan yap',
+                  color: const Color(0xFFFACC15),
+                  onTap: busy ? null : onMakeDefault,
+                ),
               AdminSmallAction(
                 icon: Icons.visibility_outlined,
                 tooltip: 'Kartviziti gör',
@@ -410,8 +439,9 @@ class _CreditRow extends StatelessWidget {
 
 /// Künye ekle / düzenle popup'ı: Genel (fotoğraf, ad, unvan, not) ve
 /// İletişim (telefon, e-posta, Instagram, YouTube, onay) sekmeleri.
-class _MediaCreditForm extends StatefulWidget {
-  const _MediaCreditForm({
+class MediaCreditForm extends StatefulWidget {
+  const MediaCreditForm({
+    super.key,
     required this.leagueId,
     required this.kind,
     required this.credit,
@@ -422,10 +452,10 @@ class _MediaCreditForm extends StatefulWidget {
   final MediaCredit? credit;
 
   @override
-  State<_MediaCreditForm> createState() => _MediaCreditFormState();
+  State<MediaCreditForm> createState() => _MediaCreditFormState();
 }
 
-class _MediaCreditFormState extends State<_MediaCreditForm> {
+class _MediaCreditFormState extends State<MediaCreditForm> {
   late final _name = TextEditingController(text: widget.credit?.name ?? '');
   late final _title = TextEditingController(text: widget.credit?.title ?? '');
   late final _note = TextEditingController(text: widget.credit?.note ?? '');
@@ -538,10 +568,19 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
         if (avatarUrl != null || _removeAvatar) 'avatar_url': avatarUrl,
       };
       if (old == null) {
+        // Türün ilk kişisi turnuvanın varsayılanı olur.
+        final defaults = await sb
+            .from('media_credits')
+            .select('id')
+            .eq('league_id', widget.leagueId)
+            .eq('kind', widget.kind.name)
+            .eq('is_default', true)
+            .limit(1);
         await sb.from('media_credits').insert({
           ...payload,
           'league_id': widget.leagueId,
           'kind': widget.kind.name,
+          'is_default': defaults.isEmpty,
         });
       } else {
         await sb.from('media_credits').update(payload).eq('id', old.id);

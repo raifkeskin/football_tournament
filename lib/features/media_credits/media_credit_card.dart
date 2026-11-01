@@ -16,11 +16,15 @@ class MediaCreditChip extends StatefulWidget {
     super.key,
     required this.leagueId,
     required this.kind,
+    this.matchId,
     this.padding = const EdgeInsets.fromLTRB(12, 10, 12, 0),
     this.asRow = false,
   });
 
   final String leagueId;
+
+  /// Verilirse maçın kendi medya ekibi (yoksa turnuvanın varsayılanı).
+  final String? matchId;
   final MediaCreditKind kind;
   final EdgeInsets padding;
 
@@ -33,18 +37,55 @@ class MediaCreditChip extends StatefulWidget {
 
 class _MediaCreditChipState extends State<MediaCreditChip> {
   late List<MediaCredit>? _credits = MediaCreditFeed.memory(widget.leagueId);
+  late MatchCrew? _crew = widget.matchId == null
+      ? null
+      : MatchMediaCrew.memory(widget.matchId!);
 
   @override
   void initState() {
     super.initState();
     MediaCreditFeed.changes.addListener(_onChanged);
+    MatchMediaCrew.changes.addListener(_onCrewChanged);
     _load();
+    _loadCrew();
   }
 
   @override
   void dispose() {
     MediaCreditFeed.changes.removeListener(_onChanged);
+    MatchMediaCrew.changes.removeListener(_onCrewChanged);
     super.dispose();
+  }
+
+  void _onCrewChanged() {
+    final id = widget.matchId;
+    if (id != null && MatchMediaCrew.changes.value == id) {
+      setState(() => _crew = MatchMediaCrew.memory(id));
+    }
+  }
+
+  Future<void> _loadCrew() async {
+    final id = widget.matchId;
+    if (id == null) return;
+    try {
+      final c = await MatchMediaCrew.fetch(id);
+      if (mounted) setState(() => _crew = c);
+    } catch (_) {}
+  }
+
+  /// Tek kişi: kartviziti; birden çok: önce kişi seçilir.
+  Future<void> _open(List<MediaCredit> list) async {
+    if (list.length == 1) {
+      await showMediaCreditCard(context, list.first);
+      return;
+    }
+    final c = await showAdminOptionPicker<MediaCredit>(
+      context: context,
+      title: widget.kind.label,
+      items: list,
+      labelBuilder: (c) => c.name,
+    );
+    if (c != null && mounted) await showMediaCreditCard(context, c);
   }
 
   void _onChanged() {
@@ -66,13 +107,13 @@ class _MediaCreditChipState extends State<MediaCreditChip> {
 
   @override
   Widget build(BuildContext context) {
-    final credit = _credits
-        ?.where((c) => c.kind == widget.kind && c.isActive)
-        .firstOrNull;
-    if (credit == null) return const SizedBox.shrink();
+    final list = MatchMediaCrew.resolve(_credits, _crew, widget.kind);
+    if (list.isEmpty) return const SizedBox.shrink();
+    final credit = list.first;
+    final names = list.map((c) => c.name).join(', ');
     if (widget.asRow) {
       return InkWell(
-        onTap: () => showMediaCreditCard(context, credit),
+        onTap: () => _open(list),
         child: Padding(
           padding: widget.padding,
           child: MatchInfoLine(
@@ -80,7 +121,7 @@ class _MediaCreditChipState extends State<MediaCreditChip> {
                 ? Icons.photo_camera_outlined
                 : Icons.videocam_outlined,
             label: credit.kind.label,
-            value: credit.name,
+            value: names,
             trailing: const Icon(
               Icons.chevron_right_rounded,
               size: 18,
@@ -101,7 +142,7 @@ class _MediaCreditChipState extends State<MediaCreditChip> {
           ),
           child: InkWell(
             customBorder: const StadiumBorder(),
-            onTap: () => showMediaCreditCard(context, credit),
+            onTap: () => _open(list),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 7, 14, 7),
               child: Row(
@@ -125,7 +166,7 @@ class _MediaCreditChipState extends State<MediaCreditChip> {
                   ),
                   Flexible(
                     child: Text(
-                      credit.name,
+                      names,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

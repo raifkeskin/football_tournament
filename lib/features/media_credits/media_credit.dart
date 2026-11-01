@@ -42,6 +42,7 @@ class MediaCredit {
     this.note,
     this.contactConsent = false,
     this.isActive = true,
+    this.isDefault = false,
   });
 
   final String id;
@@ -61,6 +62,9 @@ class MediaCredit {
   final String? note;
   final bool contactConsent;
   final bool isActive;
+
+  /// Maçına ayrı ekip seçilmemiş maçlarda görünen kişi (türü başına bir).
+  final bool isDefault;
 
   String get displayTitle =>
       (title ?? '').trim().isEmpty ? kind.defaultTitle : title!.trim();
@@ -84,6 +88,7 @@ class MediaCredit {
     note: _s(m['note']),
     contactConsent: m['contact_consent'] == true,
     isActive: m['is_active'] != false,
+    isDefault: m['is_default'] == true,
   );
 
   Map<String, dynamic> toMap() => {
@@ -100,6 +105,7 @@ class MediaCredit {
     'note': note,
     'contact_consent': contactConsent,
     'is_active': isActive,
+    'is_default': isDefault,
   };
 }
 
@@ -159,5 +165,68 @@ class MediaCreditFeed {
       );
     } catch (_) {}
     return list;
+  }
+}
+
+/// Maçın medya ekibi: [custom] ise maç için seçilmiş kişiler ([ids]; boşsa
+/// ekip yok), değilse turnuvanın varsayılanları.
+typedef MatchCrew = ({bool custom, Set<String> ids});
+
+class MatchMediaCrew {
+  MatchMediaCrew._();
+
+  static SupabaseClient get _sb => Supabase.instance.client;
+  static final _memory = <String, MatchCrew>{};
+
+  /// Ekibi değişen maçın id'si.
+  static final changes = ValueNotifier<String?>(null);
+
+  static MatchCrew? memory(String matchId) => _memory[matchId];
+
+  static Future<MatchCrew> fetch(String matchId) async {
+    final row = await _sb
+        .from('matches')
+        .select('media_crew_custom, match_media_crew(credit_id)')
+        .eq('id', matchId)
+        .maybeSingle();
+    final crew = (
+      custom: row?['media_crew_custom'] == true,
+      ids: {
+        for (final r in (row?['match_media_crew'] as List? ?? const []))
+          (r as Map)['credit_id'].toString(),
+      },
+    );
+    return _memory[matchId] = crew;
+  }
+
+  /// [ids] null → turnuvanın varsayılanına döner; boş → ekip yok.
+  static Future<void> save(String matchId, Set<String>? ids) async {
+    await _sb.rpc(
+      'set_match_media_crew',
+      params: {'p_match_id': matchId, 'p_credit_ids': ids?.toList()},
+    );
+    _memory[matchId] = (custom: ids != null, ids: ids ?? const {});
+    changes.value = null;
+    changes.value = matchId;
+  }
+
+  /// Maçta görünen [kind] türündeki kişiler.
+  static List<MediaCredit> resolve(
+    List<MediaCredit>? credits,
+    MatchCrew? crew,
+    MediaCreditKind kind,
+  ) {
+    final list = [
+      for (final c in credits ?? const <MediaCredit>[])
+        if (c.kind == kind && c.isActive) c,
+    ];
+    if (crew != null && crew.custom) {
+      return [
+        for (final c in list)
+          if (crew.ids.contains(c.id)) c,
+      ];
+    }
+    final def = list.where((c) => c.isDefault).firstOrNull ?? list.firstOrNull;
+    return def == null ? const [] : [def];
   }
 }
