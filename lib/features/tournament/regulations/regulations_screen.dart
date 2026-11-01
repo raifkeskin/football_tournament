@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/widgets/admin_form.dart';
@@ -75,102 +76,74 @@ class _Parsed {
   }
 }
 
-/// Turnuva sayfasındaki giriş: talimatname varsa (ya da düzenleyebiliyorsa)
-/// "Talimatname" düğmesi.
-class RegulationsButton extends StatefulWidget {
-  const RegulationsButton({
-    super.key,
+/// Seçili turnuvanın güncel sezonunun talimatnamesi: Ana Sayfa bandındaki
+/// ikon ve menüdeki kısayol buna bakar.
+@immutable
+class RegulationsRef {
+  const RegulationsRef({
     required this.leagueId,
     required this.seasonId,
-    required this.leagueName,
     required this.seasonName,
+    required this.hasText,
   });
 
   final String leagueId;
   final String seasonId;
-  final String leagueName;
   final String seasonName;
+  final bool hasText;
 
-  @override
-  State<RegulationsButton> createState() => _RegulationsButtonState();
+  /// Menüde görünsün mü: metin varsa herkese, yoksa düzenleyebilene.
+  bool shownTo(AppSessionState s) =>
+      regulationsVisible(s) && (hasText || _canEdit(s, leagueId));
+
+  Future<void> open(BuildContext context) async {
+    await RegulationsScreen.open(
+      context,
+      leagueId: leagueId,
+      seasonId: seasonId,
+      leagueName: ActiveTournament.theme.value?.name ?? '',
+      seasonName: seasonName,
+    );
+    RegulationsShortcut.reload();
+  }
 }
 
-class _RegulationsButtonState extends State<RegulationsButton> {
-  late Future<_Regulations> _future = _load(widget.seasonId);
+class RegulationsShortcut {
+  RegulationsShortcut._();
 
-  @override
-  void didUpdateWidget(RegulationsButton old) {
-    super.didUpdateWidget(old);
-    if (old.seasonId != widget.seasonId) _future = _load(widget.seasonId);
+  static final current = ValueNotifier<RegulationsRef?>(null);
+  static String? _leagueId;
+
+  /// Turnuva değişince güncel sezonun talimatnamesini (Ana Sayfa ile aynı
+  /// sezon: aktif, yoksa en yeni) yükler.
+  static Future<void> sync(String? leagueId) async {
+    if (leagueId == _leagueId) return;
+    _leagueId = leagueId;
+    current.value = null;
+    if (leagueId == null) return;
+    try {
+      final rows = await Supabase.instance.client
+          .from('seasons')
+          .select('id, name, regulations')
+          .eq('league_id', leagueId)
+          .order('is_active', ascending: false)
+          .order('start_date', ascending: false)
+          .limit(1);
+      if (_leagueId != leagueId || rows.isEmpty) return;
+      final row = rows.first;
+      current.value = RegulationsRef(
+        leagueId: leagueId,
+        seasonId: row['id'].toString(),
+        seasonName: (row['name'] ?? '').toString(),
+        hasText: (row['regulations'] ?? '').toString().trim().isNotEmpty,
+      );
+    } catch (_) {}
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final s = AppSession.of(context).value;
-    if (!regulationsVisible(s)) return const SizedBox.shrink();
-    return FutureBuilder<_Regulations>(
-      future: _future,
-      builder: (context, snap) {
-        final r = snap.data;
-        if (r == null) return const SizedBox.shrink();
-        if (r.isEmpty && !_canEdit(s, widget.leagueId)) {
-          return const SizedBox.shrink();
-        }
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () async {
-                await RegulationsScreen.open(
-                  context,
-                  leagueId: widget.leagueId,
-                  seasonId: widget.seasonId,
-                  leagueName: widget.leagueName,
-                  seasonName: widget.seasonName,
-                );
-                if (mounted) {
-                  setState(() => _future = _load(widget.seasonId));
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.gavel_rounded,
-                      size: 15,
-                      color: Color(0xFFE0A526),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      r.isEmpty ? 'Talimatname ekle' : 'Talimatname',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  static void reload() {
+    final id = _leagueId;
+    _leagueId = null;
+    sync(id);
   }
 }
 
@@ -242,13 +215,8 @@ class _RegulationsScreenState extends State<RegulationsScreen> {
   Widget build(BuildContext context) {
     final s = AppSession.of(context).value;
     final canEdit = _canEdit(s, widget.leagueId);
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        title: const Text('Turnuva Talimatnamesi'),
-      ),
+    return AdminPageScaffold(
+      title: 'Turnuva Talimatnamesi',
       body: FutureBuilder<_Regulations>(
         future: _future,
         builder: (context, snap) {
@@ -323,47 +291,42 @@ class _RegulationsScreenState extends State<RegulationsScreen> {
           );
         },
       ),
-      bottomNavigationBar: FutureBuilder<_Regulations>(
+      bottomBar: FutureBuilder<_Regulations>(
         future: _future,
         builder: (context, snap) {
           final r = snap.data;
-          if (r == null) return const SizedBox.shrink();
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-              child: Row(
-                children: [
-                  if (!r.isEmpty)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _share(r.text),
-                        icon: const Icon(Icons.share_rounded),
-                        label: const Text('Paylaş'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(46),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.25),
-                          ),
-                        ),
+          if (r == null) return const SizedBox(height: 46);
+          return Row(
+            children: [
+              if (!r.isEmpty)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _share(r.text),
+                    icon: const Icon(Icons.share_rounded),
+                    label: const Text('Paylaş'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(46),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.25),
                       ),
                     ),
-                  if (!r.isEmpty && canEdit) const SizedBox(width: 10),
-                  if (canEdit)
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _edit(r),
-                        icon: const Icon(Icons.edit_rounded),
-                        label: const Text('Düzenle'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kAdminAccent,
-                          minimumSize: const Size.fromHeight(46),
-                        ),
-                      ),
+                  ),
+                ),
+              if (!r.isEmpty && canEdit) const SizedBox(width: 10),
+              if (canEdit)
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _edit(r),
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Düzenle'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kAdminAccent,
+                      minimumSize: const Size.fromHeight(46),
                     ),
-                ],
-              ),
-            ),
+                  ),
+                ),
+            ],
           );
         },
       ),
@@ -523,13 +486,8 @@ class _RegulationsEditScreenState extends State<_RegulationsEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        title: const Text('Talimatnameyi Düzenle'),
-      ),
+    return AdminPageScaffold(
+      title: 'Talimatnameyi Düzenle',
       body: Padding(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
         child: Column(
@@ -561,18 +519,11 @@ class _RegulationsEditScreenState extends State<_RegulationsEditScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: kAdminAccent,
-              minimumSize: const Size.fromHeight(48),
-            ),
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'Kaydediliyor…' : 'KAYDET'),
-          ),
-        ),
+      bottomBar: AdminPrimaryButton(
+        label: 'KAYDET',
+        icon: Icons.check_rounded,
+        busy: _saving,
+        onPressed: _saving ? null : _save,
       ),
     );
   }

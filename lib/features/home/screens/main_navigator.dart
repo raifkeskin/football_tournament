@@ -28,6 +28,7 @@ import '../../team/screens/roster_add_screen.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
+import '../../tournament/regulations/regulations_screen.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -85,6 +86,10 @@ class _MainNavigatorState extends State<MainNavigator> {
       }
     });
     AppSettings.bottomNavEnabled.addListener(_onSettings);
+    // Talimatname kısayolu (Ana Sayfa bandı, menü) seçili turnuvaya bağlı.
+    ActiveTournament.currentLeagueId.addListener(_onSettings);
+    AppSettings.regulationsEnabled.addListener(_onSettings);
+    RegulationsShortcut.current.addListener(_onSettings);
   }
 
   void _onSettings() {
@@ -103,6 +108,9 @@ class _MainNavigatorState extends State<MainNavigator> {
     MainNavigator.tabRequest.removeListener(_onTabRequest);
     NotificationRouter.pending.removeListener(_onPushOpen);
     AppSettings.bottomNavEnabled.removeListener(_onSettings);
+    ActiveTournament.currentLeagueId.removeListener(_onSettings);
+    AppSettings.regulationsEnabled.removeListener(_onSettings);
+    RegulationsShortcut.current.removeListener(_onSettings);
     LeagueSwitchScope.clearHome(_route);
     super.dispose();
   }
@@ -176,6 +184,9 @@ class _MainNavigatorState extends State<MainNavigator> {
     _route = ModalRoute.of(context);
     final signedIn =
         session.value.user != null && !session.value.user!.isAnonymous;
+    RegulationsShortcut.sync(ActiveTournament.currentLeagueId.value);
+    final regulations = RegulationsShortcut.current.value;
+    final showRegulations = regulations?.shownTo(session.value) ?? false;
     // Turnuva seçicisi yalnızca ana sekmelerde (Profil / yönetim panelinde
     // değil).
     LeagueSwitchScope.setHome(
@@ -203,12 +214,20 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
-      // Yayın Rehberi: bantta sağda takvim (gün seçimi).
+      // Yayın Rehberi: bantta sağda takvim (gün seçimi); Ana Sayfa:
+      // turnuva talimatnamesi (metin varsa).
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
               icon: Icons.calendar_month_rounded,
               size: 36,
               onTap: BroadcastGuideScreen.pickDate,
+            )
+          : _aktifSekme == 0 && showRegulations && regulations!.hasText
+          ? BandIconButton(
+              icon: Icons.gavel_rounded,
+              size: 36,
+              tooltip: 'Talimatname',
+              onTap: () => regulations.open(context),
             )
           : null,
     );
@@ -271,6 +290,12 @@ class _MainNavigatorState extends State<MainNavigator> {
             Navigator.of(context).pop(); // çekmeceyi kapat
             showLeagueCodeDialog(this.context);
           },
+          onRegulations: showRegulations
+              ? () {
+                  Navigator.of(context).pop(); // çekmeceyi kapat
+                  regulations!.open(this.context);
+                }
+              : null,
         ),
         // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
         // baştan kurulur ve verilerini yeniden okur.
@@ -559,6 +584,7 @@ class _MenuDrawer extends StatelessWidget {
     required this.onSelect,
     required this.onLogout,
     required this.onEnterCode,
+    this.onRegulations,
   });
 
   final int activeIndex;
@@ -567,6 +593,9 @@ class _MenuDrawer extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final VoidCallback onLogout;
   final VoidCallback onEnterCode;
+
+  /// Seçili turnuvanın talimatnamesi (yoksa / kapalıysa null).
+  final VoidCallback? onRegulations;
 
   static const _ground = Color(0xFF0F172A);
   static const _surface = Color(0xFF1E293B);
@@ -719,24 +748,37 @@ class _MenuDrawer extends StatelessWidget {
         (
           Icons.camera_alt_rounded,
           const Color(0xFFE1306C),
-          t!.instagramUrl,
+          () => _open(t!.instagramUrl),
           'Instagram',
         ),
       if ((t?.facebookUrl ?? '').isNotEmpty)
-        (Icons.facebook, const Color(0xFF1877F2), t!.facebookUrl, 'Facebook'),
+        (
+          Icons.facebook,
+          const Color(0xFF1877F2),
+          () => _open(t!.facebookUrl),
+          'Facebook',
+        ),
       if ((t?.youtubeUrl ?? '').isNotEmpty)
         (
           Icons.smart_display_rounded,
           const Color(0xFFFF0000),
-          t!.youtubeUrl,
+          () => _open(t!.youtubeUrl),
           'YouTube',
         ),
       if ((t?.websiteUrl ?? '').isNotEmpty)
         (
           Icons.language_rounded,
           const Color(0xFF64748B),
-          t!.websiteUrl,
+          () => _open(t!.websiteUrl),
           'Web sitesi',
+        ),
+      // Turnuva talimatnamesi (sosyal hesapların yanında).
+      if (t != null && onRegulations != null)
+        (
+          Icons.gavel_rounded,
+          const Color(0xFFD97706),
+          onRegulations!,
+          'Talimatname',
         ),
     ];
     return Container(
@@ -802,9 +844,10 @@ class _MenuDrawer extends StatelessWidget {
                 ],
                 if (links.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    runSpacing: 6,
                     children: [
-                      for (final (icon, color, url, label) in links)
+                      for (final (icon, color, onTap, label) in links)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Material(
@@ -812,7 +855,7 @@ class _MenuDrawer extends StatelessWidget {
                             shape: const CircleBorder(),
                             child: InkWell(
                               customBorder: const CircleBorder(),
-                              onTap: () => _open(url),
+                              onTap: onTap,
                               child: SizedBox(
                                 width: 32,
                                 height: 32,
