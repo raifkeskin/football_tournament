@@ -2091,8 +2091,8 @@ class LineupFoldHeader extends StatelessWidget {
             Tooltip(
               message: open ? 'Dizilişi gizle' : 'Dizilişi göster',
               child: Container(
-                width: 34,
-                height: 34,
+                width: 26,
+                height: 26,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
@@ -2119,15 +2119,15 @@ class _ChevronPainter extends CustomPainter {
     final c = s.center(Offset.zero);
     final dy = up ? 3.0 : -3.0;
     final path = Path()
-      ..moveTo(c.dx - 7, c.dy + dy)
-      ..lineTo(c.dx, c.dy - dy)
-      ..lineTo(c.dx + 7, c.dy + dy);
+      ..moveTo(c.dx - 5, c.dy + dy * 0.8)
+      ..lineTo(c.dx, c.dy - dy * 0.8)
+      ..lineTo(c.dx + 5, c.dy + dy * 0.8);
     canvas.drawPath(
       path,
       Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.4
+        ..strokeWidth = 2.8
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
