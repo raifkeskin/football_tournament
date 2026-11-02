@@ -812,37 +812,55 @@ class LineupPitchPoster extends StatelessWidget {
             const SizedBox(height: 8),
             _sectionTitle(p, 'YEDEKLER'),
             const SizedBox(height: 5),
+            // Sahadaki gibi alt alta: ad üstte ince, soyad altta kalın;
+            // numara solda.
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 9,
-              runSpacing: 4,
+              spacing: 12,
+              runSpacing: 6,
               children: [
                 for (final pl in data.subs)
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text:
-                              '${(pl.number ?? '').isEmpty ? '–' : pl.number} ',
-                          style: TextStyle(
-                            color: p.accent,
-                            fontWeight: FontWeight.w800,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        (pl.number ?? '').isEmpty ? '–' : pl.number!,
+                        style: TextStyle(
+                          color: p.accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (pl.lastName.isNotEmpty)
+                            Text(
+                              _shortFirst(pl.firstName),
+                              style: const TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 8.5,
+                                height: 1.1,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          Text(
+                            (pl.lastName.isNotEmpty
+                                    ? pl.lastName
+                                    : pl.firstName)
+                                .trUpper,
+                            style: const TextStyle(
+                              color: Color(0xFFE2E8F0),
+                              fontSize: 10.5,
+                              height: 1.1,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        TextSpan(
-                          text:
-                              (pl.lastName.isNotEmpty
-                                      ? pl.lastName
-                                      : pl.firstName)
-                                  .trUpper,
-                        ),
-                      ],
-                    ),
-                    style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
               ],
             ),
