@@ -1,20 +1,26 @@
 import '../widgets/quick_event_entry.dart';
 import '../widgets/quick_score_dialog.dart';
 import '../../../core/services/active_tournament.dart';
+
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../player/widgets/player_card.dart';
+
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/age_rules.dart';
+
 import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
 import '../widgets/attendance_card.dart';
@@ -49,7 +55,9 @@ import '../../share/pre_match_video.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
+
 import 'package:football_tournament/core/widgets/picked_image.dart';
+
 import '../../../core/services/photo_cutouts.dart';
 import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
@@ -65,8 +73,10 @@ import '../widgets/match_info_card.dart';
 import '../widgets/match_weather.dart';
 import '../services/youtube_autolink_service.dart';
 import '../../team/screens/team_squad_screen.dart';
+
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
+
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/match_event_icons.dart';
 import '../../../core/services/video_link.dart';
@@ -727,9 +737,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   static DateTime? _scheduledStart(MatchModel m) {
     final d = DateTime.tryParse((m.matchDate ?? '').trim());
     if (d == null) return null;
-    final t = RegExp(
-      r'^(\d{1,2}):(\d{2})',
-    ).firstMatch((m.matchTime ?? '').trim());
+    final t = RegExp(r'^(\d{1,2}):(\d{2})')
+        .firstMatch((m.matchTime ?? '').trim());
     if (t == null) return null;
     return DateTime(
       d.year,
@@ -1124,9 +1133,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     final uri = Uri.tryParse(rawLocation);
     if (uri == null || uri.scheme.isEmpty) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Konum linki geçersiz.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Konum linki geçersiz.')));
       return;
     }
 
@@ -1134,9 +1142,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       final can = await canLaunchUrl(uri);
       if (!can) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
         return;
       }
       final ok = await launchUrl(
@@ -1151,9 +1158,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } catch (_) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
       }
     }
   }
@@ -2920,9 +2926,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     final m = widget.match;
     final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
     if (_selectedType == 'Takım Fotosu' && _isHomeTeam == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Takımı seçin.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Takımı seçin.')));
       return;
     }
     final teamId = _selectedType == 'Takım Fotosu'
@@ -2939,9 +2944,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     );
     void snack(String text, {Color? color}) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
     }
 
     if (_isUrlType) {
@@ -3681,9 +3685,8 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
       widget.onDataChanged();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
       }
     }
   }
@@ -3937,9 +3940,8 @@ Future<void> _openYoutubeExternally(BuildContext context, String url) async {
   final ok =
       uri != null && await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
   }
 }
 
@@ -4455,9 +4457,8 @@ int _jerseyValue(String? n) => int.tryParse((n ?? '').trim()) ?? 999;
 /// önce. Maç tarih/saati Türkiye saatidir (UTC+3). Tarih/saat yoksa null.
 DateTime? _rosterOpenAt(MatchModel m, int hours) {
   final d = DateTime.tryParse((m.matchDate ?? '').trim());
-  final t = RegExp(
-    r'^(\d{1,2}):(\d{2})',
-  ).firstMatch((m.matchTime ?? '').trim());
+  final t = RegExp(r'^(\d{1,2}):(\d{2})')
+      .firstMatch((m.matchTime ?? '').trim());
   if (d == null || t == null) return null;
   final kickoff = DateTime.utc(
     d.year,
@@ -5540,33 +5541,36 @@ class _AutoMotmTeamState extends State<_AutoMotmTeam> {
                           ),
                           const SizedBox(width: 8),
                           RatingBadge(value: rating, best: true),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            height: 28,
-                            child: FilledButton(
-                              onPressed: _saving
-                                  ? null
-                                  : () => _approve(id, byId[id]?.name ?? ''),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFFFBBF24),
-                                foregroundColor: const Color(0xFF1F1500),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
+                          if (AppSession.of(context).value
+                              .canManageLeague(widget.match.leagueId)) ...[
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              height: 28,
+                              child: FilledButton(
+                                onPressed: _saving
+                                    ? null
+                                    : () => _approve(id, byId[id]?.name ?? ''),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFBBF24),
+                                  foregroundColor: const Color(0xFF1F1500),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
-                                visualDensity: VisualDensity.compact,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: const Text(
-                                'Onayla',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
+                                child: const Text(
+                                  'Onayla',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -5717,9 +5721,8 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             int order(MatchRosterModel a, MatchRosterModel b) {
               final c = lineOf(a).compareTo(lineOf(b));
               if (c != 0) return c;
-              return _jerseyValue(
-                jerseyOf(a),
-              ).compareTo(_jerseyValue(jerseyOf(b)));
+              return _jerseyValue(jerseyOf(a))
+                  .compareTo(_jerseyValue(jerseyOf(b)));
             }
 
             // İlk 11: oyuncunun kayıtlı mevkisi değil, o maçın diziliş
@@ -5750,14 +5753,10 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               ..sort(hasOrder ? byList : order);
 
             final ins = widget.insights;
-            // Puandan otomatik yıldız şimdilik yalnız admin.
+            // Puandan otomatik yıldız: olay ikonlarını/puanı görenler.
             final motm = ins == null
                 ? null
-                : _MotmBoard.pick(
-                    match.id,
-                    ins,
-                    auto: AppSession.of(context).value.isAdmin,
-                  );
+                : _MotmBoard.pick(match.id, ins, auto: true);
             final ratings = ins == null
                 ? const <String, double>{}
                 : _teamRatings(
@@ -6127,9 +6126,9 @@ class _DetailTabState extends State<_DetailTab>
     super.initState();
     MatchHighlightService.changes.addListener(_onClipsChanged);
     if (widget.match.status == MatchStatus.finished) {
-      MatchHighlightService.fetch(
-        widget.match.id,
-      ).then((_) => _onClipsChanged()).catchError((_) {});
+      MatchHighlightService.fetch(widget.match.id)
+          .then((_) => _onClipsChanged())
+          .catchError((_) {});
     }
   }
 
@@ -6454,9 +6453,9 @@ class _DetailTabView extends StatelessWidget {
           if (!yellowSeen.add(key)) secondYellows.add(e);
         }
 
-        // Elle seçilmemişse akışın sonunda puandan maçın oyuncusu (admin).
+        // Elle seçilmemişse akışın sonunda puandan maçın oyuncusu (puanı
+        // görenler; Onayla yalnız ligi yönetenler).
         final autoMotm =
-            AppSession.of(context).value.isAdmin &&
             match.status == MatchStatus.finished &&
             !normalized.any((e) => pickType(e) == 'man_of_the_match');
         return ListView.separated(
