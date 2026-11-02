@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -456,6 +457,66 @@ class _FormationTabState extends State<FormationTab>
   /// Kaydedilmemiş değişikliği olan takımlar (teamIndex).
   final Set<int> _dirty = {};
 
+  /// Otomatik kayıt: değişiklikten kısa süre sonra arkada kaydedilir; kaydet
+  /// düğmesi yok. [_edits] her değişiklikte artar: kayıt sürerken yeni
+  /// değişiklik gelirse o da ayrıca kaydedilir.
+  Timer? _saveTimer;
+  int _edits = 0;
+  Future<void>? _inFlight;
+
+  /// Son çizimdeki diziliş ve saha sırası (takım → değerler); zamanlayıcı
+  /// bunları kaydeder.
+  final Map<int, (String, List<String>)> _latest = {};
+
+  /// Son otomatik kayıt hata verdi; ikona dokununca yeniden denenir.
+  bool _saveFailed = false;
+
+  void _changed() {
+    _edits++;
+    _saveFailed = false;
+    _saveTimer?.cancel();
+    final team = _selected;
+    _saveTimer = Timer(const Duration(milliseconds: 900), () {
+      _saveTimer = null;
+      _autoSave(team);
+    });
+  }
+
+  Future<void> _autoSave(int team) {
+    final prev = _inFlight ?? Future<void>.value();
+    final next = prev.then((_) async {
+      final v = _latest[team];
+      if (v == null || !_dirty.contains(team)) return;
+      await _saveLayout(team, v.$1, v.$2);
+    });
+    _inFlight = next;
+    return next;
+  }
+
+  /// Paylaşmadan önce: bekleyen kayıt hemen yapılır, sürüyorsa beklenir.
+  Future<void> _flush() async {
+    if (_saveTimer != null) {
+      _saveTimer!.cancel();
+      _saveTimer = null;
+      await _autoSave(_selected);
+    } else {
+      await _inFlight;
+    }
+  }
+
+  @override
+  void dispose() {
+    // Ekrandan hızlı çıkılırsa bekleyen kayıt yine gönderilir.
+    if (_saveTimer != null) {
+      _saveTimer!.cancel();
+      for (final team in _dirty) {
+        final v = _latest[team];
+        if (v != null) _persist(team, v.$1, v.$2).catchError((_) {});
+      }
+    }
+    super.dispose();
+  }
+
   /// Dokunarak yer değiştirmede ilk seçilen oyuncu.
   String? _picked;
 
@@ -483,48 +544,54 @@ class _FormationTabState extends State<FormationTab>
       _order[_selected] = next;
       _dirty.add(_selected);
     });
+    _changed();
   }
 
-  /// Dizilişi (matches) ve saha sırasını (match_rosters.pos_x) kaydeder.
+  /// Dizilişi (matches) ve saha sırasını (match_rosters.pos_x) yazar.
   /// Güncelleme hiçbir satırı etkilemezse (ör. yetki) hata verilir.
-  Future<void> _saveLayout(String formation, List<String> ids) async {
+  Future<void> _persist(int team, String formation, List<String> ids) async {
     final sb = Supabase.instance.client;
-    final team = _selected;
+    final teamId = team == 0
+        ? widget.match.homeTeamId
+        : widget.match.awayTeamId;
+    // Yetki kontrolü sunucuda: sorumlu yalnızca kendi takımını yazar.
+    await sb.rpc(
+      'set_match_formation',
+      params: {
+        'p_match_id': widget.match.id,
+        'p_team_id': teamId,
+        'p_formation': formation,
+      },
+    );
+    for (var i = 0; i < ids.length; i++) {
+      final r = await sb
+          .from('match_rosters')
+          .update({'pos_x': i})
+          .eq('match_id', widget.match.id)
+          .eq('team_id', teamId)
+          .eq('player_id', ids[i])
+          .select('id');
+      if (r.isEmpty) {
+        throw Exception('Oyuncu yerleşimi kaydedilemedi (yetki yok).');
+      }
+    }
+    SupabaseMatchService.notifyLocalChange(widget.match.id);
+  }
+
+  /// Arkada kaydeder; ekran beklemez, yalnız küçük durum ikonu değişir.
+  Future<void> _saveLayout(int team, String formation, List<String> ids) async {
+    final edits = _edits;
     setState(() => _saving = true);
     try {
-      // Yetki kontrolü sunucuda: sorumlu yalnızca kendi takımını yazar.
-      await sb.rpc(
-        'set_match_formation',
-        params: {
-          'p_match_id': widget.match.id,
-          'p_team_id': _teamId,
-          'p_formation': formation,
-        },
-      );
-      for (var i = 0; i < ids.length; i++) {
-        final r = await sb
-            .from('match_rosters')
-            .update({'pos_x': i})
-            .eq('match_id', widget.match.id)
-            .eq('team_id', _teamId)
-            .eq('player_id', ids[i])
-            .select('id');
-        if (r.isEmpty) {
-          throw Exception('Oyuncu yerleşimi kaydedilemedi (yetki yok).');
-        }
-      }
-      SupabaseMatchService.notifyLocalChange(widget.match.id);
+      await _persist(team, formation, ids);
       if (!mounted) return;
       setState(() {
-        _chosen[team] = formation;
-        _order[team] = ids;
-        _dirty.remove(team);
+        // Kayıt sürerken yeni değişiklik geldiyse o ayrıca kaydedilecek.
+        if (_edits == edits) _dirty.remove(team);
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Diziliş kaydedildi.')));
     } catch (e) {
       if (!mounted) return;
+      setState(() => _saveFailed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Kaydedilemedi: $e'),
@@ -561,6 +628,7 @@ class _FormationTabState extends State<FormationTab>
       _picked = null;
       _dirty.add(_selected);
     });
+    _changed();
   }
 
   @override
@@ -643,6 +711,7 @@ class _FormationTabState extends State<FormationTab>
                   final pitchLines = layout.lines;
                   final currentIds = layout.ids;
                   final dirty = _dirty.contains(_selected);
+                  _latest[_selected] = (formation, currentIds);
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -690,27 +759,23 @@ class _FormationTabState extends State<FormationTab>
                                 color: Colors.white,
                                 size: 20,
                               ),
-                              onPressed: () {
-                                if (dirty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Önce dizilişi kaydedin, sonra paylaşın.',
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-                                widget.onShare!(_teamId);
+                              onPressed: () async {
+                                final teamId = _teamId;
+                                await _flush();
+                                if (!mounted) return;
+                                widget.onShare!(teamId);
                               },
                             ),
                           if (_canEdit) ...[
                             const SizedBox(width: 8),
-                            _SaveLayoutButton(
+                            _SaveStatus(
                               dirty: dirty,
                               saving: _saving,
-                              onPressed: () =>
-                                  _saveLayout(formation, currentIds),
+                              failed: _saveFailed,
+                              onRetry: () {
+                                setState(() => _saveFailed = false);
+                                _autoSave(_selected);
+                              },
                             ),
                           ],
                         ],
@@ -890,54 +955,58 @@ class _SubsInRow extends StatelessWidget {
   }
 }
 
-/// "Kaydet" butonu: kaydedilmemiş değişiklik varsa yeşil ve etkin,
-/// yoksa soluk "Kaydedildi" durumu.
-class _SaveLayoutButton extends StatelessWidget {
-  const _SaveLayoutButton({
+/// Otomatik kaydın durumu: küçük ikon (kaydediliyor / kaydedildi).
+class _SaveStatus extends StatelessWidget {
+  const _SaveStatus({
     required this.dirty,
     required this.saving,
-    required this.onPressed,
+    required this.failed,
+    required this.onRetry,
   });
 
   final bool dirty;
   final bool saving;
-  final VoidCallback onPressed;
+  final bool failed;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (!dirty && !saving) {
-      return const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_outline, color: _midText, size: 16),
-          SizedBox(width: 4),
-          Text('Kaydedildi', style: TextStyle(color: _midText, fontSize: 12)),
-        ],
+    if (failed && !saving) {
+      return IconButton(
+        tooltip: 'Kaydedilemedi, yeniden dene',
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+        onPressed: onRetry,
+        icon: const Icon(
+          Icons.cloud_off_rounded,
+          color: Colors.redAccent,
+          size: 20,
+        ),
       );
     }
-    return ElevatedButton.icon(
-      onPressed: saving ? null : onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: _accent.withValues(alpha: 0.5),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        minimumSize: const Size(0, 36),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      icon: saving
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : const Icon(Icons.save_rounded, size: 18),
-      label: const Text(
-        'Kaydet',
-        style: TextStyle(fontWeight: FontWeight.w800),
+    final busy = dirty || saving;
+    return Tooltip(
+      message: busy ? 'Kaydediliyor' : 'Kaydedildi',
+      child: SizedBox(
+        width: 22,
+        height: 22,
+        child: Center(
+          child: busy
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _midText,
+                  ),
+                )
+              : const Icon(
+                  Icons.cloud_done_outlined,
+                  color: _midText,
+                  size: 18,
+                ),
+        ),
       ),
     );
   }
