@@ -742,7 +742,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           children: [
             SquadPlayerAvatar(
               name: p.name,
-              photoUrl: (_playerPhotoUrlByPhone[p.id] ?? p.photoUrl ?? ''),
+              photoUrl: ((p.photoUrl ?? '').trim().isNotEmpty
+                  ? p.photoUrl!
+                  : _playerPhotoUrlByPhone[p.id] ?? ''),
               size: 34,
             ),
             const SizedBox(width: 10),
@@ -2034,6 +2036,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (!mounted) return;
 
     if (saved == true) {
+      // Fotoğraf önbelleği de tazelensin; yoksa liste eski fotoğrafı
+      // gösterir.
+      if (editing != null) _playerPhotoUrlByPhone.remove(editing.id);
       _refreshPlayersStreamForTournament(tournamentId);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2490,7 +2495,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       if (age != null) '$age yaş',
     ].join(' · ');
     // Fotoğraf yalnız izin verilmişse dolu gelir (veritabanı gizler).
-    final photo = (_playerPhotoUrlByPhone[p.id] ?? p.photoUrl ?? '').trim();
+    final photo =
+        ((p.photoUrl ?? '').trim().isNotEmpty
+                ? p.photoUrl!
+                : _playerPhotoUrlByPhone[p.id] ?? '')
+            .trim();
     final palette = _palette;
     Future<void> editJersey() => _promptJerseyNumberEdit(
       player: p,
