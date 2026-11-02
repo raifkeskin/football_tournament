@@ -552,9 +552,14 @@ class LineupPitchPoster extends StatelessWidget {
     return '${parts.first.characters.first}. ${parts.skip(1).join(' ')}';
   }
 
-  /// Dekupe oyuncu boyu; numaralı daireden bu kadar uzun (yukarı taşar).
-  static const _cutH = 56.0;
-  static const _cutExtra = _cutH - 30;
+  /// Dekupe oyuncu en fazla bu boyda; hatlar sıkışınca (ör. 4-2-3-1)
+  /// alttaki oyuncunun başı üstteki ismin üstüne gelmesin diye küçülür.
+  static const _cutMaxH = 56.0;
+  static const _cutMinH = 36.0;
+
+  /// İsim bloğu yüksekliği: ad + soyad ya da yalnız soyad.
+  static const _nameH = 28.0;
+  static const _lastNameH = 17.0;
 
   bool _hasCutout(PosterPlayer pl) =>
       data.tokenStyle == PitchTokenStyle.photo &&
@@ -562,11 +567,11 @@ class LineupPitchPoster extends StatelessWidget {
 
   /// Diziliş ekranındaki gibi: ayağının altında takım renginde zemin
   /// halkası, kenarda ince beyaz kontur ve gölge.
-  Widget _cutout(String url, TeamPalette p) {
+  Widget _cutout(String url, TeamPalette p, double cutH) {
     Widget img({Color? tint}) => Image.network(
       url,
-      width: 45,
-      height: _cutH,
+      width: 45 * cutH / _cutMaxH,
+      height: cutH,
       fit: BoxFit.contain,
       alignment: Alignment.bottomCenter,
       color: tint,
@@ -575,7 +580,7 @@ class LineupPitchPoster extends StatelessWidget {
     );
     return SizedBox(
       width: 48,
-      height: _cutH + 4,
+      height: cutH + 4,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.bottomCenter,
@@ -618,7 +623,11 @@ class LineupPitchPoster extends StatelessWidget {
     );
   }
 
-  Widget _token(PosterPlayer pl) {
+  Widget _token(
+    PosterPlayer pl, {
+    required double cutH,
+    bool showFirst = true,
+  }) {
     final p = data.palette;
     final number = Text(
       (pl.number ?? '').isEmpty ? '–' : pl.number!,
@@ -631,7 +640,7 @@ class LineupPitchPoster extends StatelessWidget {
       ),
     );
     final mark = _hasCutout(pl)
-        ? _cutout(pl.cutoutUrl!, p)
+        ? _cutout(pl.cutoutUrl!, p, cutH)
         : data.tokenStyle == PitchTokenStyle.shirt
         ? JerseyShape(
             width: 36,
@@ -668,7 +677,7 @@ class LineupPitchPoster extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 3),
-          if (hasLast)
+          if (hasLast && showFirst)
             Text(
               _shortFirst(pl.firstName),
               maxLines: 1,
@@ -733,6 +742,36 @@ class LineupPitchPoster extends StatelessWidget {
                     builder: (context, c) {
                       const tokenW = 78.0;
                       final outfield = data.lines.length - 1;
+                      // Dekupe + isim, aynı dikeyde (yatayda iç içe) duran en
+                      // yakın iki saha oyuncusu arasındaki boşluğa sığmalı.
+                      // Kaleci ortada, stoperlerin arasında kalır.
+                      final slots = [
+                        for (var li = 1; li < data.lines.length; li++)
+                          for (var i = 0; i < data.lines[li].length; i++)
+                            pitchSlot(
+                              li: li,
+                              i: i,
+                              n: data.lines[li].length,
+                              outfieldLines: outfield,
+                            ),
+                      ];
+                      var gap = 0.54 * c.maxHeight;
+                      for (final a in slots) {
+                        for (final b in slots) {
+                          final dy = (b.dy - a.dy) * c.maxHeight;
+                          if (dy > 4 &&
+                              ((b.dx - a.dx) * c.maxWidth).abs() < 64 &&
+                              dy < gap) {
+                            gap = dy;
+                          }
+                        }
+                      }
+                      // Ad yalnız dekupeli afişte, yer darsa düşer.
+                      final showFirst =
+                          !data.starters.any(_hasCutout) ||
+                          gap - _nameH - 4 >= 48;
+                      final cutH = (gap - (showFirst ? _nameH : _lastNameH) - 4)
+                          .clamp(_cutMinH, _cutMaxH);
                       return Stack(
                         children: [
                           for (var li = 0; li < data.lines.length; li++)
@@ -746,14 +785,18 @@ class LineupPitchPoster extends StatelessWidget {
                                 );
                                 final pl = data.lines[li][i];
                                 // Dekupe uzun: ayak hizası daireyle aynı.
-                                final extra = _hasCutout(pl) ? _cutExtra : 0.0;
+                                final extra = _hasCutout(pl) ? cutH - 30 : 0.0;
                                 return Positioned(
                                   left: (pos.dx * c.maxWidth - tokenW / 2)
                                       .clamp(0.0, c.maxWidth - tokenW),
                                   top: (pos.dy * c.maxHeight - 26 - extra)
                                       .clamp(0.0, c.maxHeight - 60 - extra),
                                   width: tokenW,
-                                  child: _token(pl),
+                                  child: _token(
+                                    pl,
+                                    cutH: cutH,
+                                    showFirst: showFirst,
+                                  ),
                                 );
                               }(),
                         ],
