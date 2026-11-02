@@ -1032,7 +1032,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                                         size: 18,
                                       ),
                                       label: const Text(
-                                        'Kutuları kapat',
+                                        'Listeyi Kapat',
                                         style: TextStyle(
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.w700,
@@ -1486,47 +1486,67 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            tile(
-              'İlk 11',
-              '${_starters.length}/$_startingLimit',
-              _green,
-              _Box.starters,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                tile(
+                  'İlk 11',
+                  '${_starters.length}/$_startingLimit',
+                  _green,
+                  _Box.starters,
+                ),
+                const SizedBox(width: 6),
+                tile('Yedek', '${_subs.length}/$_subLimit', _blue, _Box.subs),
+                const SizedBox(width: 6),
+                tile(
+                  'Seçilmedi',
+                  '${_remaining.length}',
+                  const Color(0xFFCBD5E1),
+                  _Box.list,
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            tile('Yedek', '${_subs.length}/$_subLimit', _blue, _Box.subs),
-            const SizedBox(width: 6),
-            tile(
-              'Seçilmedi',
-              '${_remaining.length}',
-              const Color(0xFFCBD5E1),
-              _Box.list,
+          ),
+          const SizedBox(height: 6),
+          // İnce, tam genişlik çubuk: İlk 11 / Yedekler kutularını açar.
+          Material(
+            color: _card,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(9),
+              side: const BorderSide(color: Color(0xFF334155)),
             ),
-            const SizedBox(width: 6),
-            Material(
-              color: _card,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: Color(0xFF334155)),
-              ),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => _setBoxesOpen(true),
-                child: const SizedBox(
-                  width: 36,
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: _mid,
-                    semanticLabel: 'Kutuları aç',
-                  ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(9),
+              onTap: () => _setBoxesOpen(true),
+              child: const SizedBox(
+                height: 30,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Listeyi Aç',
+                      style: TextStyle(
+                        color: _mid,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: _mid,
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
