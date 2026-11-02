@@ -11,6 +11,10 @@ Admin hesabıyla giriş yapar (admin.env); anon key app_config.dart'tan.
   python3 scripts/make_cutouts.py --team <team_id>           # rapor
   python3 scripts/make_cutouts.py --team <team_id> --apply   # üret + yükle
   python3 scripts/make_cutouts.py --all --apply               # eksik olan herkes
+
+Üretilemeyen fotoğraf player_photo_cutout_skips'e sebebiyle yazılır ve sonraki
+çalışmalarda atlanır (--retry ile yeniden denenir). Bekleyenler admin
+panelindeki "Dekupe Bekleyenler" ekranında görünür.
 """
 import hashlib
 import json
@@ -67,6 +71,9 @@ def main():
         players = json.loads(data)
     _, data = request("GET", f"{base}/rest/v1/player_photo_cutouts?select=photo_url", auth)
     done = {r["photo_url"] for r in json.loads(data)}
+    if "--retry" not in sys.argv:
+        _, data = request("GET", f"{base}/rest/v1/player_photo_cutout_skips?select=photo_url", auth)
+        done |= {r["photo_url"] for r in json.loads(data)}
 
     todo = {}
     for p in players:
@@ -93,7 +100,15 @@ def main():
             )
             if r.returncode != 0 or "NOFACE" in r.stdout or px < MIN_SRC_PX:
                 skipped += 1
-                print(f"  atlandı: {name} ({'yüz yok' if 'NOFACE' in r.stdout else f'{px} px'})")
+                reason = "yüz yok" if "NOFACE" in r.stdout else f"düşük çözünürlük ({px} px)"
+                request(
+                    "POST",
+                    f"{base}/rest/v1/player_photo_cutout_skips?on_conflict=photo_url",
+                    {**auth, "Content-Type": "application/json",
+                     "Prefer": "resolution=merge-duplicates,return=minimal"},
+                    json.dumps({"photo_url": url, "reason": reason}).encode(),
+                )
+                print(f"  atlandı: {name} ({reason})")
                 continue
             path = f"players/cutouts/{hashlib.sha1(url.encode()).hexdigest()[:20]}.png"
             request(
