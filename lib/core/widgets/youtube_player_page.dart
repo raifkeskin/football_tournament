@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
+import '../services/app_session.dart';
+import '../services/app_settings.dart';
 import 'app_name_band.dart';
 import 'mp4_clip_page.dart';
 
@@ -173,7 +175,30 @@ Future<void> openYoutubeClip(
   required int startSec,
   required int endSec,
   String title = 'Gol',
+  String? clipUrl,
+  String? storyUrl,
 }) {
+  // Gol kesitinin MP4 hâli (Mac'te üretilir): YouTube yerine dosya oynar,
+  // hikâye MP4'ü Instagram'da paylaşılabilir. Yeni özellik: önce yalnız
+  // admin.
+  if ((clipUrl ?? '').isNotEmpty) {
+    var allowed = AppSettings.goalClipMp4Enabled.value;
+    if (!allowed) {
+      try {
+        allowed = AppSession.of(context).value.isAdmin;
+      } catch (_) {}
+    }
+    if (allowed) {
+      return Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'Mp4ClipPage'),
+          fullscreenDialog: true,
+          builder: (_) =>
+              Mp4ClipPage(url: clipUrl!, title: title, storyUrl: storyUrl),
+        ),
+      );
+    }
+  }
   // Yayıncının teslim ettiği kesit: video_id alanında kendi depomuzdaki MP4
   // adresi (http…) durur; YouTube yerine yerel oynatıcı.
   if (videoId.startsWith('http')) {
@@ -266,7 +291,9 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     _state = _controller.stream.listen((v) {
       if (!_ended && v.playerState == PlayerState.ended) _finish();
       // Oynatma başlayınca YouTube'un açılış yazıları sönene kadar kapak.
-      if (_covered && _uncover == null && v.playerState == PlayerState.playing) {
+      if (_covered &&
+          _uncover == null &&
+          v.playerState == PlayerState.playing) {
         _uncover = Timer(_coverFor, _removeCover);
       }
     });

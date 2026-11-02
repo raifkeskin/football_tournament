@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Gol kesitlerini MP4'e çevirir (Mac'te, launchd ile birkaç dakikada bir).
+
+Onaylı gol kesitleri (match_highlights, YouTube aralığı) için:
+  1. YouTube yayınından yalnız gol aralığı indirilir (tam yayın inmez).
+  2. İki MP4 üretilir: yatay (16:9, köşede Lig Masası) ve Instagram hikâyesi
+     (9:16: turnuva logosu, maç sonucu, GOL!, golcü, golle gelen skor).
+  3. clips deposuna yüklenir; match_highlights.clip_url / story_url yazılır.
+  4. Bir kopyası ARCHIVE_DIR altına (Lig / N. Hafta / Maç) bırakılır.
+
+Kullanım: goal_clips.py [--match <id>] [--limit N]
+Veritabanı: ~/.config/football_tournament/db.env (yazdırılmaz).
+Yükleme: admin.env'deki admin hesabıyla (clips deposuna yalnız admin yazar).
+"""
+import argparse
+import datetime
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import urllib.request
+
+from PIL import Image, ImageDraw, ImageFont
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CFG = os.path.expanduser('~/.config/football_tournament')
+FONTS = os.path.join(ROOT, 'assets', 'fonts')
+APP_LOGO = os.path.join(ROOT, 'assets', 'images', 'app_logo.png')
+SUPABASE_URL = 'https://qxdjebzszikeslobrozf.supabase.co'
+ARCHIVE_DIR = os.environ.get(
+    'ARCHIVE_DIR', os.path.expanduser('~/Desktop/LigMasasi-Kesitler'))
+BREW = '/opt/homebrew/bin'
+LEAD, LENGTH = 3, 20  # özetteki başlangıçtan 3 sn önce, 20 sn
+MAX_TRIES = 3
+
+
+def log(*a):
+    print(datetime.datetime.now().strftime('%H:%M:%S'), *a, flush=True)
+
+
+def psql(sql):
+    with open(os.path.join(CFG, 'db.env')) as f:
+        url = f.read().strip()
+    out = subprocess.run(['psql', url, '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+                         capture_output=True, text=True, check=True)
+    return out.stdout.strip()
+
+
+def q(v):
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def anon_key():
+    src = open(os.path.join(ROOT, 'lib', 'core', 'config', 'app_config.dart')).read()
+    i = src.index("'SUPABASE_ANON_KEY'")
+    j = src.index('eyJ', i)
+    k = j
+    while k < len(src) and (src[k].isalnum() or src[k] in '._-'):
+        k += 1
+    return src[j:k]
+
+
+_token = None
+
+
+def admin_token():
+    global _token
+    if _token:
+        return _token
+    env = {}
+    for line in open(os.path.join(CFG, 'admin.env')):
+        if '=' in line:
+            k, v = line.strip().split('=', 1)
+            env[k] = v.strip().strip('"').strip("'")
+    req = urllib.request.Request(
+        f'{SUPABASE_URL}/auth/v1/token?grant_type=password',
+        data=json.dumps({'email': env['ADMIN_EMAIL'], 'password': env['ADMIN_PASSWORD']}).encode(),
+        headers={'apikey': anon_key(), 'Content-Type': 'application/json'})
+    _token = json.load(urllib.request.urlopen(req))['access_token']
+    return _token
+
+
+def upload(path, key):
+    with open(path, 'rb') as f:
+        data = f.read()
+    req = urllib.request.Request(
+        f'{SUPABASE_URL}/storage/v1/object/clips/{key}', data=data, method='POST',
+        headers={'apikey': anon_key(), 'Authorization': f'Bearer {admin_token()}',
+                 'Content-Type': 'video/mp4', 'x-upsert': 'true',
+                 'Cache-Control': 'max-age=31536000'})
+    urllib.request.urlopen(req).read()
+    return f'{SUPABASE_URL}/storage/v1/object/public/clips/{key}'
+
+
+# Kesit bilgileri: maç, takımlar, logolar, maç sonucu, golle gelen skor.
+QUERY = """
+with h as (
+  select h.*, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+         m.match_date, m.week, m.league_id
+    from public.match_highlights h
+    join public.matches m on m.id = h.match_id
+   where h.kind = 'goal' and h.status = 'approved'
+     and h.video_id !~ '^http'
+     and h.story_url is null and h.clip_tries < {tries}
+     and m.status = 'finished'
+     {extra}
+   order by h.created_at desc
+   limit {limit}
+), ev as (
+  select e.match_id, e.id, e.team_id, e.is_own_goal,
+         row_number() over (partition by e.match_id
+                            order by e.minute, coalesce(e.added_minute, 0), e.created_at) as n,
+         e.minute, e.added_minute, e.player_id
+    from public.match_events e
+   where e.event_type = 'goal' and e.match_id in (select match_id from h)
+)
+select json_agg(json_build_object(
+  'id', h.id, 'match_id', h.match_id, 'video_id', h.video_id,
+  'start', h.start_sec, 'minute', h.minute, 'added', h.added_minute,
+  'week', h.week, 'date', h.match_date,
+  'league', l.name, 'league_logo', l.logo_url,
+  'home', ht.name, 'away', at.name,
+  'home_logo', ht.logo_url, 'away_logo', at.logo_url,
+  'fh', h.home_score, 'fa', h.away_score,
+  'team', st.name, 'side', case when h.team_id = h.away_team_id then 'away' else 'home' end,
+  'scorer', coalesce(nullif(trim(p.name || ' ' || p.surname), ''),
+                     (select trim(pp.name || ' ' || pp.surname)
+                        from ev join public.players pp on pp.id = ev.player_id
+                       where ev.id = h.match_event_id)),
+  'rh', (select count(*) from ev where ev.match_id = h.match_id and r.upto >= ev.n
+           and ((ev.team_id = h.home_team_id) <> coalesce(ev.is_own_goal, false))),
+  'ra', (select count(*) from ev where ev.match_id = h.match_id and r.upto >= ev.n
+           and ((ev.team_id = h.away_team_id) <> coalesce(ev.is_own_goal, false)))
+))
+from h
+join public.leagues l on l.id = h.league_id
+join public.teams ht on ht.id = h.home_team_id
+join public.teams at on at.id = h.away_team_id
+left join public.teams st on st.id = h.team_id
+left join public.players p on p.id = h.player_id
+cross join lateral (
+  -- Bu gole kadar olan goller: bağlı olaya kadar; bağ yoksa dakikaya kadar.
+  select coalesce(
+    (select ev.n from ev where ev.id = h.match_event_id),
+    (select max(ev.n) from ev where ev.match_id = h.match_id
+        and ev.minute <= coalesce(h.minute, 0)),
+    0) as upto
+) r
+"""
+
+
+def short(n):
+    return (n or '').replace(' Masterler', '').replace(' Masterlar', '').strip()
+
+
+def font(name, size):
+    return ImageFont.truetype(os.path.join(FONTS, name), size)
+
+
+def fetch(url, path):
+    if not url:
+        return None
+    try:
+        urllib.request.urlretrieve(url, path)
+        Image.open(path).convert('RGBA')
+        return path
+    except Exception:
+        return None
+
+
+def story_overlay(c, out, logos):
+    """9:16 katman: üstte turnuva + maç sonucu, altta GOL!, golcü, golle skor."""
+    W, H = 1080, 1920
+    im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    GOLD = (226, 184, 69, 255)
+    WHITE = (255, 255, 255, 255)
+    MUTED = (203, 213, 225, 255)
+
+    def ctext(y, t, fo, fill, cx=W / 2):
+        w = d.textlength(t, font=fo)
+        d.text((cx - w / 2, y), t, font=fo, fill=fill)
+
+    def logo(path, cx, cy, size, alpha=1.0):
+        if not path:
+            return
+        lg = Image.open(path).convert('RGBA')
+        lg.thumbnail((size, size), Image.LANCZOS)
+        if alpha < 1:
+            lg.putalpha(lg.getchannel('A').point(lambda v: int(v * alpha)))
+        im.alpha_composite(lg, (int(cx - lg.width / 2), int(cy - lg.height / 2)))
+
+    # Turnuva logosu + adı
+    top = 300
+    if logos['league']:
+        logo(logos['league'], W / 2, 170, 150)
+    else:
+        top = 220
+    ctext(top - 45, (c['league'] or '').upper(), font('BarlowCondensed-ExtraBold.ttf', 38), GOLD)
+
+    # Maç sonucu bandı
+    y0 = top + 15
+    im.alpha_composite(Image.new('RGBA', (W - 80, 230), (11, 18, 32, 205)), (40, y0))
+    logo(logos['home'], 150, y0 + 95, 120)
+    logo(logos['away'], W - 150, y0 + 95, 120)
+    for name, cx in ((short(c['home']), 150), (short(c['away']), W - 150)):
+        fo = font('Barlow-Bold.ttf', 28)
+        if d.textlength(name, font=fo) > 260:
+            fo = font('Barlow-Bold.ttf', 23)
+        ctext(y0 + 170, name, fo, MUTED, cx)
+    ctext(y0 + 18, 'MAÇ SONUCU', font('BarlowCondensed-ExtraBold.ttf', 30), GOLD)
+    ctext(y0 + 50, f"{c['fh']} - {c['fa']}", font('BarlowCondensed-ExtraBold.ttf', 120), WHITE)
+
+    # GOL! + dakika + golcü
+    minute = f"{c['minute']}+{c['added']}'" if c.get('added') else f"{c['minute']}'"
+    ctext(1290, 'GOL!', font('BarlowCondensed-ExtraBoldItalic.ttf', 160), GOLD)
+    who = f"{minute}  {c['scorer']}" if c.get('scorer') else f"{minute}  {short(c['team'])}"
+    fo = font('BarlowCondensed-ExtraBold.ttf', 76)
+    if d.textlength(who, font=fo) > W - 80:
+        fo = font('BarlowCondensed-ExtraBold.ttf', 60)
+    ctext(1470, who, fo, WHITE)
+
+    # Golle gelen skor: iki takımın logosu arasında; golü atan tarafın
+    # sayısı altın rengi.
+    sf = font('BarlowCondensed-ExtraBold.ttf', 92)
+    hs, as_ = str(c['rh']), str(c['ra'])
+    dash = ' - '
+    w_h, w_d, w_a = (d.textlength(t, font=sf) for t in (hs, dash, as_))
+    total = w_h + w_d + w_a
+    x = (W - total) / 2
+    y = 1565
+    pad = 26
+    d.rounded_rectangle((x - 110 - pad, y - 4, x + total + 110 + pad, y + 112),
+                        radius=58, fill=(11, 18, 32, 190), outline=(226, 184, 69, 140), width=2)
+    logo(logos['home'], x - 60, y + 54, 76)
+    logo(logos['away'], x + total + 60, y + 54, 76)
+    d.text((x, y), hs, font=sf, fill=GOLD if c['side'] == 'home' else WHITE)
+    d.text((x + w_h, y), dash, font=sf, fill=MUTED)
+    d.text((x + w_h + w_d, y), as_, font=sf, fill=GOLD if c['side'] == 'away' else WHITE)
+
+    # Lig Masası imzası
+    fb = font('BarlowCondensed-ExtraBold.ttf', 62)
+    tw = d.textlength('LİG MASASI', font=fb)
+    x0 = (W - (90 + 16 + tw)) / 2
+    logo(APP_LOGO, x0 + 45, 1757, 90)
+    d.text((x0 + 106, 1720), 'LİG MASASI', font=fb, fill=WHITE)
+
+    # Video köşe filigranı (video 1080x608, dikeyde ortada)
+    logo(APP_LOGO, W - 22 - 39, (H + 608) / 2 - 18 - 39, 78, alpha=0.9)
+    im.save(out)
+
+
+def wide_overlay(out):
+    """16:9 katman: sağ altta Lig Masası logosu ve yazısı."""
+    y = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+    d = ImageDraw.Draw(y)
+    fy = font('BarlowCondensed-ExtraBold.ttf', 44)
+    tw = d.textlength('LİG MASASI', font=fy)
+    bw = int(76 + 14 + tw + 28)
+    x0, y0 = 1920 - bw - 30, 1080 - 130
+    y.alpha_composite(Image.new('RGBA', (bw, 100), (11, 18, 32, 150)), (x0, y0))
+    lg = Image.open(APP_LOGO).convert('RGBA')
+    lg.thumbnail((76, 76), Image.LANCZOS)
+    y.alpha_composite(lg, (x0 + 14, y0 + 12))
+    d.text((x0 + 14 + 76 + 14, y0 + 22), 'LİG MASASI', font=fy, fill=(255, 255, 255, 255))
+    y.save(out)
+
+
+def run(cmd):
+    env = dict(os.environ, PATH=f"{BREW}:{os.environ.get('PATH', '')}")
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout).strip()[-400:])
+
+
+def hms(s):
+    return f'{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}'
+
+
+def make(c, tmp):
+    s = max(0, int(c['start']) - LEAD)
+    src = os.path.join(tmp, 'src.mp4')
+    run([f'{BREW}/yt-dlp', '-q', '--no-warnings', '--no-playlist',
+         '-f', 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]',
+         '--download-sections', f'*{hms(s)}-{hms(s + LENGTH)}',
+         '--force-keyframes-at-cuts', '--merge-output-format', 'mp4',
+         '-o', src, f"https://www.youtube.com/watch?v={c['video_id']}"])
+    logos = {k: fetch(c.get(f'{k}_logo') if k != 'league' else c.get('league_logo'),
+                      os.path.join(tmp, f'{k}.png'))
+             for k in ('league', 'home', 'away')}
+    ov, ovw = os.path.join(tmp, 'story.png'), os.path.join(tmp, 'wide.png')
+    story_overlay(c, ov, logos)
+    wide_overlay(ovw)
+    story, wide = os.path.join(tmp, 'story.mp4'), os.path.join(tmp, 'wide.mp4')
+    run([f'{BREW}/ffmpeg', '-v', 'error', '-y', '-i', src, '-i', ov, '-filter_complex',
+         '[0:v]split[a][b];[a]scale=-2:1920,crop=1080:1920,gblur=sigma=40,eq=brightness=-0.18[bg];'
+         '[b]scale=1080:-2[fg];[bg][fg]overlay=0:(H-h)/2[v];[v][1:v]overlay=0:0,format=yuv420p[out]',
+         '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'medium', '-crf', '21',
+         '-r', '30', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', story])
+    run([f'{BREW}/ffmpeg', '-v', 'error', '-y', '-i', src, '-i', ovw, '-filter_complex',
+         '[0:v]scale=1920:1080[v];[v][1:v]overlay=0:0,format=yuv420p[out]',
+         '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'medium', '-crf', '21',
+         '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', wide])
+    return wide, story
+
+
+def archive(c, wide, story):
+    date = datetime.date.fromisoformat(c['date']).strftime('%d.%m.%Y') if c.get('date') else ''
+    week = f"{c['week']}. Hafta" if c.get('week') else 'Diğer'
+    match = f"{short(c['home'])} {c['fh']}-{c['fa']} {short(c['away'])} ({date})"
+    folder = os.path.join(ARCHIVE_DIR, c['league'] or 'Lig', week, match)
+    os.makedirs(folder, exist_ok=True)
+    base = f"{c['minute']}' {c.get('scorer') or short(c['team'])}".replace('/', '-')
+    for src, kind in ((story, 'hikaye'), (wide, 'yatay')):
+        dst = os.path.join(folder, f'{base} ({kind}).mp4')
+        with open(src, 'rb') as a, open(dst, 'wb') as b:
+            b.write(a.read())
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--match')
+    ap.add_argument('--limit', type=int, default=8)
+    args = ap.parse_args()
+    extra = f'and h.match_id = {q(args.match)}' if args.match else \
+        "and h.created_at > now() - interval '21 days'"
+    raw = psql(QUERY.format(tries=MAX_TRIES, extra=extra, limit=args.limit))
+    clips = json.loads(raw) if raw else []
+    if not clips:
+        return
+    for c in clips:
+        name = f"{c['minute']}' {c.get('scorer') or ''} · {short(c['home'])}-{short(c['away'])}"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                wide, story = make(c, tmp)
+                key = f"goals/{c['match_id']}/{c['id']}"
+                wide_url = upload(wide, f'{key}.mp4')
+                story_url = upload(story, f'{key}_story.mp4')
+                psql(f"update public.match_highlights set clip_url = {q(wide_url)}, "
+                     f"story_url = {q(story_url)}, clip_error = null where id = {q(c['id'])}")
+                try:
+                    archive(c, wide, story)
+                except Exception as e:
+                    log('arşiv kopyası yazılamadı:', e)
+            log('hazır:', name)
+        except Exception as e:
+            msg = str(e)[-300:]
+            log('HATA:', name, msg)
+            psql(f"update public.match_highlights set clip_tries = clip_tries + 1, "
+                 f"clip_error = {q(msg)} where id = {q(c['id'])}")
+
+
+if __name__ == '__main__':
+    lock = os.path.join(tempfile.gettempdir(), 'ligmasasi_goal_clips.lock')
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL)
+    except FileExistsError:
+        # Önceki çalışma sürüyor (ya da yarım kaldı; 30 dk sonra kilit düşer).
+        if datetime.datetime.now().timestamp() - os.path.getmtime(lock) < 1800:
+            sys.exit(0)
+        os.remove(lock)
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL)
+    try:
+        main()
+    finally:
+        os.close(fd)
+        os.remove(lock)

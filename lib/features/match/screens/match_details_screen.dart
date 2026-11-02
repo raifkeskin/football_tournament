@@ -5482,7 +5482,10 @@ class _AutoMotmTeamState extends State<_AutoMotmTeam> {
                           const SizedBox(width: 6),
                           const Text(
                             'Maçın Oyuncusu',
-                            style: TextStyle(color: Colors.white60, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -6934,6 +6937,8 @@ class _MinutelessSummary extends StatelessWidget {
               videoId: c.videoId,
               startSec: c.startSec,
               endSec: c.endSec,
+              clipUrl: c.clipUrl,
+              storyUrl: c.storyUrl,
               title: r.name.isEmpty ? 'Gol' : r.name,
             ),
             child: const Padding(
@@ -7176,6 +7181,8 @@ class _DetailEventTile extends StatelessWidget {
           videoId: c.videoId,
           startSec: c.startSec,
           endSec: c.endSec,
+          clipUrl: c.clipUrl,
+          storyUrl: c.storyUrl,
           title: title.isEmpty ? 'Gol' : "$minute' $title",
         ),
         child: const Padding(

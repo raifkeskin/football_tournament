@@ -39,4 +39,15 @@ class InstagramShare {
     });
     return ok ?? false;
   }
+
+  /// MP4'ü Instagram'da açar (hikâyede arka plan videosu); açılamazsa false.
+  static Future<bool> shareVideo(Uint8List mp4, {required bool story}) async {
+    final ok = await _channel.invokeMethod<bool>('share', {
+      'bytes': mp4,
+      'story': story,
+      'appId': _facebookAppId,
+      'video': true,
+    });
+    return ok ?? false;
+  }
 }
