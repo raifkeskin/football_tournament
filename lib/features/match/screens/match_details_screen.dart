@@ -763,9 +763,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     final db = Supabase.instance.client;
     final rows = await db
         .from('match_events')
-        .select('team_id, minute, player_id, is_own_goal, is_penalty')
+        .select(
+          'team_id, minute, added_minute, player_id, is_own_goal, is_penalty',
+        )
         .eq('match_id', m.id)
         .eq('event_type', 'goal');
+    // Maç süresini aşan dakika maç detayındaki gibi uzatma yazılır (70+1').
+    await MatchClock.ensureLoaded();
+    final fullTime = MatchClock.periodOf(m.seasonId) * 2;
     // match_events'te ad yok: adlar (soyad değil) oyunculardan okunur.
     final ids = {
       for (final r in rows)
@@ -806,7 +811,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       final minute = r['minute'] is num ? (r['minute'] as num).toInt() : null;
       final pen = r['is_penalty'] == true && !own;
       (sides[home ? 0 : 1][key] ??= []).add(
-        minute == null ? (pen ? '(P)' : null) : "$minute'${pen ? ' (P)' : ''}",
+        minute == null
+            ? (pen ? '(P)' : null)
+            : '${minuteLabel(minute, readAddedMinute(r), fullTime: fullTime)}'
+                  '${pen ? ' (P)' : ''}',
       );
       if (minute != null) {
         firstMinute[key] = minute < (firstMinute[key] ?? 999)
@@ -5050,9 +5058,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     if (p == null || !_ageRules.hasMatchLimits) return null;
     final year = AgeRules.birthYearOf(p.birthDate);
     final isGk = (p.mainPosition ?? '').trim() == 'Kaleci';
-    return _ageRules.isMatchQuota(birthYear: year, isGk: isGk)
-        ? '$year'
-        : null;
+    return _ageRules.isMatchQuota(birthYear: year, isGk: isGk) ? '$year' : null;
   }
 
   void _subscribe() {
