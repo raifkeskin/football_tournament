@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/list_filter.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -537,10 +539,31 @@ class _AdminPenaltyManagementScreenState
                   if (_selectedGroupId.isNotEmpty) _groupName(_selectedGroupId),
                   _filterLabel(_penaltyFilter),
                 ].where((s) => s.trim().isNotEmpty);
-                return AdminFilterBar(
+                // Lisans Yönetimi'ndeki gibi: Filtre düğmesi + seçimin özeti.
+                return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  summary: parts.join(' • '),
-                  onTap: _openFilters,
+                  child: Row(
+                    children: [
+                      ListFilterButton(
+                        onPressed: _openFilters,
+                        changed:
+                            (_selectedGroupId.isNotEmpty ? 1 : 0) +
+                            (_penaltyFilter != _PenaltyFilter.active ? 1 : 0),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          parts.join(' • '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: kAdminMuted,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             ),

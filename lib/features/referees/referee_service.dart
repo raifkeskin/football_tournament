@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/app_session.dart';
 import '../../core/services/app_settings.dart';
 
 /// Hakem havuzundaki kayıt (`referees`); turnuva listesinde telefon ve
@@ -131,9 +132,9 @@ class RefereeService {
 
   static SupabaseClient get _sb => Supabase.instance.client;
 
-  /// Özellik açık mı (kapalıyken yalnız admin).
-  static bool enabledFor({required bool isAdmin}) =>
-      isAdmin || AppSettings.refereesEnabled.value;
+  /// Özellik açık mı (kapalıyken yalnız admin ve kurucu başkan).
+  static bool enabledFor(AppSessionState s) =>
+      s.isAdmin || s.isLeagueOwner || AppSettings.refereesEnabled.value;
 
   static final Map<String, Referee> _byId = {};
 

@@ -16,7 +16,6 @@ class AppSettings {
   static const _kSelfRegistration = 'self_registration_enabled';
   static const _kIdentity = 'identity_verification_enabled';
   static const _kIdentityUsers = 'identity_verification_users';
-  static const _kIdentityRoles = 'identity_verification_roles';
   static const _kManualPlayerCreate = 'manual_player_create_enabled';
   static const _kSuspendedTab = 'suspended_tab_enabled';
   static const _kWeeklyPicks = 'weekly_picks_enabled';
@@ -24,6 +23,9 @@ class AppSettings {
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
   static const _kBiometricLogin = 'biometric_login_enabled';
+  static const _kMatchPosterDesigns = 'match_poster_designs_enabled';
+  static const _kMatchInsights = 'match_insights_enabled';
+  static const _kRegulations = 'regulations_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -58,14 +60,12 @@ class AppSettings {
   /// Kapalıyken eski kayıt talebi akışı kullanılır.
   static final selfRegistrationEnabled = ValueNotifier<bool>(false);
 
-  /// Kimlik doğrulama herkese açık mı; kapalıyken yalnız admin ve
-  /// [identityVerificationUsers] (deneme hesapları) görür.
+  /// Kimlik doğrulama Aktif/Pasif (Kimlik Yönetimi). Aktifken futbolcu
+  /// kendi profilini, sorumlular kadrolarını doğrular; pasifken yalnız admin
+  /// ve [identityVerificationUsers] (deneme hesapları) görür. Kayıt Ol'daki
+  /// kimlikle kayıt bu anahtardan bağımsızdır.
   static final identityVerificationEnabled = ValueNotifier<bool>(false);
   static final identityVerificationUsers = ValueNotifier<Set<String>>({});
-
-  /// Kimlik Yönetimi: kimlik doğrulamanın açık olduğu roller
-  /// (league_owner, region_owner, team_manager, player).
-  static final identityVerificationRoles = ValueNotifier<Set<String>>({});
 
   /// Elle yeni futbolcu ekleme (lisans listesi, kadro talebi). Kapalıyken
   /// yalnız admin ekler; diğerleri futbolcunun uygulamadan kaydını bekleyip
@@ -90,6 +90,17 @@ class AppSettings {
 
   /// Yüz tanıma / parmak izi ile giriş teklifi herkese açık mı (admin her zaman).
   static final biometricLoginEnabled = ValueNotifier<bool>(false);
+
+  /// Maç afişinde Formalar / Çapraz / Takım tasarımları herkese açık mı
+  /// (admin her zaman görür).
+  static final matchPosterDesignsEnabled = ValueNotifier<bool>(false);
+
+  /// Kadro/Diziliş olay ikonları, futbolcu puanı ve "Olay ekle" herkese
+  /// açık mı (admin her zaman görür).
+  static final matchInsightsEnabled = ValueNotifier<bool>(false);
+
+  /// Turnuva talimatnamesi herkese açık mı (admin her zaman görür).
+  static final regulationsEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -132,12 +143,6 @@ class AppSettings {
             if (v is List)
               for (final x in v) x.toString(),
           };
-        } else if (r['key'] == _kIdentityRoles) {
-          final v = r['value'];
-          identityVerificationRoles.value = {
-            if (v is List)
-              for (final x in v) x.toString(),
-          };
         } else if (r['key'] == _kManualPlayerCreate) {
           manualPlayerCreateEnabled.value = r['value'] != false;
         } else if (r['key'] == _kWeeklyPicks) {
@@ -152,6 +157,12 @@ class AppSettings {
           newsCommentsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kBiometricLogin) {
           biometricLoginEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kMatchPosterDesigns) {
+          matchPosterDesignsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kMatchInsights) {
+          matchInsightsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kRegulations) {
+          regulationsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {
@@ -234,17 +245,14 @@ class AppSettings {
     tournamentRequestsEnabled.value = enabled;
   }
 
-  /// Yalnızca admin.
-  /// Yalnızca admin. Rolün kimlik doğrulamasını açar ya da kapatır.
-  static Future<void> setIdentityRole(String role, bool on) async {
-    final next = {...identityVerificationRoles.value};
-    on ? next.add(role) : next.remove(role);
+  /// Yalnızca admin. Kimlik doğrulamayı açar ya da kapatır.
+  static Future<void> setIdentityVerificationEnabled(bool enabled) async {
     await _sb.from('app_settings').upsert({
-      'key': _kIdentityRoles,
-      'value': next.toList()..sort(),
+      'key': _kIdentity,
+      'value': enabled,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
-    identityVerificationRoles.value = next;
+    identityVerificationEnabled.value = enabled;
   }
 
   static Future<void> setManualPlayerCreateEnabled(bool enabled) async {

@@ -42,6 +42,7 @@ class MediaCredit {
     this.note,
     this.contactConsent = false,
     this.isActive = true,
+    this.isDefault = false,
   });
 
   final String id;
@@ -61,6 +62,9 @@ class MediaCredit {
   final String? note;
   final bool contactConsent;
   final bool isActive;
+
+  /// Maçına ayrı ekip seçilmemiş maçlarda görünen kişi (türü başına bir).
+  final bool isDefault;
 
   String get displayTitle =>
       (title ?? '').trim().isEmpty ? kind.defaultTitle : title!.trim();
@@ -84,6 +88,7 @@ class MediaCredit {
     note: _s(m['note']),
     contactConsent: m['contact_consent'] == true,
     isActive: m['is_active'] != false,
+    isDefault: m['is_default'] == true,
   );
 
   Map<String, dynamic> toMap() => {
@@ -100,7 +105,71 @@ class MediaCredit {
     'note': note,
     'contact_consent': contactConsent,
     'is_active': isActive,
+    'is_default': isDefault,
   };
+}
+
+/// Medya rehberi: her yayıncı / fotoğrafçı bir kez kayıtlı; turnuvalar
+/// rehberden kişiyi kendi listesine bağlar.
+class MediaDirectory {
+  MediaDirectory._();
+
+  static SupabaseClient get _sb => Supabase.instance.client;
+
+  /// Rehberdeki [kind] türündeki etkin kişiler (ada göre).
+  static Future<List<MediaCredit>> all(MediaCreditKind kind) async {
+    final rows = await _sb
+        .from('media_credits')
+        .select()
+        .eq('kind', kind.name)
+        .eq('is_active', true)
+        .order('name');
+    return [for (final r in rows) MediaCredit.fromMap(r)];
+  }
+
+  /// Kişiyi turnuvanın listesine bağlar; türün ilk kişisi varsayılan olur.
+  static Future<void> link(String leagueId, MediaCredit c) async {
+    final defaults = await _sb
+        .from('league_media_credits')
+        .select('credit_id')
+        .eq('league_id', leagueId)
+        .eq('kind', c.kind.name)
+        .eq('is_default', true)
+        .limit(1);
+    await _sb.from('league_media_credits').upsert({
+      'league_id': leagueId,
+      'credit_id': c.id,
+      'kind': c.kind.name,
+      'is_default': defaults.isEmpty,
+    }, onConflict: 'league_id,credit_id');
+    MediaCreditFeed.notifyChanged(leagueId);
+  }
+
+  /// Kişiyi turnuvanın listesinden çıkarır (rehberde kalır).
+  static Future<void> unlink(String leagueId, String creditId) async {
+    await _sb
+        .from('league_media_credits')
+        .delete()
+        .eq('league_id', leagueId)
+        .eq('credit_id', creditId);
+    MediaCreditFeed.notifyChanged(leagueId);
+  }
+
+  /// Turnuvada türünün varsayılanı yapar.
+  static Future<void> makeDefault(String leagueId, MediaCredit c) async {
+    await _sb
+        .from('league_media_credits')
+        .update({'is_default': false})
+        .eq('league_id', leagueId)
+        .eq('kind', c.kind.name)
+        .eq('is_default', true);
+    await _sb
+        .from('league_media_credits')
+        .update({'is_default': true})
+        .eq('league_id', leagueId)
+        .eq('credit_id', c.id);
+    MediaCreditFeed.notifyChanged(leagueId);
+  }
 }
 
 /// Turnuvanın etkin künyeleri; Medya sekmesi önce bellekteki/cihazdaki hâli
@@ -144,12 +213,21 @@ class MediaCreditFeed {
   }
 
   static Future<List<MediaCredit>> fetch(String leagueId) async {
+    // Turnuvanın rehberden bağladığı kişiler (varsayılan bağlantıda).
     final rows = await _sb
-        .from('media_credits')
-        .select()
-        .eq('league_id', leagueId)
-        .eq('is_active', true);
-    final list = [for (final r in rows) MediaCredit.fromMap(r)];
+        .from('league_media_credits')
+        .select('is_default, media_credits(*)')
+        .eq('league_id', leagueId);
+    final list = [
+      for (final r in rows)
+        if (r['media_credits'] is Map &&
+            (r['media_credits'] as Map)['is_active'] != false)
+          MediaCredit.fromMap({
+            ...Map<String, dynamic>.from(r['media_credits'] as Map),
+            'league_id': leagueId,
+            'is_default': r['is_default'] == true,
+          }),
+    ];
     _memory[leagueId] = list;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -159,5 +237,68 @@ class MediaCreditFeed {
       );
     } catch (_) {}
     return list;
+  }
+}
+
+/// Maçın medya ekibi: [custom] ise maç için seçilmiş kişiler ([ids]; boşsa
+/// ekip yok), değilse turnuvanın varsayılanları.
+typedef MatchCrew = ({bool custom, Set<String> ids});
+
+class MatchMediaCrew {
+  MatchMediaCrew._();
+
+  static SupabaseClient get _sb => Supabase.instance.client;
+  static final _memory = <String, MatchCrew>{};
+
+  /// Ekibi değişen maçın id'si.
+  static final changes = ValueNotifier<String?>(null);
+
+  static MatchCrew? memory(String matchId) => _memory[matchId];
+
+  static Future<MatchCrew> fetch(String matchId) async {
+    final row = await _sb
+        .from('matches')
+        .select('media_crew_custom, match_media_crew(credit_id)')
+        .eq('id', matchId)
+        .maybeSingle();
+    final crew = (
+      custom: row?['media_crew_custom'] == true,
+      ids: {
+        for (final r in (row?['match_media_crew'] as List? ?? const []))
+          (r as Map)['credit_id'].toString(),
+      },
+    );
+    return _memory[matchId] = crew;
+  }
+
+  /// [ids] null → turnuvanın varsayılanına döner; boş → ekip yok.
+  static Future<void> save(String matchId, Set<String>? ids) async {
+    await _sb.rpc(
+      'set_match_media_crew',
+      params: {'p_match_id': matchId, 'p_credit_ids': ids?.toList()},
+    );
+    _memory[matchId] = (custom: ids != null, ids: ids ?? const {});
+    changes.value = null;
+    changes.value = matchId;
+  }
+
+  /// Maçta görünen [kind] türündeki kişiler.
+  static List<MediaCredit> resolve(
+    List<MediaCredit>? credits,
+    MatchCrew? crew,
+    MediaCreditKind kind,
+  ) {
+    final list = [
+      for (final c in credits ?? const <MediaCredit>[])
+        if (c.kind == kind && c.isActive) c,
+    ];
+    if (crew != null && crew.custom) {
+      return [
+        for (final c in list)
+          if (crew.ids.contains(c.id)) c,
+      ];
+    }
+    final def = list.where((c) => c.isDefault).firstOrNull ?? list.firstOrNull;
+    return def == null ? const [] : [def];
   }
 }

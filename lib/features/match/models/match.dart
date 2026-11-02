@@ -180,6 +180,10 @@ class MatchModel {
   final int? homePens;
   final int? awayPens;
 
+  /// Hızlı skorla bitirildi, olaylar sonradan girilecek ("Maç detayları
+  /// işleniyor..."); bu sürede skor gollerden aşağı çekilmez.
+  final bool detailsPending;
+
   MatchModel({
     required this.id,
     required this.leagueId,
@@ -218,6 +222,7 @@ class MatchModel {
     this.shootout,
     this.homePens,
     this.awayPens,
+    this.detailsPending = false,
   });
 
   /// Beraberliğin olmadığı eleme maçı (puan tablosuna sayılmaz).
@@ -436,6 +441,7 @@ class MatchModel {
       shootout: ShootoutKick.listFrom(map['shootout']),
       homePens: readScore(v('homePens', 'home_pens')),
       awayPens: readScore(v('awayPens', 'away_pens')),
+      detailsPending: v('detailsPending', 'details_pending') == true,
     );
   }
 

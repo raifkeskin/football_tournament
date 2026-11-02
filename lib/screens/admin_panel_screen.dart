@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:football_tournament/core/services/app_session.dart';
 import 'package:football_tournament/core/services/app_settings.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
+import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
-import '../features/match/screens/admin_live_draws_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
 import '../features/share/admin_poster_background_screen.dart';
 import '../features/sponsors/admin_sponsors_screen.dart';
@@ -100,23 +100,6 @@ class AdminPanelWidget extends StatelessWidget {
             );
           },
         ),
-      // Canlı kuralar: iptal / geri alma (yalnız admin).
-      if (isAdmin)
-        _AdminMenuData(
-          baslik: 'Canlı Kuralar',
-          renkler: const [Color(0xFF38BDF8), Color(0xFF0369A1)],
-          ikon: Icons.casino_rounded,
-          resimYolu: 'assets/images/admin_fixture.jpg',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                settings: const RouteSettings(name: 'AdminLiveDrawsScreen'),
-                builder: (_) => const AdminLiveDrawsScreen(),
-              ),
-            );
-          },
-        ),
       _AdminMenuData(
         baslik: 'Ceza Yönetimi',
         renkler: const [Color(0xFFF87171), Color(0xFFDC2626)],
@@ -183,9 +166,9 @@ class AdminPanelWidget extends StatelessWidget {
             );
           },
         ),
-      // Hakemler: admin ve kurucu başkan (özellik açılana dek yalnız admin).
+      // Hakemler: admin ve kurucu başkan.
       if ((isAdmin || session.isLeagueOwner) &&
-          RefereeService.enabledFor(isAdmin: isAdmin))
+          RefereeService.enabledFor(session))
         _AdminMenuData(
           baslik: 'Hakemler',
           renkler: const [Color(0xFFFDE047), Color(0xFFCA8A04)],
@@ -281,24 +264,29 @@ class AdminPanelWidget extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             sliver: SliverToBoxAdapter(child: header),
           ),
-        // Grid Menü
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => Padding(
-                padding: const EdgeInsets.only(
-                  bottom: 10.0,
-                ), // Kartlar arası boşluk 12'den 10'a düştü
-                child: SizedBox(
-                  height: 68,
-                  child: _ModernImageMenuCard(data: menuItems[index]),
-                ),
+        // Kartlar kategorilere ayrılır (başlık + kartlar); Sistem en sonda,
+        // altındaki küçük satırlar da Sistem'e aittir.
+        for (final cat in _categories)
+          if (cat == 'SİSTEM' ||
+              menuItems.any((m) => _categoryOf(m.baslik) == cat)) ...[
+            SliverToBoxAdapter(child: _categoryHeader(cat)),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList.list(
+                children: [
+                  for (final m in menuItems)
+                    if (_categoryOf(m.baslik) == cat)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SizedBox(
+                          height: 56,
+                          child: _ModernImageMenuCard(data: m),
+                        ),
+                      ),
+                ],
               ),
-              childCount: menuItems.length,
             ),
-          ),
-        ),
+          ],
 
         // Diğer araçlar (Liste şeklinde devam edebilir)
         SliverToBoxAdapter(
@@ -362,96 +350,102 @@ class AdminPanelWidget extends StatelessWidget {
                   ),
                 ),
                 if (isAdmin) ...[
-                  const SizedBox(height: 8),
-                  _SettingSwitch(
-                    setting: AppSettings.privateLeaguesEnabled,
-                    save: AppSettings.setPrivateLeaguesEnabled,
-                    title: 'Gizli Turnuva Özelliği',
-                    onIcon: Icons.lock_outline_rounded,
-                    offIcon: Icons.public_rounded,
-                    onText:
-                        'Açık · "Turnuva Kodu Gir" ve gizli turnuva seçimi '
-                        'görünür',
-                    offText: 'Kapalı · tüm turnuvalar herkese açık',
-                  ),
-                  const SizedBox(height: 8),
-                  _SettingSwitch(
-                    setting: AppSettings.bottomNavEnabled,
-                    save: AppSettings.setBottomNavEnabled,
-                    title: 'Alt Menü',
-                    onIcon: Icons.space_bar_rounded,
-                    offIcon: Icons.menu_rounded,
-                    onText: 'Açık · ana ekranlarda alt gezinme çubuğu görünür',
-                    offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
-                  ),
-                  const SizedBox(height: 8),
-                  _SettingSwitch(
-                    setting: AppSettings.tournamentRequestsEnabled,
-                    save: AppSettings.setTournamentRequestsEnabled,
-                    title: 'Turnuva Oluştur',
-                    onIcon: Icons.emoji_events_rounded,
-                    offIcon: Icons.emoji_events_outlined,
-                    onText: 'Açık · "Turnuvanı Kur" girişi herkese görünür',
-                    offText: 'Kapalı · yalnız admin görür',
-                  ),
-                  const SizedBox(height: 8),
-                  _SettingSwitch(
-                    setting: AppSettings.selfRegistrationEnabled,
-                    save: AppSettings.setSelfRegistrationEnabled,
-                    title: 'Yeni Kayıt Akışı',
-                    onIcon: Icons.how_to_reg_rounded,
-                    offIcon: Icons.person_add_alt_1_outlined,
-                    onText:
-                        'Açık · Kayıt Ol: Futbolcu Profili (kimlikle) ya da '
-                        'Turnuva Sorumlusu; kod SMS Test Modu\'na göre gider',
-                    offText: 'Kapalı · eski kayıt talebi akışı',
-                  ),
-                  const SizedBox(height: 8),
-                  _SettingSwitch(
-                    setting: AppSettings.manualPlayerCreateEnabled,
-                    save: AppSettings.setManualPlayerCreateEnabled,
-                    title: 'Elle Futbolcu Ekleme',
-                    onIcon: Icons.person_add_alt_1_rounded,
-                    offIcon: Icons.how_to_reg_rounded,
-                    onText:
-                        'Açık · kurucu başkan ve bölge sorumlusu yeni '
-                        'futbolcu ekleyebilir',
-                    offText:
-                        'Kapalı · futbolcu uygulamadan kayıt olur, listeden '
-                        'seçilir (admin ekleyebilir)',
-                  ),
-                  const SizedBox(height: 8),
-                  const _PhotoLimitSetting(),
-                  const SizedBox(height: 8),
-                  _SettingSwitch(
-                    setting: AppSettings.smsOtpEnabled,
-                    save: AppSettings.setSmsOtpEnabled,
-                    title: 'SMS Doğrulama',
-                    onIcon: Icons.sms_outlined,
-                    offIcon: Icons.send_rounded,
-                    onText:
-                        'Açık · Kayıt ve şifre sıfırlama SMS koduyla, '
-                        'onaysız',
-                    offText:
-                        'Kapalı · talep Telegram\'a düşer, şifre WhatsApp\'tan',
-                  ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: AppSettings.smsOtpEnabled,
-                    builder: (context, on, _) => !on
-                        ? const SizedBox.shrink()
-                        : Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: _SettingSwitch(
-                              setting: AppSettings.smsOtpTestMode,
-                              save: AppSettings.setSmsOtpTestMode,
-                              title: 'SMS Test Modu',
-                              onIcon: Icons.science_outlined,
-                              offIcon: Icons.cell_tower_rounded,
-                              onText:
-                                  'Açık · kodlar SMS yerine Telegram\'a gelir',
-                              offText: 'Kapalı · kodlar İletiMerkezi ile SMS',
-                            ),
-                          ),
+                  _categoryHeader('UYGULAMA AYARLARI', horizontal: 0),
+                  _SettingsGroup(
+                    children: [
+                      _SettingSwitch(
+                        setting: AppSettings.privateLeaguesEnabled,
+                        save: AppSettings.setPrivateLeaguesEnabled,
+                        title: 'Gizli Turnuva Özelliği',
+                        onIcon: Icons.lock_outline_rounded,
+                        offIcon: Icons.public_rounded,
+                        onText:
+                            'Açık · "Turnuva Kodu Gir" ve gizli turnuva seçimi '
+                            'görünür',
+                        offText: 'Kapalı · tüm turnuvalar herkese açık',
+                      ),
+                      const SizedBox(height: 8),
+                      _SettingSwitch(
+                        setting: AppSettings.bottomNavEnabled,
+                        save: AppSettings.setBottomNavEnabled,
+                        title: 'Alt Menü',
+                        onIcon: Icons.space_bar_rounded,
+                        offIcon: Icons.menu_rounded,
+                        onText:
+                            'Açık · ana ekranlarda alt gezinme çubuğu görünür',
+                        offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
+                      ),
+                      const SizedBox(height: 8),
+                      _SettingSwitch(
+                        setting: AppSettings.tournamentRequestsEnabled,
+                        save: AppSettings.setTournamentRequestsEnabled,
+                        title: 'Turnuva Oluştur',
+                        onIcon: Icons.emoji_events_rounded,
+                        offIcon: Icons.emoji_events_outlined,
+                        onText: 'Açık · "Turnuvanı Kur" girişi herkese görünür',
+                        offText: 'Kapalı · yalnız admin görür',
+                      ),
+                      const SizedBox(height: 8),
+                      _SettingSwitch(
+                        setting: AppSettings.selfRegistrationEnabled,
+                        save: AppSettings.setSelfRegistrationEnabled,
+                        title: 'Yeni Kayıt Akışı',
+                        onIcon: Icons.how_to_reg_rounded,
+                        offIcon: Icons.person_add_alt_1_outlined,
+                        onText:
+                            'Açık · Kayıt Ol: Futbolcu Profili (kimlikle) ya da '
+                            'Turnuva Sorumlusu; kod SMS Test Modu\'na göre gider',
+                        offText: 'Kapalı · eski kayıt talebi akışı',
+                      ),
+                      const SizedBox(height: 8),
+                      _SettingSwitch(
+                        setting: AppSettings.manualPlayerCreateEnabled,
+                        save: AppSettings.setManualPlayerCreateEnabled,
+                        title: 'Elle Futbolcu Ekleme',
+                        onIcon: Icons.person_add_alt_1_rounded,
+                        offIcon: Icons.how_to_reg_rounded,
+                        onText:
+                            'Açık · kurucu başkan ve bölge sorumlusu yeni '
+                            'futbolcu ekleyebilir',
+                        offText:
+                            'Kapalı · futbolcu uygulamadan kayıt olur, listeden '
+                            'seçilir (admin ekleyebilir)',
+                      ),
+                      const SizedBox(height: 8),
+                      const _PhotoLimitSetting(),
+                      const SizedBox(height: 8),
+                      _SettingSwitch(
+                        setting: AppSettings.smsOtpEnabled,
+                        save: AppSettings.setSmsOtpEnabled,
+                        title: 'SMS Doğrulama',
+                        onIcon: Icons.sms_outlined,
+                        offIcon: Icons.send_rounded,
+                        onText:
+                            'Açık · Kayıt ve şifre sıfırlama SMS koduyla, '
+                            'onaysız',
+                        offText:
+                            'Kapalı · talep Telegram\'a düşer, şifre WhatsApp\'tan',
+                      ),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: AppSettings.smsOtpEnabled,
+                        builder: (context, on, _) => !on
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _SettingSwitch(
+                                  setting: AppSettings.smsOtpTestMode,
+                                  save: AppSettings.setSmsOtpTestMode,
+                                  title: 'SMS Test Modu',
+                                  onIcon: Icons.science_outlined,
+                                  offIcon: Icons.cell_tower_rounded,
+                                  onText:
+                                      'Açık · kodlar SMS yerine Telegram\'a gelir',
+                                  offText:
+                                      'Kapalı · kodlar İletiMerkezi ile SMS',
+                                ),
+                              ),
+                      ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 40),
@@ -462,6 +456,40 @@ class AdminPanelWidget extends StatelessWidget {
       ],
     );
   }
+
+  static const _categories = [
+    'TURNUVA',
+    'TAKIM & FUTBOLCU',
+    'İÇERİK',
+    'SİSTEM',
+  ];
+
+  static String _categoryOf(String title) => switch (title) {
+    'Takım Yönetimi' ||
+    'Lisans Yönetimi' ||
+    'Kimlik Yönetimi' => 'TAKIM & FUTBOLCU',
+    'Haber Yönetimi' ||
+    'Sponsor Yönetimi' ||
+    'Medya Künyesi' ||
+    'Afiş Arka Planı' => 'İÇERİK',
+    'Yapay Zekâ Yönetimi' => 'SİSTEM',
+    _ => 'TURNUVA',
+  };
+
+  /// Kategori başlığı: formlardaki bölüm başlıklarıyla aynı (yeşil, küçük).
+  static Widget _categoryHeader(String title, {double horizontal = 16}) =>
+      Padding(
+        padding: EdgeInsets.fromLTRB(horizontal + 4, 14, horizontal, 8),
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: kAdminAccent,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
+          ),
+        ),
+      );
 
   Widget _buildSmallActionTile(
     BuildContext context,
@@ -495,6 +523,57 @@ class AdminPanelWidget extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
       tileColor: const Color(0xFF1E293B),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    );
+  }
+}
+
+/// Uygulama Ayarları: anahtarlar kapalı bir kutuda; dokununca açılır.
+class _SettingsGroup extends StatefulWidget {
+  const _SettingsGroup({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  State<_SettingsGroup> createState() => _SettingsGroupState();
+}
+
+class _SettingsGroupState extends State<_SettingsGroup> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          onTap: () => setState(() => _open = !_open),
+          leading: const Icon(Icons.tune_rounded, color: Colors.white70),
+          title: const Text(
+            'Uygulama Ayarları',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          subtitle: const Text(
+            'Kayıt, SMS, menü ve özellik anahtarları',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          trailing: AnimatedRotation(
+            turns: _open ? 0.5 : 0,
+            duration: const Duration(milliseconds: 180),
+            child: const Icon(Icons.expand_more_rounded, color: Colors.white54),
+          ),
+          tileColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        if (_open)
+          for (final c in widget.children)
+            Padding(padding: const EdgeInsets.only(top: 8), child: c),
+      ],
     );
   }
 }
@@ -675,7 +754,7 @@ class _ModernImageMenuCard extends StatelessWidget {
         onTap: data.onPressed,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
@@ -683,17 +762,17 @@ class _ModernImageMenuCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: data.renkler,
                   ),
                 ),
-                child: Icon(data.ikon, color: Colors.white, size: 22),
+                child: Icon(data.ikon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -702,7 +781,7 @@ class _ModernImageMenuCard extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 16,
+                    fontSize: 14.5,
                   ),
                 ),
               ),

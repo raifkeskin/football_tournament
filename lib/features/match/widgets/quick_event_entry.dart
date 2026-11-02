@@ -8,6 +8,7 @@ import '../models/match.dart';
 import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
 import '../utils/season_match_settings.dart';
+import 'minute_input_dialog.dart';
 
 /// Canlı maçta olay girişi: alttaki takım butonuyla (GOL / KART / DEĞ.)
 /// olay ve takım tek dokunuşta seçilir; sonra her ekranda tek soru gelir
@@ -19,18 +20,22 @@ class QuickEventBar extends StatelessWidget {
     required this.match,
     required this.homeName,
     required this.awayName,
+    this.onMoment,
   });
 
   final MatchModel match;
   final String homeName;
   final String awayName;
 
+  /// Verilirse KART / DEĞ. yanında OLAY: puana etki eden an (takıma göre).
+  final void Function(String teamId)? onMoment;
+
   @override
   Widget build(BuildContext context) {
     Widget side(String teamId, String name) {
       Widget button(
         String label,
-        _Kind kind, {
+        _Kind? kind, {
         IconData? icon,
         bool primary = false,
       }) => SizedBox(
@@ -45,7 +50,9 @@ class QuickEventBar extends StatelessWidget {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => _open(context, teamId, kind),
+            onTap: () => kind == null
+                ? onMoment?.call(teamId)
+                : _open(context, teamId, kind),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -100,8 +107,16 @@ class QuickEventBar extends StatelessWidget {
               Expanded(child: button('KART', _Kind.card)),
               const SizedBox(width: 6),
               Expanded(
-                child: button('DEĞ.', _Kind.sub, icon: Icons.swap_vert_rounded),
+                child: button(
+                  'DEĞ.',
+                  _Kind.sub,
+                  icon: onMoment == null ? Icons.swap_vert_rounded : null,
+                ),
               ),
+              if (onMoment != null) ...[
+                const SizedBox(width: 6),
+                Expanded(child: button('OLAY', null)),
+              ],
             ],
           ),
         ],
@@ -627,6 +642,21 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
   }
 
   /// Dakika saatten gelir; −1 / +1 ile düzeltilir (uzatmada uzatma değişir).
+  Future<void> _typeMinute() async {
+    final v = await showMinuteInputDialog(
+      context,
+      title: 'Dakika',
+      minute: _minute,
+      added: _added,
+    );
+    if (v == null || !mounted) return;
+    setState(() {
+      _minute = v.minute;
+      _added = v.added;
+    });
+  }
+
+  /// Dakika: ±1 ya da dokununca elle yazılır (canlıda sayaçtan gelir).
   Widget _clock() {
     void shift(int d) => setState(() {
       if (_added != null) {
@@ -658,12 +688,30 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
             style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
           ),
           const SizedBox(width: 8),
-          Text(
-            minuteLabel(_minute, _added),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _saving ? null : _typeMinute,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kAdminAccent.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    minuteLabel(_minute, _added),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.edit_rounded, size: 14, color: kAdminAccent),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 10),

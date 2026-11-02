@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../match/insights/insight_widgets.dart';
+import '../../match/insights/match_insights.dart';
 import 'package:football_tournament/features/tournament/utils/pitch_layout.dart';
 import 'package:football_tournament/core/widgets/pitch_token_style.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -103,6 +106,7 @@ class _PitchPlayer {
     required this.line,
     required this.wide,
     required this.isCaptain,
+    this.photoUrl,
   });
 
   final String id;
@@ -111,6 +115,7 @@ class _PitchPlayer {
   final int line;
   final bool wide;
   final bool isCaptain;
+  final String? photoUrl;
 }
 
 List<int> _parseFormation(String f) => f
@@ -232,6 +237,7 @@ _Layout? _computeLayout(
           : (r.playerId == chosenGk ? 0 : (natural == 0 ? 1 : natural)),
       wide: _isWide(p?.mainPosition, p?.position),
       isCaptain: r.isCaptain,
+      photoUrl: p?.photoUrl,
     );
   }).toList();
   if (starters.isEmpty) return null;
@@ -262,13 +268,16 @@ _Layout? _computeLayout(
     outfieldCount,
   );
 
-  var f = (formation ?? '').trim().isEmpty ? autoFormation : formation!.trim();
+  // 11'li maçta kayıtlı diziliş yoksa 4-2-3-1 (sahada en yaygın dizilim);
+  // küçük sahada mevkilerden çıkan diziliş.
+  final fallback = outfieldCount == 10 ? '4-2-3-1' : autoFormation;
+  var f = (formation ?? '').trim().isEmpty ? fallback : formation!.trim();
   var counts = _parseFormation(f);
   final options = _formationOptions(outfieldCount);
   if (counts.fold<int>(0, (a, b) => a + b) != outfieldCount ||
       (options.isNotEmpty && !options.contains(f))) {
-    // Kadro değiştiyse ya da kayıtlı diziliş geçersizse otomatik olan.
-    f = autoFormation;
+    // Kadro değiştiyse ya da kayıtlı diziliş geçersizse varsayılan.
+    f = fallback;
     counts = _parseFormation(f);
   }
 
@@ -572,165 +581,299 @@ class _FormationTabState extends State<FormationTab>
           ),
           const SizedBox(height: 10),
         ],
-        StreamBuilder<List<PlayerModel>>(
-          key: ValueKey('players_$_teamId'),
-          stream: ServiceLocator.teamService.watchPlayers(
-            teamId: _teamId,
-            tournamentId: widget.match.seasonId,
-          ),
-          builder: (context, playerSnap) {
-            final players = {
-              for (final p in playerSnap.data ?? const <PlayerModel>[]) p.id: p,
-            };
-            return StreamBuilder<List<MatchRosterModel>>(
-              key: ValueKey('roster_$_teamId'),
-              stream: ServiceLocator.matchService.watchMatchRosters(
-                widget.match.id,
-                _teamId,
-              ),
-              builder: (context, rosterSnap) {
-                if (!rosterSnap.hasData) {
-                  return const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
+        MatchInsightsBuilder(
+          match: widget.match,
+          builder: (context, insights) => StreamBuilder<List<PlayerModel>>(
+            key: ValueKey('players_$_teamId'),
+            stream: ServiceLocator.teamService.watchPlayers(
+              teamId: _teamId,
+              tournamentId: widget.match.seasonId,
+              matchId: widget.match.id,
+            ),
+            builder: (context, playerSnap) {
+              final players = {
+                for (final p in playerSnap.data ?? const <PlayerModel>[])
+                  p.id: p,
+              };
+              return StreamBuilder<List<MatchRosterModel>>(
+                key: ValueKey('roster_$_teamId'),
+                stream: ServiceLocator.matchService.watchMatchRosters(
+                  widget.match.id,
+                  _teamId,
+                ),
+                builder: (context, rosterSnap) {
+                  if (!rosterSnap.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final starterRosters = rosterSnap.data!
+                      .where((r) => r.isStarting)
+                      .toList();
+                  final layout = _computeLayout(
+                    starterRosters,
+                    players,
+                    formation: _chosen[_selected] ?? _savedFormation,
+                    order: _order[_selected],
                   );
-                }
-                final starterRosters = rosterSnap.data!
-                    .where((r) => r.isStarting)
-                    .toList();
-                final layout = _computeLayout(
-                  starterRosters,
-                  players,
-                  formation: _chosen[_selected] ?? _savedFormation,
-                  order: _order[_selected],
-                );
-                if (layout == null) {
-                  return const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: Text(
-                        'Henüz ilk 11 girilmemiş.\n'
-                        'Kadrolar sekmesinden esame listesi girildiğinde '
-                        'oyuncular burada sahaya yerleşir.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ),
-                  );
-                }
-                final formation = layout.formation;
-                final options = _optionsFor(
-                  layout.outfieldCount,
-                  layout.autoFormation,
-                );
-                final pitchLines = layout.lines;
-                final currentIds = layout.ids;
-                final dirty = _dirty.contains(_selected);
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.grid_view_rounded,
-                          color: _midText,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Diziliş',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _FormationPicker(
-                          value: formation,
-                          options: options,
-                          enabled: _canEdit && options.length > 1,
-                          onChanged: _changeFormation,
-                        ),
-                        const Spacer(),
-                        // Gösterim tercihi diziliş afişine de uygulanır.
-                        // Kaydet butonu da varsa yer açmak için yalnız ikon.
-                        PitchTokenStyleToggle(compact: _canEdit),
-                        if (_canShare && widget.onShare != null)
-                          IconButton(
-                            tooltip: 'Diziliş afişini paylaş',
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 34,
-                              minHeight: 34,
-                            ),
-                            icon: const Icon(
-                              Icons.ios_share_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              if (dirty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Önce dizilişi kaydedin, sonra paylaşın.',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-                              widget.onShare!(_teamId);
-                            },
-                          ),
-                        if (_canEdit) ...[
-                          const SizedBox(width: 8),
-                          _SaveLayoutButton(
-                            dirty: dirty,
-                            saving: _saving,
-                            onPressed: () => _saveLayout(formation, currentIds),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    AspectRatio(
-                      // Kaleciye kadar tüm saha telefon ekranına sığar.
-                      aspectRatio: 0.8,
-                      child: ValueListenableBuilder<PitchTokenStyle>(
-                        valueListenable: PitchTokenStylePref.notifier,
-                        builder: (context, style, _) => _Pitch(
-                          lines: pitchLines,
-                          teamColor: teamColor,
-                          style: style,
-                          onSwap: _canEdit
-                              ? (from, to) => _swap(currentIds, from, to)
-                              : null,
-                          picked: _picked,
-                          onPick: _canEdit
-                              ? (id) => _pick(currentIds, id)
-                              : null,
-                        ),
-                      ),
-                    ),
-                    if (_canEdit)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
+                  if (layout == null) {
+                    return const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(
                         child: Text(
-                          'Yer değiştirmek için iki oyuncuya sırayla dokunun '
-                          '(ya da basılı tutup diğerinin üzerine bırakın).',
+                          'Henüz ilk 11 girilmemiş.\n'
+                          'Kadrolar sekmesinden esame listesi girildiğinde '
+                          'oyuncular burada sahaya yerleşir.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: _midText, fontSize: 11),
+                          style: TextStyle(color: Colors.white54),
                         ),
                       ),
-                  ],
-                );
-              },
-            );
-          },
+                    );
+                  }
+                  final formation = layout.formation;
+                  final options = _optionsFor(
+                    layout.outfieldCount,
+                    layout.autoFormation,
+                  );
+                  final pitchLines = layout.lines;
+                  final currentIds = layout.ids;
+                  final dirty = _dirty.contains(_selected);
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.grid_view_rounded,
+                            color: _midText,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Diziliş',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          _FormationPicker(
+                            value: formation,
+                            options: options,
+                            enabled: _canEdit && options.length > 1,
+                            onChanged: _changeFormation,
+                          ),
+                          const Spacer(),
+                          // Gösterim tercihi diziliş afişine de uygulanır.
+                          // Yalnız ikon: yazılarla dar ekranda taşıyordu.
+                          PitchTokenStyleToggle(
+                            compact: true,
+                            showPhoto: insights != null,
+                          ),
+                          if (_canShare && widget.onShare != null)
+                            IconButton(
+                              tooltip: 'Diziliş afişini paylaş',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 34,
+                                minHeight: 34,
+                              ),
+                              icon: const Icon(
+                                Icons.ios_share_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                if (dirty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Önce dizilişi kaydedin, sonra paylaşın.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                widget.onShare!(_teamId);
+                              },
+                            ),
+                          if (_canEdit) ...[
+                            const SizedBox(width: 8),
+                            _SaveLayoutButton(
+                              dirty: dirty,
+                              saving: _saving,
+                              onPressed: () =>
+                                  _saveLayout(formation, currentIds),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      AspectRatio(
+                        // Kaleciye kadar tüm saha telefon ekranına sığar.
+                        aspectRatio: 0.8,
+                        child: ValueListenableBuilder<PitchTokenStyle>(
+                          valueListenable: PitchTokenStylePref.notifier,
+                          builder: (context, style, _) => _Pitch(
+                            lines: pitchLines,
+                            teamColor: teamColor,
+                            // Profil yalnız yeni özellik açıkken.
+                            style:
+                                style == PitchTokenStyle.photo &&
+                                    insights == null
+                                ? PitchTokenStyle.circle
+                                : style,
+                            insights: insights,
+                            onSwap: _canEdit
+                                ? (from, to) => _swap(currentIds, from, to)
+                                : null,
+                            picked: _picked,
+                            onPick: _canEdit
+                                ? (id) => _pick(currentIds, id)
+                                : null,
+                          ),
+                        ),
+                      ),
+                      if (_canEdit)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Yer değiştirmek için iki oyuncuya sırayla dokunun '
+                            '(ya da basılı tutup diğerinin üzerine bırakın).',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: _midText, fontSize: 11),
+                          ),
+                        ),
+                      if (insights != null)
+                        _SubsInRow(
+                          insights: insights,
+                          bench: rosterSnap.data!
+                              .where((r) => !r.isStarting)
+                              .toList(),
+                          players: players,
+                        ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// Dizilişin altında oyuna sonradan girenler: ↑ dakika, numara ve ad.
+class _SubsInRow extends StatelessWidget {
+  const _SubsInRow({
+    required this.insights,
+    required this.bench,
+    required this.players,
+  });
+
+  final MatchInsights insights;
+  final List<MatchRosterModel> bench;
+  final Map<String, PlayerModel> players;
+
+  @override
+  Widget build(BuildContext context) {
+    final came =
+        [
+          for (final r in bench)
+            if (insights.of(r.playerId).subbedIn) r,
+        ]..sort(
+          (a, b) => (insights.of(a.playerId).subIn ?? 0).compareTo(
+            insights.of(b.playerId).subIn ?? 0,
+          ),
+        );
+    if (came.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'OYUNA GİRENLER',
+            style: TextStyle(
+              color: _midText,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [for (final r in came) _chip(r)],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(MatchRosterModel r) {
+    final m = insights.of(r.playerId);
+    final p = players[r.playerId];
+    final no = (r.jerseyNumber ?? p?.number ?? '').trim();
+    final goals = m.goals.length + m.penGoals.length;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.arrow_upward_rounded,
+            size: 14,
+            color: Color(0xFF22C55E),
+          ),
+          if (m.subIn != null)
+            Text(
+              "${m.subIn}' ",
+              style: const TextStyle(
+                color: Color(0xFF86EFAC),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          Text(
+            '${no.isEmpty ? '' : '$no '}${shortPlayerName(p?.name ?? '-')}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (goals > 0) ...[
+            const SizedBox(width: 5),
+            const Icon(Icons.sports_soccer, size: 13, color: Colors.white),
+            if (goals > 1)
+              Text(
+                '×$goals',
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+          ],
+          if (m.assists.isNotEmpty) ...[
+            const SizedBox(width: 5),
+            Text(
+              'A×${m.assists.length}',
+              style: const TextStyle(
+                color: Color(0xFF6EE7B7),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -946,12 +1089,16 @@ class _Pitch extends StatelessWidget {
     this.onSwap,
     this.picked,
     this.onPick,
+    this.insights,
   });
 
   /// lines[0]: kaleci, sonrakiler defanstan hücuma dizilişin hatları.
   final List<List<_PitchPlayer>> lines;
   final Color teamColor;
   final PitchTokenStyle style;
+
+  /// Verilirse işaretlerin köşelerinde gol/asist/çıkış/kart ikonları.
+  final MatchInsights? insights;
 
   /// null değilse oyuncular sürükle-bırakla yer değiştirebilir.
   final void Function(String fromId, String toId)? onSwap;
@@ -1011,6 +1158,7 @@ class _Pitch extends StatelessWidget {
       player: p,
       color: selected ? const Color(0xFFFACC15) : color,
       style: style,
+      marks: insights?.of(p.id),
     );
     if (swap == null) return token;
     final pick = onPick;
@@ -1051,11 +1199,220 @@ class _PlayerToken extends StatelessWidget {
     required this.player,
     required this.color,
     this.style = PitchTokenStyle.circle,
+    this.marks,
   });
 
   final _PitchPlayer player;
   final Color color;
   final PitchTokenStyle style;
+
+  /// Maçtaki olayları (köşe ikonları); null ise ikon yok.
+  final PlayerMarks? marks;
+
+  Widget _photo() {
+    final url = (player.photoUrl ?? '').trim();
+    final initials = player.name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .take(2)
+        .map((e) => e.characters.first)
+        .join()
+        .toUpperCase();
+    final fallback = Container(
+      alignment: Alignment.center,
+      color: const Color(0xFFCBD5E1),
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: Color(0xFF334155),
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+      ),
+    );
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 2)),
+        ],
+      ),
+      child: ClipOval(
+        child: url.isEmpty
+            ? fallback
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => fallback,
+              ),
+      ),
+    );
+  }
+
+  /// Köşe ikonu: koyu daire içinde ikon, gerekirse sayı rozeti.
+  Widget _corner(Widget icon, {int count = 1}) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Container(
+        width: 16,
+        height: 16,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: Color(0xFF0F172A),
+          shape: BoxShape.circle,
+        ),
+        child: icon,
+      ),
+      if (count > 1)
+        Positioned(
+          right: -5,
+          top: -5,
+          child: Container(
+            width: 12,
+            height: 12,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Color(0xFFEF4444),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+
+  static const _shadow = [
+    Shadow(color: Colors.black87, blurRadius: 3, offset: Offset(0, 1)),
+  ];
+
+  static String _trUpper(String v) =>
+      v.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
+  List<Widget> _nameLines(String full) {
+    final parts = full.trim().split(RegExp(r'\s+'));
+    final last = parts.length > 1 ? parts.removeLast() : '';
+    final first = parts.join(' ');
+    Widget line(String t, TextStyle st) => FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(t, maxLines: 1, style: st),
+    );
+    return [
+      if (first.isNotEmpty)
+        line(
+          last.isEmpty ? _trUpper(first) : first,
+          TextStyle(
+            color: Colors.white.withValues(alpha: last.isEmpty ? 1 : 0.88),
+            fontSize: last.isEmpty ? 12 : 9.5,
+            fontFamily: last.isEmpty ? 'BarlowCondensed' : null,
+            fontWeight: last.isEmpty ? FontWeight.w800 : FontWeight.w500,
+            height: 1.1,
+            shadows: _shadow,
+          ),
+        ),
+      if (last.isNotEmpty)
+        line(
+          _trUpper(last),
+          const TextStyle(
+            color: Colors.white,
+            fontFamily: 'BarlowCondensed',
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            height: 1.05,
+            letterSpacing: 0.2,
+            shadows: _shadow,
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _eventCorners() {
+    final m = marks;
+    if (m == null) return const [];
+    final goals = m.goals.length + m.penGoals.length;
+    final card = m.yellows.isNotEmpty || m.reds.isNotEmpty;
+    // Asist: oyuncu kartındaki tepside top ikonu.
+    final assist = _corner(
+      Image.asset('assets/images/assist.png', width: 14, height: 14),
+      count: m.assists.length,
+    );
+    final assistLeft = card && goals > 0 && m.assists.isNotEmpty;
+    final right = <Widget>[
+      if (card)
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: Center(child: CardIcon(red: m.reds.isNotEmpty, size: 12)),
+        ),
+      if (goals > 0)
+        _corner(
+          const Icon(Icons.sports_soccer, size: 13, color: Colors.white),
+          count: goals,
+        ),
+      if (m.assists.isNotEmpty && !assistLeft) assist,
+    ];
+    return [
+      if (m.subbedOut)
+        Positioned(
+          left: -14,
+          top: -6,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (m.subOut != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE60F172A),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    "${m.subOut}'",
+                    style: const TextStyle(
+                      color: Color(0xFFFCA5A5),
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              const Icon(
+                Icons.arrow_downward_rounded,
+                size: 14,
+                color: Color(0xFFEF4444),
+              ),
+            ],
+          ),
+        ),
+      // Sağ sütun alt alta: kart, gol, asist. Üçü birden varsa asist sola,
+      // çıkış okunun altına geçer (sütun formadan taşmasın).
+      if (right.isNotEmpty)
+        Positioned(
+          right: -12,
+          top: 9,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < right.length; i++) ...[
+                if (i > 0) const SizedBox(height: 2),
+                right[i],
+              ],
+            ],
+          ),
+        ),
+      if (assistLeft) Positioned(left: -10, top: 14, child: assist),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1069,7 +1426,9 @@ class _PlayerToken extends StatelessWidget {
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              if (style == PitchTokenStyle.shirt)
+              if (style == PitchTokenStyle.photo)
+                _photo()
+              else if (style == PitchTokenStyle.shirt)
                 JerseyShape(
                   width: 38,
                   color: color,
@@ -1115,28 +1474,13 @@ class _PlayerToken extends StatelessWidget {
                   top: -2,
                   child: CaptainBadge(size: 15),
                 ),
+              ..._eventCorners(),
             ],
           ),
         ),
-        const SizedBox(height: 3),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            shortPlayerName(player.name),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+        const SizedBox(height: 2),
+        // Afişteki gibi: küçük ad, altında kalın büyük soyad (gölgeli).
+        ..._nameLines(player.name),
       ],
     );
   }

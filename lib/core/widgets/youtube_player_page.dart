@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -154,7 +156,11 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
   // YouTube'a geçiş videonun içindeki YouTube logosundan.
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerFrame(controller: _controller, title: 'Maç Yayını');
+    return YoutubePlayerFrame(
+      controller: _controller,
+      title: 'Maç Yayını',
+      youtubeUrl: widget.url,
+    );
   }
 }
 
@@ -219,14 +225,26 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
   // Bitiş YouTube'a bırakılmaz (endSeconds yok): video sonunda YouTube öneri
   // şeridi gösterir ve gömülü oynatıcıda kapatılamaz. Bitiş saniyesinde
   // video duraklatılır, üstü "Tekrar İzle" katmanıyla örtülür.
+  //
+  // YouTube oynatma başlarken 2-3 sn başlığı ve ortada ‖ işaretini gösterir
+  // (gömülü oynatıcıda kapatılamaz). Kesit [_lead] sn önceden başlar ve bu
+  // süre siyah kapakla örtülür; kapak kalkınca kesitin başı ekrandadır.
+  static const _lead = 3;
+  static const _coverFor = Duration(milliseconds: 2700);
+
+  late final int _from = math.max(0, widget.startSec - _lead);
+
   late final _controller = YoutubePlayerController.fromVideoId(
     videoId: widget.videoId,
     autoPlay: true,
-    startSeconds: widget.startSec.toDouble(),
+    startSeconds: _from.toDouble(),
     params: const YoutubePlayerParams(
       // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
       // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
       showFullscreenButton: kIsWeb,
+      // YouTube'un çizelgesi tüm yayını (2 saat) gösterip kesitin dışına
+      // atlatıyor; yerine yalnız kesiti gösteren _ClipControls.
+      showControls: false,
       strictRelatedVideos: true,
       origin: youtubePlayerOrigin,
     ),
@@ -235,6 +253,8 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
   StreamSubscription<YoutubeVideoState>? _position;
   StreamSubscription<YoutubePlayerValue>? _state;
   bool _ended = false;
+  bool _covered = true;
+  Timer? _uncover;
 
   @override
   void initState() {
@@ -245,7 +265,17 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     });
     _state = _controller.stream.listen((v) {
       if (!_ended && v.playerState == PlayerState.ended) _finish();
+      // Oynatma başlayınca YouTube'un açılış yazıları sönene kadar kapak.
+      if (_covered && _uncover == null && v.playerState == PlayerState.playing) {
+        _uncover = Timer(_coverFor, _removeCover);
+      }
     });
+    // Oynatma hiç başlamazsa (otomatik oynatma engeli) kapak takılı kalmasın.
+    Timer(const Duration(seconds: 8), _removeCover);
+  }
+
+  void _removeCover() {
+    if (mounted && _covered) setState(() => _covered = false);
   }
 
   void _finish() {
@@ -257,6 +287,7 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
   void dispose() {
     _position?.cancel();
     _state?.cancel();
+    _uncover?.cancel();
     _controller.close();
     super.dispose();
   }
@@ -275,6 +306,13 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     return YoutubePlayerFrame(
       controller: _controller,
       title: widget.title,
+      controls: _ClipControls(
+        controller: _controller,
+        startSec: widget.startSec,
+        endSec: widget.endSec,
+        ended: _ended,
+        onReplay: _replay,
+      ),
       actions: [
         IconButton(
           tooltip: 'Tekrar izle',
@@ -310,6 +348,20 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
                 ),
               ),
             )
+          : _covered
+          ? const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white54,
+                  ),
+                ),
+              ),
+            )
           : null,
     );
   }
@@ -328,7 +380,17 @@ class YoutubePlayerFrame extends StatefulWidget {
     this.actions = const [],
     this.overlay,
     this.footer,
+    this.youtubeUrl,
+    this.controls,
   });
+
+  /// YouTube düğmeleri kapalıyken oynatıcının üstüne çizilen kendi
+  /// düğmelerimiz (tam ekranda da görünür).
+  final Widget? controls;
+
+  /// Video uygulama içinde oynatılamıyorsa (kanal gömmeye izin vermiyor,
+  /// video yok) ortada açıklama ve "YouTube'da izle" düğmesi çıkar.
+  final String? youtubeUrl;
 
   final YoutubePlayerController controller;
   final String title;
@@ -342,6 +404,47 @@ class YoutubePlayerFrame extends StatefulWidget {
 
 class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   bool _full = false;
+
+  /// Oynatıcı hatası (gömme izni yok, video bulunamadı).
+  YoutubeError _error = YoutubeError.none;
+  StreamSubscription<YoutubePlayerValue>? _errorSub;
+
+  /// Oynatıcı her zaman hata bildirmiyor (yalnız kapak görseli kalıyor):
+  /// açılırken YouTube'a videonun gömülebilir olup olmadığı sorulur.
+  Future<void> _checkEmbeddable() async {
+    final url = (widget.youtubeUrl ?? '').trim();
+    if (url.isEmpty) return;
+    try {
+      final res = await http
+          .get(
+            Uri.https('www.youtube.com', '/oembed', {
+              'url': url,
+              'format': 'json',
+            }),
+          )
+          .timeout(const Duration(seconds: 6));
+      if (!mounted || _error != YoutubeError.none) return;
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        setState(() => _error = YoutubeError.notEmbeddable);
+      } else if (res.statusCode == 404) {
+        setState(() => _error = YoutubeError.videoNotFound);
+      }
+    } catch (_) {
+      // Sorulamazsa oynatıcının kendi hatası beklenir.
+    }
+  }
+
+  Future<void> _openExternally() async {
+    final uri = Uri.tryParse((widget.youtubeUrl ?? '').trim());
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('YouTube açılamadı.')));
+    }
+  }
+
   bool? _immersive;
 
   /// Tam ekranda uygulamanın ortak (turnuva) bandı gizlenir.
@@ -361,6 +464,10 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   @override
   void initState() {
     super.initState();
+    _errorSub = widget.controller.stream.listen((v) {
+      if (v.error != _error && mounted) setState(() => _error = v.error);
+    });
+    _checkEmbeddable();
     landscapeOnFullscreen(
       widget.controller,
       onChanged: (full) {
@@ -371,6 +478,7 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
 
   @override
   void dispose() {
+    _errorSub?.cancel();
     resetPlayerOrientation();
     LeagueSwitchScope.setBandHidden(_route, false);
     super.dispose();
@@ -401,6 +509,49 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
         if (!didPop && _full) widget.controller.exitFullScreen();
       },
       child: _scaffold(context, fill),
+    );
+  }
+
+  /// Video gömülerek oynatılamıyor: açıklama ve YouTube'a geçiş.
+  Widget _errorCover() {
+    final embed = const {
+      YoutubeError.notEmbeddable,
+      YoutubeError.sameAsNotEmbeddable,
+    }.contains(_error);
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.82),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                embed
+                    ? 'Yayının sahibi bu videonun uygulama içinde '
+                          'oynatılmasına izin vermiyor.'
+                    : 'Video şu an burada oynatılamıyor.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, height: 1.35),
+              ),
+              if ((widget.youtubeUrl ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF0000),
+                  ),
+                  onPressed: _openExternally,
+                  icon: const Icon(Icons.smart_display_rounded),
+                  label: const Text(
+                    "YouTube'da izle",
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -449,14 +600,19 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
                             controller: widget.controller,
                             // Tam ekranda oynatıcı sayfanın üstündeki ayrı
                             // katmanda çizilir; çıkış düğmesi de oraya.
-                            controlsBuilder: (context, isFullscreen) =>
-                                isFullscreen
-                                ? _FullscreenExit(
+                            controlsBuilder: (context, isFullscreen) => Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (widget.controls != null) widget.controls!,
+                                if (isFullscreen)
+                                  _FullscreenExit(
                                     onExit: widget.controller.exitFullScreen,
-                                  )
-                                : const SizedBox.shrink(),
+                                  ),
+                              ],
+                            ),
                           ),
                           if (widget.overlay != null) widget.overlay!,
+                          if (_error != YoutubeError.none) _errorCover(),
                         ],
                       ),
                     ),
@@ -558,6 +714,162 @@ class _FullscreenExitState extends State<_FullscreenExit> {
                     style: TextStyle(color: Colors.white, fontSize: 13.5),
                   ),
                 ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Gol kesitinin kendi düğmeleri: oynat/duraklat, yalnız kesit süresini
+/// gösteren çubuk (kesit içinde ileri/geri sarılır) ve süre. Videoya
+/// dokunmak oynatır/duraklatır; YouTube'a dokunuş gitmez.
+class _ClipControls extends StatefulWidget {
+  const _ClipControls({
+    required this.controller,
+    required this.startSec,
+    required this.endSec,
+    required this.ended,
+    required this.onReplay,
+  });
+
+  final YoutubePlayerController controller;
+  final int startSec;
+  final int endSec;
+  final bool ended;
+  final VoidCallback onReplay;
+
+  @override
+  State<_ClipControls> createState() => _ClipControlsState();
+}
+
+class _ClipControlsState extends State<_ClipControls> {
+  StreamSubscription<YoutubeVideoState>? _posSub;
+  StreamSubscription<YoutubePlayerValue>? _stateSub;
+  double _pos = 0;
+  double? _drag;
+  bool _playing = false;
+
+  double get _len => (widget.endSec - widget.startSec).clamp(1, 36000) * 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _posSub = widget.controller.videoStateStream.listen((v) {
+      final p = (v.position.inMilliseconds / 1000 - widget.startSec).clamp(
+        0.0,
+        _len,
+      );
+      if (mounted && (p - _pos).abs() > 0.05) setState(() => _pos = p);
+    });
+    _stateSub = widget.controller.stream.listen((v) {
+      final playing =
+          v.playerState == PlayerState.playing ||
+          v.playerState == PlayerState.buffering;
+      if (mounted && playing != _playing) setState(() => _playing = playing);
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _stateSub?.cancel();
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (widget.ended) return widget.onReplay();
+    _playing ? widget.controller.pauseVideo() : widget.controller.playVideo();
+  }
+
+  Future<void> _seek(double v) async {
+    setState(() {
+      _pos = v;
+      _drag = null;
+    });
+    await widget.controller.seekTo(
+      seconds: widget.startSec + v,
+      allowSeekAhead: true,
+    );
+    if (!_playing) await widget.controller.playVideo();
+  }
+
+  static String _fmt(double s) {
+    final t = s.round();
+    return '${t ~/ 60}:${(t % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (_drag ?? _pos).clamp(0.0, _len);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggle,
+          child: const SizedBox.expand(),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Color(0xB3000000), Color(0x00000000)],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 14, 12, 2),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: _playing ? 'Duraklat' : 'Oynat',
+                    color: Colors.white,
+                    onPressed: _toggle,
+                    icon: Icon(
+                      widget.ended
+                          ? Icons.replay_rounded
+                          : _playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                    ),
+                  ),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.white30,
+                        thumbColor: Colors.white,
+                        overlayShape: SliderComponentShape.noOverlay,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                      ),
+                      child: Slider(
+                        value: value,
+                        max: _len,
+                        onChanged: (v) => setState(() => _drag = v),
+                        onChangeEnd: _seek,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${_fmt(value)} / ${_fmt(_len)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

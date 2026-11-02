@@ -139,11 +139,17 @@ abstract class IMatchService {
     String? matchTime,
   });
 
+  /// [detailsPending]: olaylar sonradan girilecek ("Maç detayları
+  /// işleniyor...").
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,
     required int awayScore,
+    bool detailsPending = false,
   });
+
+  /// "Maç detayları işleniyor..." ibaresini elle kapatır / açar.
+  Future<void> setDetailsPending(String matchId, bool pending);
 
   Future<void> insertDefaultMatchEvents(String matchId, int duration);
 

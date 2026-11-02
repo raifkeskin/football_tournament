@@ -327,7 +327,7 @@ Future<void> showMatchScheduleDialog(
                   ),
                   // Hakem listesi açıkken hakem "Hakem Ata"dan seçilir.
                   if (!RefereeService.enabledFor(
-                    isAdmin: AppSession.of(context).value.isAdmin,
+                    AppSession.of(context).value,
                   )) ...[
                     const SizedBox(height: 12),
                     TextField(

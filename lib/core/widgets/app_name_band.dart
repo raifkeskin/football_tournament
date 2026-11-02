@@ -799,7 +799,10 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
                   shrinkWrap: true,
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   children: [
-                    for (final l in leagues)
+                    for (final (i, l) in leagues.indexed) ...[
+                      // Kendi turnuvalarının altında herkese açık olanlar.
+                      if (!l.isOwn && (i == 0 || leagues[i - 1].isOwn))
+                        const _LeagueGroupHeader('Diğer turnuvalar'),
                       _LeagueRow(
                         league: l,
                         selected: l.id == current,
@@ -807,6 +810,7 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
                         // Seçince liste kapanır, turnuva değişir.
                         onTap: () => Navigator.pop(context, l.id),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -814,6 +818,32 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LeagueGroupHeader extends StatelessWidget {
+  const _LeagueGroupHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: const EdgeInsets.only(top: 8),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFF334155))),
+      ),
+      child: Text(
+        _trUpper(label),
+        style: const TextStyle(
+          color: Color(0xFF94A3B8),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1,
+        ),
+      ),
     );
   }
 }

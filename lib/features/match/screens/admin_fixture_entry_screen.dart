@@ -14,6 +14,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/app_date_picker.dart';
+import 'admin_live_draws_screen.dart';
 import 'fixture_draw_screen.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -60,8 +61,11 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   bool _repeat = false;
   int _repeatCount = 5;
 
-  /// Açık sekme: 0 Turnuva, 1 Eşleşme, 2 Zaman.
+  /// Açık adım: 0 Turnuva, 1 Eşleşme, 2 Zaman.
   int _tab = 0;
+
+  /// Seçili grupta maç var mı; varsa fikstür kurası seçeneği gösterilmez.
+  bool? _groupHasMatches;
 
   bool get _canRepeat => _teams.length == 2;
 
@@ -201,11 +205,17 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       _awayTeamId = null;
       _teams = const [];
       _loadingTeams = true;
+      _groupHasMatches = null;
     });
     try {
-      final teams = await _teamService.watchTeamsByGroup(groupId).first;
+      final res = await Future.wait<Object>([
+        _teamService.watchTeamsByGroup(groupId).first,
+        _sb.from('matches').select('id').eq('group_id', groupId).limit(1),
+      ]);
+      final teams = res[0] as List<Team>;
       if (!mounted || _selectedGroupId != groupId) return;
       setState(() {
+        _groupHasMatches = (res[1] as List).isNotEmpty;
         _teams = teams;
         _loadingTeams = false;
         // İki takım varsa eşleşme bellidir.
@@ -386,26 +396,49 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
 
     return AdminPageScaffold(
       title: 'Fikstür Planlama',
-      // KAYDET altta sabit: form kaydırılırken de görünür.
+      // Adım düğmeleri altta sabit: 1-2. adımda İLERLE, sonda KAYDET.
       bottomBar: _isLoading
           ? null
-          : AdminPrimaryButton(
-              label: 'KAYDET',
-              icon: Icons.check_rounded,
-              onPressed: _saveFixture,
+          : Row(
+              children: [
+                if (_tab > 0) ...[
+                  Expanded(
+                    flex: 2,
+                    child: AdminSecondaryButton(
+                      label: 'GERİ',
+                      onPressed: () => setState(() => _tab--),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  flex: 3,
+                  child: _tab < 2
+                      ? AdminPrimaryButton(
+                          label: 'İLERLE',
+                          icon: Icons.arrow_forward_rounded,
+                          onPressed: _next,
+                        )
+                      : AdminPrimaryButton(
+                          label: 'KAYDET',
+                          icon: Icons.check_rounded,
+                          onPressed: _saveFixture,
+                        ),
+                ),
+              ],
             ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kAdminAccent))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Alanlar sekmelere bölünür; form aşağı doğru uzamaz.
+                // Alanlar üç adıma bölünür; form aşağı doğru uzamaz.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: AdminFormTabs(
+                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 4),
+                  child: AdminFormSteps(
                     labels: const ['Turnuva', 'Eşleşme', 'Zaman'],
-                    selected: _tab,
-                    onChanged: (i) => setState(() => _tab = i),
+                    current: _tab,
+                    onTap: (i) => setState(() => _tab = i),
                   ),
                 ),
                 Expanded(
@@ -501,7 +534,11 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                             },
                           ),
                         ),
-                      if (_tab == 0 && groupChosen)
+                      // Kura: grupta maç yoksa fikstür kurası; canlı
+                      // kuraların yönetimi (iptal / geri alma) yalnız admin.
+                      // Turnuva/sezon/grup seçilmeden ve grupta maç varken
+                      // kura seçenekleri görünmez.
+                      if (_tab == 0 && groupChosen && _groupHasMatches == false)
                         AdminFormSection(
                           title: 'Kura',
                           child: AdminFieldGroup(
@@ -516,6 +553,23 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                                 loading: _loadingTeams,
                                 onTap: _teams.length < 2 ? null : _openDraw,
                               ),
+                              if (session.isAdmin)
+                                AdminSelectRow(
+                                  icon: Icons.casino_rounded,
+                                  label: 'Canlı kuralar',
+                                  value: null,
+                                  placeholder:
+                                      'Planlı, süren ve çekilmiş kuralar',
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      settings: const RouteSettings(
+                                        name: 'AdminLiveDrawsScreen',
+                                      ),
+                                      builder: (_) =>
+                                          const AdminLiveDrawsScreen(),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -809,6 +863,30 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       initialTime: _selectedTime,
     );
     if (picked != null) setState(() => _selectedTime = picked);
+  }
+
+  /// İLERLE: adımın alanları tamamsa sonraki adıma geçer.
+  void _next() {
+    String? missing;
+    if (_tab == 0) {
+      if (_selectedGroupId == null) missing = 'Turnuva, sezon ve grup seçin.';
+    } else {
+      final week = int.tryParse(_weekController.text.trim());
+      if (_homeTeamId == null || _awayTeamId == null) {
+        missing = 'Ev sahibi ve deplasman takımını seçin.';
+      } else if (_homeTeamId == _awayTeamId) {
+        missing = 'Ev sahibi ve deplasman aynı olamaz.';
+      } else if (week == null || week < 1) {
+        missing = 'Lütfen geçerli bir hafta girin.';
+      }
+    }
+    if (missing != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(missing)));
+      return;
+    }
+    setState(() => _tab++);
   }
 
   Future<void> _saveFixture() async {

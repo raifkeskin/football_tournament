@@ -465,7 +465,9 @@ class SupabaseMatchService implements IMatchService {
   /// Bitmiş maçta olay eklenip silinince skor gol olaylarından 0-0'dan
   /// yeniden hesaplanır. Maçta hiç gol olayı yoksa Hızlı Skor Girişi'yle
   /// girilen skor korunur; son gol silindiyse ([goalRemoved]) skor 0-0 olur.
-  /// [row]: home/away_team_id ve home/away_score.
+  /// Detayları işlenen maçta (details_pending) skor gollerden aşağı
+  /// çekilmez; goller skoru tutunca ibare kapanır.
+  /// [row]: home/away_team_id, home/away_score ve details_pending.
   Future<void> _syncFinishedScore(
     String matchId,
     Map<String, dynamic> row, {
@@ -487,9 +489,21 @@ class SupabaseMatchService implements IMatchService {
       if (scorer == homeTeamId) home++;
       if (scorer == awayTeamId) away++;
     }
-    if (goals.isEmpty && !goalRemoved) return;
     final curHome = _readInt(row['home_score'], fallback: 0);
     final curAway = _readInt(row['away_score'], fallback: 0);
+    if (row['details_pending'] == true) {
+      final done = home == curHome && away == curAway;
+      final next = {
+        if (home > curHome) 'home_score': home,
+        if (away > curAway) 'away_score': away,
+        if (done) 'details_pending': false,
+      };
+      if (next.isEmpty) return;
+      await _client.from('matches').update(next).eq('id', matchId);
+      notifyLocalChange(matchId);
+      return;
+    }
+    if (goals.isEmpty && !goalRemoved) return;
     if (curHome == home && curAway == away) return;
     await _client
         .from('matches')
@@ -614,7 +628,10 @@ class SupabaseMatchService implements IMatchService {
     try {
       final rows = await _client
           .from('matches')
-          .select('home_team_id, away_team_id, home_score, away_score, status')
+          .select(
+            'home_team_id, away_team_id, home_score, away_score, status, '
+            'details_pending',
+          )
           .eq('id', matchId)
           .limit(1);
       if (rows.isEmpty) return;
@@ -689,7 +706,8 @@ class SupabaseMatchService implements IMatchService {
         final res = await _client
             .from('matches')
             .select(
-              'home_team_id, away_team_id, home_score, away_score, status',
+              'home_team_id, away_team_id, home_score, away_score, status, '
+              'details_pending',
             )
             .eq('id', event.matchId)
             .limit(1);
@@ -1104,6 +1122,7 @@ class SupabaseMatchService implements IMatchService {
     required String matchId,
     required int homeScore,
     required int awayScore,
+    bool detailsPending = false,
   }) {
     final id = matchId.trim();
     if (id.isEmpty) return Future.value();
@@ -1123,6 +1142,7 @@ class SupabaseMatchService implements IMatchService {
               'away_score': awayScore,
               'is_completed': true,
               'status': 'finished',
+              'details_pending': detailsPending,
             })
             .eq('id', id)
             .select('id');
@@ -1142,6 +1162,17 @@ class SupabaseMatchService implements IMatchService {
       // maç detayı bunları maç durumundan ve sezonun devre süresinden
       // (seasons.match_period_duration) üretir.
     });
+  }
+
+  @override
+  Future<void> setDetailsPending(String matchId, bool pending) async {
+    final rows = await _client
+        .from('matches')
+        .update({'details_pending': pending})
+        .eq('id', matchId)
+        .select('id');
+    if (rows.isEmpty) throw Exception('Bu maçı düzenleme yetkiniz yok.');
+    notifyLocalChange(matchId);
   }
 
   @override

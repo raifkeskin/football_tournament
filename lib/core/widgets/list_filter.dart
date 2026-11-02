@@ -119,7 +119,8 @@ class ListFilterBar extends StatelessWidget {
       children: [
         Row(
           children: [
-            OutlinedButton.icon(
+            ListFilterButton(
+              changed: changed.length,
               onPressed: () async {
                 final r = await showModalBottomSheet<Map<String, String>>(
                   context: context,
@@ -142,45 +143,6 @@ class ListFilterBar extends StatelessWidget {
                 );
                 if (r != null) onChanged(r);
               },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              icon: const Icon(Icons.tune_rounded, size: 18),
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Filtre',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  if (changed.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 18),
-                      height: 18,
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: kAdminAccent,
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Text(
-                        '${changed.length}',
-                        style: const TextStyle(
-                          color: Color(0xFF052E1F),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -470,6 +432,62 @@ class _FilterSheetState extends State<_FilterSheet> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Filtre" düğmesi (seçili filtre sayısı rozetle). [ListFilterBar] ve
+/// kendi filtre penceresi olan ekranlar (ör. Ceza Yönetimi) kullanır.
+class ListFilterButton extends StatelessWidget {
+  const ListFilterButton({
+    super.key,
+    required this.onPressed,
+    this.changed = 0,
+  });
+
+  final VoidCallback onPressed;
+
+  /// Varsayılandan farklı filtre sayısı (0: rozet yok).
+  final int changed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      icon: const Icon(Icons.tune_rounded, size: 18),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Filtre', style: TextStyle(fontWeight: FontWeight.w700)),
+          if (changed > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              constraints: const BoxConstraints(minWidth: 18),
+              height: 18,
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: kAdminAccent,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                '$changed',
+                style: const TextStyle(
+                  color: Color(0xFF052E1F),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

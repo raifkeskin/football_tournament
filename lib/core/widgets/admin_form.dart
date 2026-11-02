@@ -201,6 +201,114 @@ class AdminFormTabs extends StatelessWidget {
   }
 }
 
+/// Adım adım form göstergesi: numaralı daireler ince çizgilerle bağlı,
+/// tamamlanan adım tikli, açık adım vurgulu. Geçilmiş adıma dokununca dönülür.
+class AdminFormSteps extends StatelessWidget {
+  const AdminFormSteps({
+    super.key,
+    required this.labels,
+    required this.current,
+    this.onTap,
+  });
+
+  final List<String> labels;
+  final int current;
+
+  /// Yalnız geçilmiş adımlar için çağrılır.
+  final ValueChanged<int>? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget dot(int i) {
+      final done = i < current;
+      final active = i == current;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: done && onTap != null ? () => onTap!(i) : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: done || active ? kAdminAccent : const Color(0xFF1E293B),
+                border: Border.all(
+                  color: done || active
+                      ? kAdminAccent
+                      : Colors.white.withValues(alpha: 0.18),
+                  width: 1.5,
+                ),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: kAdminAccent.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: done
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 17,
+                      color: Colors.white,
+                    )
+                  : Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        color: active ? Colors.white : kAdminMuted,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              labels[i],
+              maxLines: 1,
+              style: TextStyle(
+                color: active
+                    ? Colors.white
+                    : done
+                    ? Colors.white70
+                    : kAdminMuted,
+                fontSize: 12,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget line(int i) => Expanded(
+      child: Container(
+        height: 2,
+        margin: const EdgeInsets.only(bottom: 22, left: 6, right: 6),
+        decoration: BoxDecoration(
+          color: i < current
+              ? kAdminAccent
+              : Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
+    );
+
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          dot(i),
+          if (i < labels.length - 1) line(i),
+        ],
+      ],
+    );
+  }
+}
+
 /// Popup'ın sağ üst köşesindeki kapatma (X) düğmesi. Popuplarda VAZGEÇ
 /// düğmesi yerine bu kullanılır.
 class AdminDialogCloseButton extends StatelessWidget {

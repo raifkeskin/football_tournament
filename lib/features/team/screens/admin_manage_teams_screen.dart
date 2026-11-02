@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/panel_scope.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -14,6 +15,8 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/team_crest.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/utils/team_colors.dart';
+import '../../share/match_poster_designs.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'team_squad_screen.dart';
 import '../../../core/utils/instagram_handle.dart';
@@ -573,6 +576,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     String? secondColor = (existing?['second_color'] ?? '').toString().trim();
     if (firstColor.isEmpty) firstColor = null;
     if (secondColor.isEmpty) secondColor = null;
+    String? jerseyStyle = (existing?['jersey_style'] ?? '').toString().trim();
+    if (jerseyStyle.isEmpty) jerseyStyle = null;
     XFile? selectedLogo;
     var removeLogo = false;
     var saving = false;
@@ -641,6 +646,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           'founded_year': ?foundedYear,
           'first_color': firstColor,
           'second_color': secondColor,
+          'jersey_style': jerseyStyle,
           if (showInstagram) 'instagram_url': instagram,
         };
 
@@ -1067,6 +1073,49 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                     onClear: () =>
                                         setSheetState(() => secondColor = null),
                                   ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        // Forma tipi yeni maç afişleriyle birlikte açılır.
+                        if (tab == 1 &&
+                            (showInstagram ||
+                                AppSettings.matchPosterDesignsEnabled.value))
+                          AdminFormSection(
+                            title: 'Forma Tipi',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text(
+                                  'Maç afişlerinde formanız bu desenle çizilir; '
+                                  'renkler yukarıdaki iki renkten gelir.',
+                                  style: TextStyle(
+                                    color: kAdminMuted,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    for (final js in JerseyStyle.values) ...[
+                                      if (js != JerseyStyle.values.first)
+                                        const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _JerseyStyleTile(
+                                          style: js,
+                                          first: firstColor,
+                                          second: secondColor,
+                                          selected:
+                                              JerseyStyle.of(jerseyStyle) == js,
+                                          onTap: saving
+                                              ? null
+                                              : () => setSheetState(
+                                                  () => jerseyStyle = js.key,
+                                                ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),
@@ -1955,6 +2004,67 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Takım formunda forma deseni seçeneği: takımın renkleriyle forma.
+class _JerseyStyleTile extends StatelessWidget {
+  const _JerseyStyleTile({
+    required this.style,
+    required this.first,
+    required this.second,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final JerseyStyle style;
+  final String? first;
+  final String? second;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? kAdminAccent.withValues(alpha: 0.16)
+          : Colors.white.withValues(alpha: 0.04),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: selected ? kAdminAccent : Colors.white.withValues(alpha: 0.14),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+          child: Column(
+            children: [
+              JerseyArt(
+                width: 64,
+                first: parseHexColor(first) ?? const Color(0xFF10B981),
+                second: parseHexColor(second) ?? Colors.white,
+                style: style,
+                label: '',
+                number: '',
+              ),
+              const SizedBox(height: 6),
+              Text(
+                style.label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

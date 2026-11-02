@@ -10,7 +10,6 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_name_band.dart';
-import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
@@ -110,7 +109,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _loadCaptainHint();
+    _loadBoxesOpen();
     SeasonMatchSettings.of(widget.match.seasonId).then((s) {
       if (mounted && s.aiEsame != _aiEsame) {
         setState(() => _aiEsame = s.aiEsame);
@@ -265,8 +264,6 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   }
 
   Future<void> _loadVerified() async {
-    // Özellik gizliyken (ve sezon istemiyorsa) tik gösterilmez.
-    if (!_requireId && !IdentityAccess.visibleIn(context)) return;
     try {
       final v = await IdentityService.verifiedAmong(_players.map((p) => p.id));
       if (mounted) setState(() => _verified = v);
@@ -655,20 +652,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       await _showQuotaDialog(issues);
       return false;
     }
-    // Kaptan seçilmeden kaydedilmez: uyarı pazubant seçimine götürür.
-    if (close && _starters.isNotEmpty && _captainId == null) {
-      final pick = await showAdminConfirmDialog(
-        context: context,
-        title: 'Kaptan seçilmedi',
-        message: "Kaydetmeden önce İlk 11'den takım kaptanını seçin.",
-        confirmLabel: 'KAPTAN SEÇ',
-        destructive: false,
-        icon: Icons.shield_outlined,
-      );
-      if (!pick || !mounted) return false;
-      await _pickCaptain();
-      if (_captainId == null || !mounted) return false;
-    }
+    // Kaptan isteğe bağlı: hızlı girişte sonradan pazubant düğmesiyle seçilir.
     final ids = [..._starters, ..._subs];
     final notVerified = ids.where(_unverified).toList();
     if (notVerified.isNotEmpty) {
@@ -977,7 +961,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                 onPressed: _isSaving ? null : _readFromPaper,
                 icon: const Icon(Icons.document_scanner_outlined, size: 18),
                 label: const Text(
-                  'Kağıttan oku',
+                  'Kağıttan Okut',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
@@ -1006,23 +990,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                         child: Column(
                           children: [
                             _topLine(),
-                            _boxes(),
+                            _boxesOpen ? _boxes() : _boxSummary(),
                             _tabs(),
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(14, 0, 14, 4),
-                              child: Text.rich(
-                                TextSpan(
-                                  text: 'Sürükleyin ya da düğmeye dokunun · ',
-                                  children: [
-                                    TextSpan(
-                                      text: '✎ numarayı değiştirin',
-                                      style: TextStyle(color: _gold),
-                                    ),
-                                  ],
-                                ),
-                                style: TextStyle(color: _mid, fontSize: 11),
-                              ),
-                            ),
                             Expanded(child: _squadList(keyboard)),
                             if (keyboard == 0) _footer(),
                           ],
@@ -1054,72 +1023,30 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     return m < 1 || m > 12 ? ymd : '$d ${_months[m - 1]}';
   }
 
-  static const _captainHintKey = 'esame_captain_hint_hidden';
+  static const _boxesOpenKey = 'esame_boxes_open';
 
-  /// Kaptan ipucu bir kez kapatılınca bu cihazda bir daha gösterilmez.
-  bool _showCaptainHint = false;
+  /// İlk 11 / Yedekler kutuları açık mı. Kapalıyken tek satır sayaç
+  /// kutuları (sürükle-bırak hedefi); seçim bu cihazda hatırlanır.
+  bool _boxesOpen = true;
 
-  Future<void> _loadCaptainHint() async {
+  Future<void> _loadBoxesOpen() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final hidden = prefs.getBool(_captainHintKey) ?? false;
-      if (mounted && !hidden) setState(() => _showCaptainHint = true);
+      final open = prefs.getBool(_boxesOpenKey) ?? true;
+      if (mounted && open != _boxesOpen) setState(() => _boxesOpen = open);
     } catch (_) {}
   }
 
-  Future<void> _hideCaptainHint() async {
-    setState(() => _showCaptainHint = false);
+  Future<void> _setBoxesOpen(bool open) async {
+    setState(() => _boxesOpen = open);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_captainHintKey, true);
+      await prefs.setBool(_boxesOpenKey, open);
     } catch (_) {}
   }
 
-  Widget _captainHint() => Container(
-    margin: const EdgeInsets.only(bottom: 6),
-    padding: const EdgeInsets.fromLTRB(9, 6, 2, 6),
-    decoration: BoxDecoration(
-      color: _green.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(9),
-      border: Border.all(color: _green.withValues(alpha: 0.5)),
-    ),
-    child: Row(
-      children: [
-        _tag('C', _green),
-        const SizedBox(width: 7),
-        const Expanded(
-          child: Text.rich(
-            TextSpan(
-              text: 'Kaptanı seçmek için ',
-              children: [
-                TextSpan(
-                  text: 'kırmızı-beyaz pazubant',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                TextSpan(text: ' düğmesine dokunun.'),
-              ],
-            ),
-            style: TextStyle(
-              color: Color(0xFFA7F3D0),
-              fontSize: 11.5,
-              height: 1.3,
-            ),
-          ),
-        ),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _hideCaptainHint,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: Icon(Icons.close_rounded, size: 16, color: _mid),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  /// Kontenjan paneli (yalnız sezonda maç günü sınırı varsa), kaptan ipucu
-  /// ve diziliş / otomatik numara düğmeleri.
+  /// Kontenjan paneli (yalnız sezonda maç günü sınırı varsa), kaptan,
+  /// diziliş ve otomatik numara düğmeleri.
   Widget _topLine() {
     Widget? quota;
     if (_ageRules.hasMatchLimits) {
@@ -1248,7 +1175,6 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         children: [
           if (quota != null)
             Padding(padding: const EdgeInsets.only(bottom: 6), child: quota),
-          if (_showCaptainHint) _captainHint(),
           Row(
             children: [
               _captainButton(),
@@ -1330,23 +1256,35 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       _toast("Önce İlk 11'e oyuncu ekleyin.");
       return;
     }
-    final picked = await showModalBottomSheet<String>(
+    // Tam ekran: İlk 11'in tamamı kaydırmadan sığar (satır yüksekliği
+    // ekrana göre).
+    final picked = await showGeneralDialog<String>(
       context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
+      barrierDismissible: false,
+      pageBuilder: (ctx, _, _) => _captainPage(ctx),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _captainId = picked;
+      _dirty = true;
+    });
+  }
+
+  /// Kutular kapalıyken: İlk 11 / Yedek / Seçilmedi sayaçları. Her biri
+  /// sürükle-bırak hedefi (oyuncu üstüne bırakılınca o listeye geçer);
+  /// dokununca kutular açılır.
+  Widget _captainPage(BuildContext ctx) {
+    final ids = [
+      for (final id in _starters)
+        if (_byId[id] != null) id,
+    ];
+    return Scaffold(
       backgroundColor: _bg,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(ctx).size.height * 0.75,
-        ),
+      body: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
               child: Row(
                 children: [
                   _armband(size: 18),
@@ -1356,72 +1294,235 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                       'Kaptanı Seçin',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 17,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
+                  IconButton(
+                    tooltip: 'Kapat',
+                    color: Colors.white70,
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
                 ],
               ),
             ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                children: [
-                  for (final id in _starters)
-                    if (_byId[id] != null)
-                      ListTile(
-                        onTap: () => Navigator.pop(ctx, id),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        tileColor: id == _captainId
-                            ? _green.withValues(alpha: 0.12)
-                            : null,
-                        leading: SizedBox(
-                          width: 30,
-                          child: Text(
-                            _jersey[id]?.text.trim() ?? '',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: _mid,
-                              fontWeight: FontWeight.w800,
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final rowH = ids.isEmpty
+                      ? 48.0
+                      : ((c.maxHeight - 16) / ids.length - 4).clamp(40.0, 60.0);
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                    children: [
+                      for (final id in ids)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Material(
+                            color: id == _captainId
+                                ? _green.withValues(alpha: 0.16)
+                                : _card,
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => Navigator.pop(ctx, id),
+                              child: SizedBox(
+                                height: rowH,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      child: Text(
+                                        _jersey[id]?.text.trim() ?? '',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: _gold,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        _byId[id]!.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    if (id == _captainId)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 12,
+                                        ),
+                                        child: _armband(size: 16),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                        title: Text(
-                          _byId[id]!.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        trailing: id == _captainId ? _armband(size: 16) : null,
-                      ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
     );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _captainId = picked;
-      _dirty = true;
-    });
+  }
+
+  Widget _boxSummary() {
+    Widget tile(String label, String value, Color color, _Box box) {
+      return Expanded(
+        child: DragTarget<String>(
+          onWillAcceptWithDetails: (d) =>
+              box == _Box.list ? _selected(d.data) : true,
+          onAcceptWithDetails: (d) => _place(d.data, box),
+          builder: (context, cand, _) {
+            final hover = cand.isNotEmpty;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _setBoxesOpen(true),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: hover ? 0.3 : 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: color.withValues(alpha: hover ? 1 : 0.5),
+                    width: hover ? 2 : 1,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      value,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                tile(
+                  'İlk 11',
+                  '${_starters.length}/$_startingLimit',
+                  _green,
+                  _Box.starters,
+                ),
+                const SizedBox(width: 6),
+                tile('Yedek', '${_subs.length}/$_subLimit', _blue, _Box.subs),
+                const SizedBox(width: 6),
+                tile(
+                  'Seçilmedi',
+                  '${_remaining.length}',
+                  const Color(0xFFCBD5E1),
+                  _Box.list,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          _listToggle(open: false),
+        ],
+      ),
+    );
+  }
+
+  /// Kutuların altında ince, tam genişlik çubuk: "Listeyi Aç / Kapat".
+  Widget _listToggle({required bool open}) {
+    return Material(
+      color: _card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(9),
+        side: const BorderSide(color: Color(0xFF334155)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: () => _setBoxesOpen(!open),
+        child: SizedBox(
+          height: 30,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                open ? 'Listeyi Kapat' : 'Listeyi Aç',
+                style: const TextStyle(
+                  color: _mid,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                open
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: _mid,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _boxes() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _box(_Box.starters)),
-          const SizedBox(width: 6),
-          Expanded(child: _box(_Box.subs)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _box(_Box.starters)),
+              const SizedBox(width: 6),
+              Expanded(child: _box(_Box.subs)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _listToggle(open: true),
         ],
       ),
     );
@@ -1843,10 +1944,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   Widget _squadRow(PlayerModel p) {
     final pen = _penalized[p.id];
     final noId = pen == null && _unverified(p.id);
-    final sub = (p.position ?? '').trim();
     final editing = p.id == _editingId;
     final row = Container(
-      height: 38,
+      constraints: const BoxConstraints(minHeight: 40),
       margin: const EdgeInsets.only(bottom: 3),
       padding: const EdgeInsets.only(right: 6),
       decoration: BoxDecoration(
@@ -1886,21 +1986,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: p.name,
-                children: [
-                  if (sub.isNotEmpty)
-                    TextSpan(
-                      text: '  $sub',
-                      style: const TextStyle(
-                        color: _mid,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                ],
-              ),
+            // Mevki gruplarda / sekmelerde; ada tüm alan kalsın.
+            child: Text(
+              p.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1948,10 +2036,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             )
           else ...[
             if (_starters.length < _startingLimit)
-              _addButton("İlk 11", _green, () => _place(p.id, _Box.starters)),
+              _addButton('11', _green, () => _place(p.id, _Box.starters)),
             if (_subs.length < _subLimit) ...[
               const SizedBox(width: 5),
-              _addButton('Yedek', _blue, () => _place(p.id, _Box.subs)),
+              _addButton('Ydk', _blue, () => _place(p.id, _Box.subs)),
             ],
           ],
         ],
@@ -1974,8 +2062,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         foregroundColor: c,
         backgroundColor: c.withValues(alpha: 0.1),
         side: BorderSide(color: c.withValues(alpha: 0.6)),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        minimumSize: const Size(0, 28),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(36, 28),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
@@ -1988,18 +2076,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
   Widget _footer() {
     final bad = _badJersey;
-    final missing = bad
-        .where((id) => (_jersey[id]?.text.trim() ?? '').isEmpty)
-        .length;
-    final dup = bad.length > missing;
     final ready = _starters.length == _startingLimit && bad.isEmpty;
-    final label = ready
-        ? 'KAYDET'
-        : missing > 0
-        ? "KAYDET · $missing oyuncunun forma no'su eksik"
-        : dup
-        ? 'KAYDET · aynı forma no iki kez'
-        : 'KAYDET · İlk 11 ${_starters.length}/$_startingLimit';
+    // Yazı hep KAYDET; eksik varsa renk turuncu, ayrıntı kaydederken.
+    const label = 'KAYDET';
     return SafeArea(
       top: false,
       child: Padding(

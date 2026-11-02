@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../match/insights/rating_settings_screen.dart';
+import '../../match/insights/match_insights.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -549,7 +552,7 @@ class SeasonManagementScreen extends StatelessWidget {
                               (v) => setSheetState(() => trackGoalMinutes = v),
                             ),
                             if (RefereeService.enabledFor(
-                              isAdmin: AppSession.of(context).value.isAdmin,
+                              AppSession.of(context).value,
                             ))
                               switchRow(
                                 Icons.flag_outlined,
@@ -700,6 +703,41 @@ class SeasonManagementScreen extends StatelessWidget {
                               (v) => setSheetState(() => isDefault = v),
                             ),
                           ],
+                        ),
+                      ),
+                    // Futbolcu puanlama (yeni özellik: admin ve kurucu başkan).
+                    if (tab == 0 && isEdit && matchInsightsVisible(context))
+                      AdminFormSection(
+                        title: 'Futbolcu Puanlama',
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          leading: const Icon(
+                            Icons.star_half_rounded,
+                            color: Colors.white70,
+                          ),
+                          title: const Text(
+                            'Puanlama kuralları',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Maç kadrosunda futbolcu puanı, kurallar ve '
+                            'Olay ekle puanları',
+                            style: TextStyle(color: Colors.white60),
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.white60,
+                          ),
+                          onTap: () => RatingSettingsScreen.open(
+                            context,
+                            season.id,
+                            season.name,
+                          ),
                         ),
                       ),
                   ],

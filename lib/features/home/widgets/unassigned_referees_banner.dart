@@ -65,7 +65,7 @@ class _UnassignedRefereesBannerState extends State<UnassignedRefereesBanner> {
     final s = AppSession.of(context).value;
     final canSee =
         (s.isAdmin || s.isLeagueOwner || s.ownedRegions.isNotEmpty) &&
-        RefereeService.enabledFor(isAdmin: s.isAdmin);
+        RefereeService.enabledFor(s);
     if (canSee != _canSee) {
       _canSee = canSee;
       _load();

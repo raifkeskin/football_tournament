@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/services/app_session.dart';
+import '../../media_credits/match_crew_sheet.dart';
 import '../../media_credits/media_credit.dart';
 import '../../media_credits/media_credit_card.dart';
 import '../../referees/referee_service.dart';
@@ -43,17 +45,38 @@ class _MatchInfoTabState extends State<MatchInfoTab>
   @override
   bool get wantKeepAlive => true;
 
+  /// Maça özel medya ekibi (yoksa turnuvanın varsayılanları).
+  late MatchCrew? _crew = MatchMediaCrew.memory(widget.match.id);
+
   @override
   void initState() {
     super.initState();
     MediaCreditFeed.changes.addListener(_onCreditsChanged);
+    MatchMediaCrew.changes.addListener(_onCrewChanged);
     _loadCredits();
+    _loadCrew();
   }
 
   @override
   void dispose() {
     MediaCreditFeed.changes.removeListener(_onCreditsChanged);
+    MatchMediaCrew.changes.removeListener(_onCrewChanged);
     super.dispose();
+  }
+
+  void _onCrewChanged() {
+    if (MatchMediaCrew.changes.value == widget.match.id) {
+      setState(() => _crew = MatchMediaCrew.memory(widget.match.id));
+    }
+  }
+
+  Future<void> _loadCrew() async {
+    try {
+      final c = await MatchMediaCrew.fetch(widget.match.id);
+      if (mounted) setState(() => _crew = c);
+    } catch (_) {
+      // Ağ hatasında varsayılanlar görünür.
+    }
   }
 
   void _onCreditsChanged() {
@@ -76,8 +99,8 @@ class _MatchInfoTabState extends State<MatchInfoTab>
     }
   }
 
-  MediaCredit? _credit(MediaCreditKind kind) =>
-      _credits?.where((c) => c.kind == kind && c.isActive).firstOrNull;
+  List<MediaCredit> _crewOf(MediaCreditKind kind) =>
+      MatchMediaCrew.resolve(_credits, _crew, kind);
 
   String? get _when {
     final m = widget.match;
@@ -97,16 +120,22 @@ class _MatchInfoTabState extends State<MatchInfoTab>
     final when = _when;
     final pitch = (widget.pitchName ?? widget.match.pitchName ?? '').trim();
     final referee = (widget.match.refereeName ?? '').trim();
-    final broadcast = _credit(MediaCreditKind.broadcast);
-    final photo = _credit(MediaCreditKind.photo);
+    final broadcasts = _crewOf(MediaCreditKind.broadcast);
+    final photos = _crewOf(MediaCreditKind.photo);
     final m = widget.match;
+    // Admin, kurucu başkan ve bölge sorumlusu maçın ekibini düzenler
+    // (sunucu maçın bölgesini ayrıca denetler).
+    final session = AppSession.of(context).value;
+    final canEditCrew =
+        session.canManageLeague(m.leagueId) ||
+        session.regionsInSeason(m.seasonId).isNotEmpty;
     final hasReferees =
         referee.isNotEmpty ||
         m.refereeId != null ||
         m.assistantReferee1Id != null ||
         m.assistantReferee2Id != null;
-    final hasMedia = broadcast != null || photo != null;
-    final hasCrew = hasReferees || hasMedia;
+    final hasMedia = broadcasts.isNotEmpty || photos.isNotEmpty;
+    final hasCrew = hasReferees || hasMedia || canEditCrew;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
@@ -163,16 +192,32 @@ class _MatchInfoTabState extends State<MatchInfoTab>
                 ),
         ),
         if (hasCrew) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(2, 18, 0, 8),
-            child: Text(
-              'MAÇIN EKİBİ',
-              style: TextStyle(
-                color: _muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.9,
-              ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(2, canEditCrew ? 8 : 18, 0, 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'MAÇIN EKİBİ',
+                    style: TextStyle(
+                      color: _muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.9,
+                    ),
+                  ),
+                ),
+                if (canEditCrew)
+                  TextButton.icon(
+                    onPressed: () => showMatchCrewSheet(context, m),
+                    icon: const Icon(Icons.edit_rounded, size: 16),
+                    label: const Text('Düzenle'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _accent,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+              ],
             ),
           ),
           if (hasReferees) _RefereesBox(match: m),
@@ -182,29 +227,29 @@ class _MatchInfoTabState extends State<MatchInfoTab>
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               child: Column(
                 children: [
-                  if (broadcast != null)
+                  for (final b in broadcasts)
                     _CrewRow(
-                      name: broadcast.name,
+                      name: b.name,
                       badge: _CrewBadge(
                         color: const Color(0x2EEF4444),
                         icon: Icons.videocam_rounded,
                         iconColor: const Color(0xFFF87171),
-                        imageUrl: broadcast.avatarUrl,
+                        imageUrl: b.avatarUrl,
                       ),
                       role: 'Yayıncı',
-                      onTap: () => showMediaCreditCard(context, broadcast),
+                      onTap: () => showMediaCreditCard(context, b),
                     ),
-                  if (photo != null)
+                  for (final p in photos)
                     _CrewRow(
-                      name: photo.name,
+                      name: p.name,
                       badge: _CrewBadge(
                         color: const Color(0x2E38BDF8),
                         icon: Icons.photo_camera_rounded,
                         iconColor: const Color(0xFF38BDF8),
-                        imageUrl: photo.avatarUrl,
+                        imageUrl: p.avatarUrl,
                       ),
                       role: 'Fotoğrafçı',
-                      onTap: () => showMediaCreditCard(context, photo),
+                      onTap: () => showMediaCreditCard(context, p),
                     ),
                 ],
               ),
