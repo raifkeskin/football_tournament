@@ -21,8 +21,14 @@ Offset pitchSlot({
   if (li == 0) return const Offset(0.5, 0.90);
   final last = outfieldLines;
 
-  // Hat yüksekliği: defans 0.70 → hücum 0.16, eşit aralıklı.
-  final baseY = last <= 1 ? 0.44 : 0.70 - (li - 1) * (0.54 / (last - 1));
+  // Hat yüksekliği: defans 0.70 → hücum 0.16, eşit aralıklı. Dört hatlıda
+  // (4-2-3-1 vb.) hatlar sık: defans kaleye, forvet ileri açılır ki
+  // fotoğraflı oyuncu ile altındaki isim üst üste binmesin.
+  final baseY = last <= 1
+      ? 0.44
+      : last == 4
+      ? const [0.76, 0.555, 0.35, 0.14][li - 1]
+      : 0.70 - (li - 1) * (0.54 / (last - 1));
 
   // Genişlik: kalabalık hatlar çizgiye kadar yayılır.
   final isAttack = li == last && last > 1;
@@ -49,7 +55,7 @@ Offset pitchSlot({
     if (n >= 5 && outer) dy = -0.06;
   } else if (isAttack) {
     // Hücum: kanat forvetleri geride ve açıkta, santrafor en önde.
-    if (n == 3 && outer) dy = 0.07;
+    if (n == 3 && outer) dy = 0.045;
     if (n >= 4 && outer) dy = 0.05;
   } else if (last == 3) {
     // Tek orta saha hattı.
@@ -60,8 +66,10 @@ Offset pitchSlot({
     }
     if (n == 4 && outer) dy = -0.02;
   } else if (li == last - 1) {
-    // Dört hatlı dizilişte forvet arkası hat: kanatlar önde.
+    // Dört hatlı dizilişte forvet arkası hat: kanatlar önde, ortadaki 10
+    // numara forvetin altında kalmasın diye orta sahaya doğru geride.
     if (n >= 3 && outer) dy = -0.03;
+    if (center) dy = 0.05;
   }
   return Offset(x, baseY + dy);
 }

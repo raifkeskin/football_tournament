@@ -756,7 +756,7 @@ class LineupPitchPoster extends StatelessWidget {
                         for (final b in slots) {
                           final dy = (b.dy - a.dy) * c.maxHeight;
                           if (dy > 4 &&
-                              ((b.dx - a.dx) * c.maxWidth).abs() < 64 &&
+                              ((b.dx - a.dx) * c.maxWidth).abs() < 56 &&
                               dy < gap) {
                             gap = dy;
                           }
