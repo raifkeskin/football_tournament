@@ -1599,6 +1599,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             m.status != MatchStatus.finished &&
             m.status != MatchStatus.cancelled;
         final bool canControl = isSuperAdmin && (!needsControl || _hasControl);
+        // Bitmiş/iptal maçta "Geri Al" üst çubukta (sekmelerin üstünde
+        // ayrı satır açılmasın).
+        final bool ended =
+            m.status == MatchStatus.finished ||
+            m.status == MatchStatus.cancelled;
         final bool managesHome =
             session.managesTeam(m.seasonId, m.homeTeamId) ||
             session.teamId == m.homeTeamId;
@@ -1697,6 +1702,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 // Maç afişi (öncesi ve sonucu): admin, turnuva sahibi ve
                 // maçtaki takımların sorumluları.
                 actions: [
+                  if (ended && canControl && canManageLeague && !beforeWindow)
+                    IconButton(
+                      tooltip: 'Son adımı geri al',
+                      icon: const Icon(Icons.undo_rounded, color: Colors.white),
+                      onPressed: () => _runPhaseAction(m, 'undo'),
+                    ),
                   // Maç önü Reels videosu: şimdilik yalnız admin.
                   if (session.isAdmin && m.status == MatchStatus.notStarted)
                     IconButton(
@@ -1946,7 +1957,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                           children: [
                             // Tek satır: solda yönetim rozeti, sağda küçük
                             // devre / Geri Al butonları (akışa yer kalsın).
-                            if (needsControl || (canControl && !beforeWindow))
+                            if (needsControl ||
+                                (canControl && !beforeWindow && !ended))
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
                                   12,
@@ -1973,7 +1985,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           },
                                         ),
                                       ),
-                                    if (canControl && !beforeWindow) ...[
+                                    if (canControl &&
+                                        !beforeWindow &&
+                                        !ended) ...[
                                       const SizedBox(width: 8),
                                       Flexible(
                                         child: FittedBox(
