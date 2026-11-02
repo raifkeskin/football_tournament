@@ -3161,6 +3161,29 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         await _imageUploadService.deleteImageByUrl(oldPhoto);
       }
 
+      // Fotoğraf yayın izni olmayan futbolcunun fotoğrafını sunucu gizli
+      // bekletir (players.photo_url boş kalır); sessiz kalmasın.
+      if (uploadedPhotoUrl != null && playerId.isNotEmpty) {
+        final row = await Supabase.instance.client
+            .from('players')
+            .select('photo_url')
+            .eq('id', playerId)
+            .maybeSingle();
+        if ((row?['photo_url'] ?? '').toString().trim().isEmpty && mounted) {
+          await showAdminConfirmDialog(
+            context: context,
+            title: 'Fotoğraf izin bekliyor',
+            message:
+                'Fotoğraf kaydedildi ancak futbolcu fotoğraf yayın iznini '
+                'vermediği için gizli tutuluyor. Futbolcu uygulamada izin '
+                'verdiğinde fotoğraf kendiliğinden görünür.',
+            confirmLabel: 'TAMAM',
+            destructive: false,
+            icon: Icons.lock_outline_rounded,
+          );
+        }
+      }
+
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
