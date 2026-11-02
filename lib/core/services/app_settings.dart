@@ -27,6 +27,7 @@ class AppSettings {
   static const _kMatchInsights = 'match_insights_enabled';
   static const _kRegulations = 'regulations_enabled';
   static const _kLineupCutouts = 'lineup_cutouts_enabled';
+  static const _kLineupInRoster = 'lineup_in_roster_enabled';
   static const _kPhotoStandard = 'photo_standard_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
@@ -108,6 +109,10 @@ class AppSettings {
   /// (admin her zaman görür).
   static final lineupCutoutsEnabled = ValueNotifier<bool>(false);
 
+  /// Maç detayında diziliş Kadro sekmesinin üstünde (Diziliş sekmesi yok)
+  /// herkese açık mı (admin her zaman görür).
+  static final lineupInRosterEnabled = ValueNotifier<bool>(false);
+
   /// Profil fotoğrafı standardı (kadraj kılavuzu + yüz kontrolü uyarısı)
   /// herkese açık mı (admin her zaman görür).
   static final photoStandardEnabled = ValueNotifier<bool>(false);
@@ -175,6 +180,8 @@ class AppSettings {
           regulationsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kLineupCutouts) {
           lineupCutoutsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kLineupInRoster) {
+          lineupInRosterEnabled.value = r['value'] == true;
         } else if (r['key'] == _kPhotoStandard) {
           photoStandardEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {

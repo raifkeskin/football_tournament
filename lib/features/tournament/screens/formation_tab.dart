@@ -373,7 +373,23 @@ class FormationTab extends StatefulWidget {
     this.onShare,
     this.homeColor,
     this.awayColor,
+    this.embedded = false,
+    this.onPlayerTap,
   });
+
+  /// Kadro sekmesine gömülü: kaydırma ve kenar boşluğu dışarıda; ilk 11
+  /// girilmemişse hiçbir şey çizilmez.
+  final bool embedded;
+
+  /// Oyuncuya dokunma (takım, oyuncu, ad, forma no): canlı maçta olay ekleme,
+  /// değilse oyuncu kartı. Verilmezse düzenleyen dokunarak yer değiştirir.
+  final void Function(
+    String teamId,
+    String playerId,
+    String name,
+    String number,
+  )?
+  onPlayerTap;
 
   /// Diziliş afişini paylaşır (takım kimliğiyle); [canShareHome] /
   /// [canShareAway] olana görünür (maç başladıktan sonra da).
@@ -635,211 +651,229 @@ class _FormationTabState extends State<FormationTab>
   Widget build(BuildContext context) {
     super.build(context);
     final teamColor = _selected == 0 ? _accent : const Color(0xFF3B82F6);
+    final children = <Widget>[
+      if (!widget.singleTeam) ...[
+        _TeamSwitch(
+          homeName: shortTeamName(widget.homeName),
+          awayName: shortTeamName(widget.awayName),
+          homeColor: widget.homeColor ?? _accent,
+          awayColor: widget.awayColor ?? _accent,
+          selected: _selected,
+          onChanged: (v) => setState(() {
+            _selected = v;
+            _picked = null;
+          }),
+        ),
+        const SizedBox(height: 10),
+      ],
+      MatchInsightsBuilder(
+        match: widget.match,
+        builder: (context, insights) => StreamBuilder<List<PlayerModel>>(
+          key: ValueKey('players_$_teamId'),
+          stream: ServiceLocator.teamService.watchPlayers(
+            teamId: _teamId,
+            tournamentId: widget.match.seasonId,
+            matchId: widget.match.id,
+          ),
+          builder: (context, playerSnap) {
+            final players = {
+              for (final p in playerSnap.data ?? const <PlayerModel>[]) p.id: p,
+            };
+            return StreamBuilder<List<MatchRosterModel>>(
+              key: ValueKey('roster_$_teamId'),
+              stream: ServiceLocator.matchService.watchMatchRosters(
+                widget.match.id,
+                _teamId,
+              ),
+              builder: (context, rosterSnap) {
+                if (!rosterSnap.hasData) {
+                  return const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final starterRosters = rosterSnap.data!
+                    .where((r) => r.isStarting)
+                    .toList();
+                final layout = _computeLayout(
+                  starterRosters,
+                  players,
+                  formation: _chosen[_selected] ?? _savedFormation,
+                  order: _order[_selected],
+                );
+                if (layout == null) {
+                  if (widget.embedded) return const SizedBox.shrink();
+                  return const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: Text(
+                        'Henüz ilk 11 girilmemiş.\n'
+                        'Kadrolar sekmesinden esame listesi girildiğinde '
+                        'oyuncular burada sahaya yerleşir.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                  );
+                }
+                final formation = layout.formation;
+                final options = _optionsFor(
+                  layout.outfieldCount,
+                  layout.autoFormation,
+                );
+                final pitchLines = layout.lines;
+                final currentIds = layout.ids;
+                final dirty = _dirty.contains(_selected);
+                _latest[_selected] = (formation, currentIds);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.grid_view_rounded,
+                          color: _midText,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Diziliş',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _FormationPicker(
+                          value: formation,
+                          options: options,
+                          enabled: _canEdit && options.length > 1,
+                          onChanged: _changeFormation,
+                        ),
+                        const Spacer(),
+                        // Gösterim tercihi diziliş afişine de uygulanır.
+                        // Yalnız ikon: yazılarla dar ekranda taşıyordu.
+                        PitchTokenStyleToggle(
+                          compact: true,
+                          showPhoto: insights != null,
+                        ),
+                        if (_canShare && widget.onShare != null)
+                          IconButton(
+                            tooltip: 'Diziliş afişini paylaş',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 34,
+                              minHeight: 34,
+                            ),
+                            icon: const Icon(
+                              Icons.ios_share_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () async {
+                              final teamId = _teamId;
+                              await _flush();
+                              if (!mounted) return;
+                              widget.onShare!(teamId);
+                            },
+                          ),
+                        if (_canEdit) ...[
+                          const SizedBox(width: 8),
+                          _SaveStatus(
+                            dirty: dirty,
+                            saving: _saving,
+                            failed: _saveFailed,
+                            onRetry: () {
+                              setState(() => _saveFailed = false);
+                              _autoSave(_selected);
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    AspectRatio(
+                      // Kaleciye kadar tüm saha telefon ekranına sığar.
+                      aspectRatio: 0.8,
+                      child: ValueListenableBuilder<PitchTokenStyle>(
+                        valueListenable: PitchTokenStylePref.notifier,
+                        builder: (context, style, _) =>
+                            ValueListenableBuilder<Map<String, String>>(
+                              valueListenable: PhotoCutouts.map,
+                              builder: (context, cutouts, _) => _Pitch(
+                                lines: pitchLines,
+                                cutouts: PhotoCutouts.visible(context)
+                                    ? cutouts
+                                    : const {},
+                                teamColor: teamColor,
+                                // Profil yalnız yeni özellik açıkken.
+                                style:
+                                    style == PitchTokenStyle.photo &&
+                                        insights == null
+                                    ? PitchTokenStyle.circle
+                                    : style,
+                                insights: insights,
+                                onSwap: _canEdit
+                                    ? (from, to) => _swap(currentIds, from, to)
+                                    : null,
+                                picked: _picked,
+                                onPick: _canEdit
+                                    ? (id) => _pick(currentIds, id)
+                                    : null,
+                                onTapPlayer: widget.onPlayerTap == null
+                                    ? null
+                                    : (p) => widget.onPlayerTap!(
+                                        _teamId,
+                                        p.id,
+                                        p.name,
+                                        p.number,
+                                      ),
+                              ),
+                            ),
+                      ),
+                    ),
+                    if (_canEdit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          widget.onPlayerTap != null
+                              ? 'Yer değiştirmek için oyuncuyu basılı tutup '
+                                    'diğerinin üzerine bırakın.'
+                              : 'Yer değiştirmek için iki oyuncuya sırayla '
+                                    'dokunun (ya da basılı tutup diğerinin '
+                                    'üzerine bırakın).',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: _midText, fontSize: 11),
+                        ),
+                      ),
+                    if (insights != null)
+                      _SubsInRow(
+                        insights: insights,
+                        bench: rosterSnap.data!
+                            .where((r) => !r.isStarting)
+                            .toList(),
+                        players: players,
+                      ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+      ),
+    ];
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      );
+    }
     return ListView(
       // Üst sekmelere yakın başlar; takım seçimi + gösterim seçimi bir arada.
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-      children: [
-        if (!widget.singleTeam) ...[
-          _TeamSwitch(
-            homeName: shortTeamName(widget.homeName),
-            awayName: shortTeamName(widget.awayName),
-            homeColor: widget.homeColor ?? _accent,
-            awayColor: widget.awayColor ?? _accent,
-            selected: _selected,
-            onChanged: (v) => setState(() {
-              _selected = v;
-              _picked = null;
-            }),
-          ),
-          const SizedBox(height: 10),
-        ],
-        MatchInsightsBuilder(
-          match: widget.match,
-          builder: (context, insights) => StreamBuilder<List<PlayerModel>>(
-            key: ValueKey('players_$_teamId'),
-            stream: ServiceLocator.teamService.watchPlayers(
-              teamId: _teamId,
-              tournamentId: widget.match.seasonId,
-              matchId: widget.match.id,
-            ),
-            builder: (context, playerSnap) {
-              final players = {
-                for (final p in playerSnap.data ?? const <PlayerModel>[])
-                  p.id: p,
-              };
-              return StreamBuilder<List<MatchRosterModel>>(
-                key: ValueKey('roster_$_teamId'),
-                stream: ServiceLocator.matchService.watchMatchRosters(
-                  widget.match.id,
-                  _teamId,
-                ),
-                builder: (context, rosterSnap) {
-                  if (!rosterSnap.hasData) {
-                    return const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final starterRosters = rosterSnap.data!
-                      .where((r) => r.isStarting)
-                      .toList();
-                  final layout = _computeLayout(
-                    starterRosters,
-                    players,
-                    formation: _chosen[_selected] ?? _savedFormation,
-                    order: _order[_selected],
-                  );
-                  if (layout == null) {
-                    return const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(
-                        child: Text(
-                          'Henüz ilk 11 girilmemiş.\n'
-                          'Kadrolar sekmesinden esame listesi girildiğinde '
-                          'oyuncular burada sahaya yerleşir.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      ),
-                    );
-                  }
-                  final formation = layout.formation;
-                  final options = _optionsFor(
-                    layout.outfieldCount,
-                    layout.autoFormation,
-                  );
-                  final pitchLines = layout.lines;
-                  final currentIds = layout.ids;
-                  final dirty = _dirty.contains(_selected);
-                  _latest[_selected] = (formation, currentIds);
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.grid_view_rounded,
-                            color: _midText,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Diziliş',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _FormationPicker(
-                            value: formation,
-                            options: options,
-                            enabled: _canEdit && options.length > 1,
-                            onChanged: _changeFormation,
-                          ),
-                          const Spacer(),
-                          // Gösterim tercihi diziliş afişine de uygulanır.
-                          // Yalnız ikon: yazılarla dar ekranda taşıyordu.
-                          PitchTokenStyleToggle(
-                            compact: true,
-                            showPhoto: insights != null,
-                          ),
-                          if (_canShare && widget.onShare != null)
-                            IconButton(
-                              tooltip: 'Diziliş afişini paylaş',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 34,
-                                minHeight: 34,
-                              ),
-                              icon: const Icon(
-                                Icons.ios_share_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              onPressed: () async {
-                                final teamId = _teamId;
-                                await _flush();
-                                if (!mounted) return;
-                                widget.onShare!(teamId);
-                              },
-                            ),
-                          if (_canEdit) ...[
-                            const SizedBox(width: 8),
-                            _SaveStatus(
-                              dirty: dirty,
-                              saving: _saving,
-                              failed: _saveFailed,
-                              onRetry: () {
-                                setState(() => _saveFailed = false);
-                                _autoSave(_selected);
-                              },
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      AspectRatio(
-                        // Kaleciye kadar tüm saha telefon ekranına sığar.
-                        aspectRatio: 0.8,
-                        child: ValueListenableBuilder<PitchTokenStyle>(
-                          valueListenable: PitchTokenStylePref.notifier,
-                          builder: (context, style, _) =>
-                              ValueListenableBuilder<Map<String, String>>(
-                                valueListenable: PhotoCutouts.map,
-                                builder: (context, cutouts, _) => _Pitch(
-                                  lines: pitchLines,
-                                  cutouts: PhotoCutouts.visible(context)
-                                      ? cutouts
-                                      : const {},
-                                  teamColor: teamColor,
-                                  // Profil yalnız yeni özellik açıkken.
-                                  style:
-                                      style == PitchTokenStyle.photo &&
-                                          insights == null
-                                      ? PitchTokenStyle.circle
-                                      : style,
-                                  insights: insights,
-                                  onSwap: _canEdit
-                                      ? (from, to) =>
-                                            _swap(currentIds, from, to)
-                                      : null,
-                                  picked: _picked,
-                                  onPick: _canEdit
-                                      ? (id) => _pick(currentIds, id)
-                                      : null,
-                                ),
-                              ),
-                        ),
-                      ),
-                      if (_canEdit)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Yer değiştirmek için iki oyuncuya sırayla dokunun '
-                            '(ya da basılı tutup diğerinin üzerine bırakın).',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: _midText, fontSize: 11),
-                          ),
-                        ),
-                      if (insights != null)
-                        _SubsInRow(
-                          insights: insights,
-                          bench: rosterSnap.data!
-                              .where((r) => !r.isStarting)
-                              .toList(),
-                          players: players,
-                        ),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+      children: children,
     );
   }
 }
@@ -1162,6 +1196,24 @@ class _TeamSwitch extends StatelessWidget {
   }
 }
 
+/// Dekupe + ad soyad, aynı dikeyde (yatayda iç içe) duran en yakın iki saha
+/// oyuncusu arasına sığmalı: dekupe boyu buna göre küçülür, yer çok darsa
+/// yazı da küçülür. [outfield]: kaleci hariç oyuncuların piksel konumu.
+({double cutH, bool compact}) _fitTokens(List<Offset> outfield) {
+  var gap = double.infinity;
+  for (final a in outfield) {
+    for (final b in outfield) {
+      final dy = b.dy - a.dy;
+      if (dy > 4 && (b.dx - a.dx).abs() < 56 && dy < gap) gap = dy;
+    }
+  }
+  if (gap == double.infinity) return (cutH: 52, compact: false);
+  const nameH = 27.0, compactH = 23.0;
+  final compact = gap - nameH - 6 < 44;
+  final cutH = (gap - (compact ? compactH : nameH) - 6).clamp(32.0, 52.0);
+  return (cutH: cutH, compact: compact);
+}
+
 class _Pitch extends StatelessWidget {
   const _Pitch({
     required this.lines,
@@ -1172,10 +1224,15 @@ class _Pitch extends StatelessWidget {
     this.onPick,
     this.insights,
     this.cutouts = const {},
+    this.onTapPlayer,
   });
 
   /// Profil görünümünde dekupe fotoğraflar (asıl adres → dekupe adresi).
   final Map<String, String> cutouts;
+
+  /// Verilirse oyuncuya dokunmak bunu çağırır (canlıda olay, değilse oyuncu
+  /// kartı); yer değiştirme o zaman yalnız basılı tutup sürükleyerek.
+  final void Function(_PitchPlayer p)? onTapPlayer;
 
   /// lines[0]: kaleci, sonrakiler defanstan hücuma dizilişin hatları.
   final List<List<_PitchPlayer>> lines;
@@ -1205,6 +1262,19 @@ class _Pitch extends StatelessWidget {
           final children = <Widget>[
             Positioned.fill(child: CustomPaint(painter: _FullPitchPainter())),
           ];
+          final fit = _fitTokens([
+            for (var li = 1; li < lines.length; li++)
+              for (var i = 0; i < lines[li].length; i++)
+                () {
+                  final o = pitchSlot(
+                    li: li,
+                    i: i,
+                    n: lines[li].length,
+                    outfieldLines: n,
+                  );
+                  return Offset(o.dx * c.maxWidth, o.dy * c.maxHeight);
+                }(),
+          ]);
           for (var li = 0; li < lines.length; li++) {
             final line = lines[li];
             for (var i = 0; i < line.length; i++) {
@@ -1225,6 +1295,7 @@ class _Pitch extends StatelessWidget {
                   child: _slot(
                     line[i],
                     li == 0 ? const Color(0xFFF59E0B) : teamColor,
+                    fit,
                   ),
                 ),
               );
@@ -1236,7 +1307,7 @@ class _Pitch extends StatelessWidget {
     );
   }
 
-  Widget _slot(_PitchPlayer p, Color color) {
+  Widget _slot(_PitchPlayer p, Color color, ({double cutH, bool compact}) fit) {
     final swap = onSwap;
     final selected = picked == p.id;
     final token = _PlayerToken(
@@ -1247,9 +1318,19 @@ class _Pitch extends StatelessWidget {
       cutoutUrl: style == PitchTokenStyle.photo
           ? cutouts[(p.photoUrl ?? '').trim()]
           : null,
+      cutoutH: fit.cutH,
+      compact: fit.compact,
     );
-    if (swap == null) return token;
-    final pick = onPick;
+    final tap = onTapPlayer;
+    if (swap == null) {
+      if (tap == null) return token;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => tap(p),
+        child: token,
+      );
+    }
+    final pick = tap == null ? onPick : (String _) => tap(p);
     final body = DragTarget<String>(
       onWillAcceptWithDetails: (d) => d.data != p.id,
       onAcceptWithDetails: (d) => swap(d.data, p.id),
@@ -1289,9 +1370,17 @@ class _PlayerToken extends StatelessWidget {
     this.style = PitchTokenStyle.circle,
     this.marks,
     this.cutoutUrl,
+    this.cutoutH = 52,
+    this.compact = false,
   });
 
   final _PitchPlayer player;
+
+  /// Dekupe boyu: hatlar sıkışınca küçülür (bkz. [_fitTokens]).
+  final double cutoutH;
+
+  /// Sıkışık yerleşim: ad soyad daha küçük yazılır.
+  final bool compact;
 
   /// Varsa oyuncu daire yerine dekupe görünür: ayağının altında takım
   /// renginde zemin halkası, kenarda ince beyaz kontur.
@@ -1346,13 +1435,11 @@ class _PlayerToken extends StatelessWidget {
     );
   }
 
-  static const _cutoutH = 52.0;
-
   Widget _cutout(String url) {
     Widget img({Color? tint}) => Image.network(
       url,
-      width: 42,
-      height: _cutoutH,
+      width: 42 * cutoutH / 52,
+      height: cutoutH,
       fit: BoxFit.contain,
       alignment: Alignment.bottomCenter,
       color: tint,
@@ -1446,41 +1533,108 @@ class _PlayerToken extends StatelessWidget {
   static String _trUpper(String v) =>
       v.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
 
-  List<Widget> _nameLines(String full) {
-    final parts = full.trim().split(RegExp(r'\s+'));
+  TextStyle get _firstStyle => TextStyle(
+    color: Colors.white,
+    fontSize: compact ? 9 : 10.5,
+    fontWeight: FontWeight.w800,
+    height: 1.1,
+    shadows: _shadow,
+  );
+
+  TextStyle get _lastStyle => TextStyle(
+    color: Colors.white.withValues(alpha: 0.92),
+    fontSize: compact ? 9.5 : 11,
+    fontWeight: FontWeight.w400,
+    height: 1.1,
+    letterSpacing: 0.2,
+    shadows: _shadow,
+  );
+
+  /// Ad kalın, soyad ince (büyük harf). Tek kelimelik ad kalın yazılır.
+  (String, String) get _split {
+    final parts = player.name.trim().split(RegExp(r'\s+'));
     final last = parts.length > 1 ? parts.removeLast() : '';
-    final first = parts.join(' ');
+    return (parts.join(' '), last);
+  }
+
+  /// Ad soyad ortalı durur; fotoğraflı gösterimde forma numarası yazının
+  /// solunda küçük yuvarlakta, ortalamayı kaydırmadan (yazı genişliği
+  /// ölçülüp yanına konur).
+  Widget _names(bool withNumber) {
+    final (first, last) = _split;
     Widget line(String t, TextStyle st) => FittedBox(
       fit: BoxFit.scaleDown,
       child: Text(t, maxLines: 1, style: st),
     );
-    return [
-      if (first.isNotEmpty)
-        line(
-          last.isEmpty ? _trUpper(first) : first,
-          TextStyle(
-            color: Colors.white.withValues(alpha: last.isEmpty ? 1 : 0.88),
-            fontSize: last.isEmpty ? 12 : 9.5,
-            fontFamily: last.isEmpty ? 'BarlowCondensed' : null,
-            fontWeight: last.isEmpty ? FontWeight.w800 : FontWeight.w500,
-            height: 1.1,
-            shadows: _shadow,
-          ),
-        ),
-      if (last.isNotEmpty)
-        line(
-          _trUpper(last),
-          const TextStyle(
-            color: Colors.white,
-            fontFamily: 'BarlowCondensed',
-            fontSize: 12.5,
-            fontWeight: FontWeight.w800,
-            height: 1.05,
-            letterSpacing: 0.2,
-            shadows: _shadow,
-          ),
-        ),
-    ];
+    final column = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (first.isNotEmpty) line(first, _firstStyle),
+        if (last.isNotEmpty) line(_trUpper(last), _lastStyle),
+      ],
+    );
+    if (!withNumber || player.number.isEmpty) return column;
+    double width(String t, TextStyle st) {
+      if (t.isEmpty) return 0;
+      final tp = TextPainter(
+        text: TextSpan(text: t, style: st),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      return tp.width;
+    }
+
+    final textW = [
+      width(first, _firstStyle),
+      width(_trUpper(last), _lastStyle),
+    ].reduce((a, b) => a > b ? a : b);
+    final d = compact ? 13.0 : 15.0;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = c.maxWidth.isFinite ? c.maxWidth : textW + 2 * d;
+        final left = ((w - textW) / 2 - d - 2).clamp(0.0, w);
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            SizedBox(
+              width: w,
+              child: Center(child: column),
+            ),
+            Positioned(
+              left: left,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Container(
+                  width: d,
+                  height: d,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white70, width: 0.8),
+                  ),
+                  child: FittedBox(
+                    child: Padding(
+                      padding: const EdgeInsets.all(1.5),
+                      child: Text(
+                        player.number,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 9,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   List<Widget> _eventCorners() {
@@ -1568,7 +1722,7 @@ class _PlayerToken extends StatelessWidget {
       children: [
         SizedBox(
           width: 44,
-          height: cutout != null ? _cutoutH + 4 : 36,
+          height: cutout != null ? cutoutH + 4 : 36,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
@@ -1628,15 +1782,16 @@ class _PlayerToken extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        // Afişteki gibi: küçük ad, altında kalın büyük soyad (gölgeli).
-        ..._nameLines(player.name),
+        // Numara dairede/formada yazmıyorsa (fotoğraf, dekupe) yazının
+        // yanında.
+        _names(cutout != null || style == PitchTokenStyle.photo),
       ],
     );
     // Dekupe daha uzun: ayak hizası dairenin altıyla aynı kalsın diye yukarı.
     return cutout == null
         ? column
         : Transform.translate(
-            offset: const Offset(0, -(_cutoutH + 4 - 36)),
+            offset: Offset(0, -(cutoutH + 4 - 36)),
             child: column,
           );
   }
@@ -1693,4 +1848,174 @@ class _FullPitchPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FullPitchPainter oldDelegate) => false;
+}
+
+/// Kadro sekmesinin VS görünümü: tam saha, ev sahibi üstte (kalesi
+/// yukarıda), deplasman altta. Salt görüntü; oyuncuya dokunma [onPlayerTap].
+/// İki takımın da ilk 11'i yoksa hiçbir şey çizilmez.
+class VsFormationPitch extends StatelessWidget {
+  const VsFormationPitch({
+    super.key,
+    required this.match,
+    this.homeColor,
+    this.awayColor,
+    this.onPlayerTap,
+  });
+
+  final MatchModel match;
+  final Color? homeColor;
+  final Color? awayColor;
+  final void Function(
+    String teamId,
+    String playerId,
+    String name,
+    String number,
+  )?
+  onPlayerTap;
+
+  Widget _team(String teamId, Widget Function(_Layout? layout) builder) {
+    return StreamBuilder<List<PlayerModel>>(
+      stream: ServiceLocator.teamService.watchPlayers(
+        teamId: teamId,
+        tournamentId: match.seasonId,
+        matchId: match.id,
+      ),
+      builder: (context, playerSnap) => StreamBuilder<List<MatchRosterModel>>(
+        stream: ServiceLocator.matchService.watchMatchRosters(match.id, teamId),
+        builder: (context, rosterSnap) {
+          final players = {
+            for (final p in playerSnap.data ?? const <PlayerModel>[]) p.id: p,
+          };
+          final starters = (rosterSnap.data ?? const <MatchRosterModel>[])
+              .where((r) => r.isStarting)
+              .toList();
+          final formation = teamId == match.homeTeamId
+              ? match.homeFormation
+              : match.awayFormation;
+          return builder(
+            _computeLayout(starters, players, formation: formation),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    PitchTokenStylePref.load();
+    PhotoCutouts.ensureLoaded();
+    return MatchInsightsBuilder(
+      match: match,
+      builder: (context, insights) => _team(
+        match.homeTeamId,
+        (home) => _team(match.awayTeamId, (away) {
+          if (home == null && away == null) return const SizedBox.shrink();
+          return AspectRatio(
+            aspectRatio: 0.55,
+            child: ValueListenableBuilder<PitchTokenStyle>(
+              valueListenable: PitchTokenStylePref.notifier,
+              builder: (context, style, _) =>
+                  ValueListenableBuilder<Map<String, String>>(
+                    valueListenable: PhotoCutouts.map,
+                    builder: (context, cutouts, _) => _pitch(
+                      context,
+                      home,
+                      away,
+                      insights,
+                      style == PitchTokenStyle.photo && insights == null
+                          ? PitchTokenStyle.circle
+                          : style,
+                      PhotoCutouts.visible(context) ? cutouts : const {},
+                    ),
+                  ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _pitch(
+    BuildContext context,
+    _Layout? home,
+    _Layout? away,
+    MatchInsights? insights,
+    PitchTokenStyle style,
+    Map<String, String> cutouts,
+  ) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          const tokenW = 78.0;
+          // Yarım sahadaki konum (0-1) tam sahaya: ev sahibi ters çevrilip
+          // üst yarıya, deplasman alt yarıya.
+          Offset place(Offset o, bool top) => top
+              ? Offset(1 - o.dx, 0.03 + (1 - o.dy) * 0.45)
+              : Offset(o.dx, 0.52 + o.dy * 0.45);
+          final children = <Widget>[
+            Positioned.fill(child: CustomPaint(painter: _FullPitchPainter())),
+          ];
+          for (final (layout, top) in [(home, true), (away, false)]) {
+            if (layout == null) continue;
+            final lines = layout.lines;
+            final n = lines.length - 1;
+            Offset slot(int li, int i) => place(
+              pitchSlot(li: li, i: i, n: lines[li].length, outfieldLines: n),
+              top,
+            );
+            // Dekupe boyu her yarı için ayrı sığdırılır.
+            final fit = _fitTokens([
+              for (var li = 1; li < lines.length; li++)
+                for (var i = 0; i < lines[li].length; i++)
+                  () {
+                    final o = slot(li, i);
+                    return Offset(o.dx * c.maxWidth, o.dy * c.maxHeight);
+                  }(),
+            ]);
+            final teamId = top ? match.homeTeamId : match.awayTeamId;
+            final color = top
+                ? (homeColor ?? _accent)
+                : (awayColor ?? const Color(0xFF3B82F6));
+            for (var li = 0; li < lines.length; li++) {
+              for (var i = 0; i < lines[li].length; i++) {
+                final p = lines[li][i];
+                final pos = slot(li, i);
+                final token = _PlayerToken(
+                  player: p,
+                  color: li == 0 ? const Color(0xFFF59E0B) : color,
+                  style: style,
+                  marks: insights?.of(p.id),
+                  cutoutUrl: style == PitchTokenStyle.photo
+                      ? cutouts[(p.photoUrl ?? '').trim()]
+                      : null,
+                  cutoutH: fit.cutH,
+                  compact: fit.compact,
+                );
+                final tap = onPlayerTap;
+                children.add(
+                  Positioned(
+                    left: (pos.dx * c.maxWidth - tokenW / 2).clamp(
+                      0.0,
+                      c.maxWidth - tokenW,
+                    ),
+                    top: pos.dy * c.maxHeight - 26,
+                    width: tokenW,
+                    child: tap == null
+                        ? token
+                        : GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => tap(teamId, p.id, p.name, p.number),
+                            child: token,
+                          ),
+                  ),
+                );
+              }
+            }
+          }
+          return Stack(children: children);
+        },
+      ),
+    );
+  }
 }

@@ -593,6 +593,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   /// Bilgi sekmesi hariç sekme numarası (Detay=0, Medya=2); Bilgi'de -1.
   int get _tab => _tabController.index - 1;
+
+  /// Yeni özellik: diziliş Kadro sekmesinin üstünde, Diziliş sekmesi yok
+  /// (admin her zaman; ekran açılışında bir kez belirlenir).
+  late final bool _lineupInRoster =
+      widget.isAdmin || AppSettings.lineupInRosterEnabled.value;
   ModalRoute<dynamic>? _bandRoute;
 
   /// Gruplu maçta 5. sekme: canlı puan durumu.
@@ -622,7 +627,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     // 0: Bilgi (kâğıt ikonu); ekran Detay ile açılır, dışarıdan gelen
     // sekme numarası Detay=0 sayılır.
     _tabController = TabController(
-      length: _hasStandings ? 6 : 5,
+      length: (_hasStandings ? 6 : 5) - (_lineupInRoster ? 1 : 0),
       vsync: this,
       initialIndex: widget.initialTabIndex + 1,
     );
@@ -1600,6 +1605,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         final bool managesAway =
             session.managesTeam(m.seasonId, m.awayTeamId) ||
             session.teamId == m.awayTeamId;
+        // Diziliş: maç başlamadan yetkililer ve takım sorumlusu; başladıktan
+        // sonra yalnız admin ve kurucu başkan (diğerleri yalnız bakar).
+        final bool canEditHome = _beforeKickoff(m)
+            ? isSuperAdmin || managesHome
+            : canManageLeague;
+        final bool canEditAway = _beforeKickoff(m)
+            ? isSuperAdmin || managesAway
+            : canManageLeague;
 
         return StreamBuilder<List<Team>>(
           stream: _teamsStream,
@@ -2019,7 +2032,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   const infoW = 46.0;
                                   final tabW =
                                       (box.maxWidth - infoW) /
-                                      (_hasStandings ? 5 : 4);
+                                      (_tabController.length - 1);
                                   return TabBar(
                                     controller: _tabController,
                                     dividerColor: Colors.transparent,
@@ -2082,13 +2095,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           label: 'Medya',
                                         ),
                                       ),
-                                      SizedBox(
-                                        width: tabW,
-                                        child: const _IconTab(
-                                          icon: Icons.sports_soccer_rounded,
-                                          label: 'Diziliş',
+                                      if (!_lineupInRoster)
+                                        SizedBox(
+                                          width: tabW,
+                                          child: const _IconTab(
+                                            icon: Icons.sports_soccer_rounded,
+                                            label: 'Diziliş',
+                                          ),
                                         ),
-                                      ),
                                       if (_hasStandings)
                                         SizedBox(
                                           width: tabW,
@@ -2118,12 +2132,25 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     _infoTab(m),
                                     _DetailTab(match: m),
 
-                                    // İŞTE DEĞİŞİKLİK YAPILAN YER: YENİ _LineupTab BAĞLANTISI
                                     _LineupTab(
                                       match: m,
                                       isSuperAdmin: isSuperAdmin,
                                       homeName: homeName,
                                       awayName: awayName,
+                                      lineupOnTop: _lineupInRoster,
+                                      homeColor: sides.home,
+                                      awayColor: sides.away,
+                                      canEditHome: canEditHome,
+                                      canEditAway: canEditAway,
+                                      canShareHome: isSuperAdmin || managesHome,
+                                      canShareAway: isSuperAdmin || managesAway,
+                                      // Canlı maçta yöneten yetkili dizilişteki
+                                      // oyuncuya dokunarak olay ekler.
+                                      canAddEvents:
+                                          isSuperAdmin &&
+                                          canControl &&
+                                          (m.status == MatchStatus.live ||
+                                              m.status == MatchStatus.halftime),
                                     ),
 
                                     _HighlightsTab(
@@ -2135,39 +2162,35 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       homeName: homeName,
                                       awayName: awayName,
                                     ),
-                                    FormationTab(
-                                      match: m,
-                                      homeName: homeName,
-                                      awayName: awayName,
-                                      homeColor: sides.home,
-                                      awayColor: sides.away,
-                                      // Takım sorumlusu dizilişi yalnız maç
-                                      // başlamadan değiştirir; paylaşım
-                                      // sonra da açık.
-                                      canEditHome:
-                                          isSuperAdmin ||
-                                          managesHome && _beforeKickoff(m),
-                                      canEditAway:
-                                          isSuperAdmin ||
-                                          managesAway && _beforeKickoff(m),
-                                      canShareHome: isSuperAdmin || managesHome,
-                                      canShareAway: isSuperAdmin || managesAway,
-                                      // Sorumlu kendi takımıyla açar.
-                                      onShare: (teamId) => shareLineupPoster(
-                                        context,
+                                    if (!_lineupInRoster)
+                                      FormationTab(
                                         match: m,
                                         homeName: homeName,
                                         awayName: awayName,
-                                        teamId: teamId,
-                                        kind: 'Diziliş',
+                                        homeColor: sides.home,
+                                        awayColor: sides.away,
+                                        canEditHome: canEditHome,
+                                        canEditAway: canEditAway,
+                                        canShareHome:
+                                            isSuperAdmin || managesHome,
+                                        canShareAway:
+                                            isSuperAdmin || managesAway,
+                                        // Sorumlu kendi takımıyla açar.
+                                        onShare: (teamId) => shareLineupPoster(
+                                          context,
+                                          match: m,
+                                          homeName: homeName,
+                                          awayName: awayName,
+                                          teamId: teamId,
+                                          kind: 'Diziliş',
+                                        ),
+                                        initialTeam:
+                                            !isSuperAdmin &&
+                                                managesAway &&
+                                                !managesHome
+                                            ? 1
+                                            : 0,
                                       ),
-                                      initialTeam:
-                                          !isSuperAdmin &&
-                                              managesAway &&
-                                              !managesHome
-                                          ? 1
-                                          : 0,
-                                    ),
                                     if (_hasStandings)
                                       StandingsView(
                                         leagueId: m.leagueId,
@@ -4321,7 +4344,28 @@ class _LineupTab extends StatefulWidget {
     required this.isSuperAdmin,
     required this.homeName,
     required this.awayName,
+    this.lineupOnTop = false,
+    this.homeColor,
+    this.awayColor,
+    this.canEditHome = false,
+    this.canEditAway = false,
+    this.canShareHome = false,
+    this.canShareAway = false,
+    this.canAddEvents = false,
   });
+
+  /// Diziliş listenin üstünde: VS'de tam saha, takımda yarım saha (ilk 11
+  /// girilmemişse saha yok). Kapalıyken diziliş ayrı sekmede.
+  final bool lineupOnTop;
+  final Color? homeColor;
+  final Color? awayColor;
+  final bool canEditHome;
+  final bool canEditAway;
+  final bool canShareHome;
+  final bool canShareAway;
+
+  /// Canlı maçta yöneten yetkili: sahadaki oyuncuya dokununca olay seçilir.
+  final bool canAddEvents;
 
   @override
   State<_LineupTab> createState() => _LineupTabState();
@@ -4586,31 +4630,46 @@ class _LineupTabState extends State<_LineupTab>
         ],
         _viewSwitch(m),
         const SizedBox(height: 10),
-        // Olay ekle: puana etki eden anlar. Canlı maçta alttaki takım
-        // butonlarında (OLAY); burada yalnız maç bittikten sonra.
-        if (insights != null &&
-            widget.isSuperAdmin &&
-            m.status == MatchStatus.finished) ...[
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: () => _openMoments(m, insights),
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-              label: Text(
-                insights.moments.isEmpty
-                    ? 'Olay ekle'
-                    : 'Olay ekle (${insights.moments.length})',
+        // Diziliş listenin üstünde (ilk 11 yoksa çizilmez).
+        if (widget.lineupOnTop) ...[
+          if (_view == null)
+            VsFormationPitch(
+              match: m,
+              homeColor: widget.homeColor,
+              awayColor: widget.awayColor,
+              onPlayerTap: _pitchTap(m, editing: false),
+            )
+          else
+            FormationTab(
+              key: ValueKey('formation_$_view'),
+              match: m,
+              homeName: widget.homeName,
+              awayName: widget.awayName,
+              homeColor: widget.homeColor,
+              awayColor: widget.awayColor,
+              canEditHome: widget.canEditHome,
+              canEditAway: widget.canEditAway,
+              canShareHome: widget.canShareHome,
+              canShareAway: widget.canShareAway,
+              onShare: (teamId) => shareLineupPoster(
+                context,
+                match: m,
+                homeName: widget.homeName,
+                awayName: widget.awayName,
+                teamId: teamId,
+                kind: 'Diziliş',
               ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              embedded: true,
+              singleTeam: true,
+              initialTeam: _view == m.homeTeamId ? 0 : 1,
+              onPlayerTap: _pitchTap(
+                m,
+                editing: _view == m.homeTeamId
+                    ? widget.canEditHome
+                    : widget.canEditAway,
               ),
             ),
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
         ],
         if (_view == null) ...[
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
@@ -4637,6 +4696,30 @@ class _LineupTabState extends State<_LineupTab>
         Positioned(right: 16, bottom: 16, child: _lineupFab(m)),
       ],
     );
+  }
+
+  /// Sahadaki oyuncuya dokunma: canlı maçta yöneten yetkiliye olay seçimi
+  /// (iki dokunuş); maç başlamadan düzenleyen dokunarak yer değiştirir
+  /// (null); diğer durumlarda oyuncu kartı.
+  void Function(String, String, String, String)? _pitchTap(
+    MatchModel m, {
+    required bool editing,
+  }) {
+    if (widget.canAddEvents) {
+      return (teamId, playerId, name, number) => showPlayerQuickEvent(
+        context,
+        match: m,
+        teamId: teamId,
+        playerId: playerId,
+        playerName: name,
+        number: number,
+        homeName: widget.homeName,
+        awayName: widget.awayName,
+      );
+    }
+    if (editing && _beforeKickoff(m)) return null;
+    return (teamId, playerId, name, number) =>
+        showPlayerCard(context, playerKey: playerId, number: number);
   }
 
   Widget _vsRow(MatchModel m, {required bool head, required String only}) {
@@ -4728,6 +4811,7 @@ class _LineupTabState extends State<_LineupTab>
         : (_isStaff || managerOpen);
     final canShare = session.canManageLeague(m.leagueId) || _managesTeam(view);
     final actions = <_SpeedDialAction>[
+      ?_momentsAction(m),
       if (canEsame)
         _SpeedDialAction(
           label: started ? 'Esameyi Düzenle' : 'Esame Girişi',
@@ -4753,6 +4837,24 @@ class _LineupTabState extends State<_LineupTab>
     return _SpeedDialFab(key: ValueKey('lineup_fab_$view'), actions: actions);
   }
 
+  /// Olay ekle (puana etki eden anlar): yetkiliye, maç bittikten sonra.
+  /// Canlı maçta alttaki takım butonlarında (OLAY).
+  _SpeedDialAction? _momentsAction(MatchModel m) {
+    final insights = _insights;
+    if (insights == null ||
+        !widget.isSuperAdmin ||
+        m.status != MatchStatus.finished) {
+      return null;
+    }
+    return _SpeedDialAction(
+      label: insights.moments.isEmpty
+          ? 'Olay ekle'
+          : 'Olay ekle (${insights.moments.length})',
+      icon: Icons.add_circle_outline_rounded,
+      onTap: () => _openMoments(m, insights),
+    );
+  }
+
   /// VS'de yetkililerin menüsü: takımlar esameyi giremediyse iki takımın
   /// esamesi buradan girilir (maç başladıktan sonra yalnız admin ve kurucu
   /// başkan, takım sekmesindeki kuralla aynı).
@@ -4772,6 +4874,7 @@ class _LineupTabState extends State<_LineupTab>
           String label(String name, bool exists) =>
               '$name · ${exists ? 'Esameyi Düzenle' : 'Esame Girişi'}';
           final actions = <_SpeedDialAction>[
+            ?_momentsAction(m),
             if (canEsame) ...[
               _SpeedDialAction(
                 label: label(widget.homeName, has(home)),
