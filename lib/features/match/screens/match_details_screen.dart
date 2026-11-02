@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/age_rules.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
@@ -5236,6 +5236,64 @@ class _TeamLineupColumn extends StatefulWidget {
   State<_TeamLineupColumn> createState() => _TeamLineupColumnState();
 }
 
+/// Maç geneli puan panosu: her kadro sütunu kendi takımının puanlarını
+/// bildirir; en yüksek puanlı tek oyuncu maçın oyuncusu olur.
+class _MotmBoard {
+  _MotmBoard._();
+
+  static final _boards =
+      <String, ValueNotifier<Map<String, Map<String, double>>>>{};
+
+  static ValueNotifier<Map<String, Map<String, double>>> of(String matchId) =>
+      _boards.putIfAbsent(matchId, () => ValueNotifier(const {}));
+
+  static void report(String matchId, String teamId, Map<String, double> r) {
+    final b = of(matchId);
+    if (mapEquals(b.value[teamId], r)) return;
+    // Çizim sırasında bildirim olmasın.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mapEquals(b.value[teamId], r)) return;
+      b.value = {...b.value, teamId: Map.of(r)};
+    });
+  }
+
+  /// Elle girilen "Maçın Adamı" varsa o; yoksa iki takımın puanı da
+  /// biliniyorsa en yüksek puan. Eşitlikte gol, sonra asist sayısı.
+  static String? pick(String matchId, MatchInsights ins) {
+    for (final e in ins.marks.entries) {
+      if (e.value.motm && e.key.isNotEmpty) return e.key;
+    }
+    if (!ins.ratingsOn) return null;
+    final teams = of(matchId).value;
+    final m = ins.match;
+    if (!teams.containsKey(m.homeTeamId) || !teams.containsKey(m.awayTeamId)) {
+      return null;
+    }
+    String? best;
+    (double, int, int)? key;
+    for (final t in teams.values) {
+      for (final e in t.entries) {
+        final p = ins.of(e.key);
+        final k = (
+          e.value,
+          p.goals.length + p.penGoals.length,
+          p.assists.length,
+        );
+        final better =
+            key == null ||
+            k.$1 > key.$1 ||
+            (k.$1 == key.$1 &&
+                (k.$2 > key.$2 || (k.$2 == key.$2 && k.$3 > key.$3)));
+        if (better) {
+          best = e.key;
+          key = k;
+        }
+      }
+    }
+    return best;
+  }
+}
+
 class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   // Akışlar bir kez kurulur; üst widget yeniden çizildiğinde (ör. oyuncular
   // yüklendiğinde) kadro akışı baştan başlamaz.
@@ -5246,10 +5304,23 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   String get teamId => widget.teamId;
   Color get color => widget.color;
 
+  late ValueNotifier<Map<String, Map<String, double>>> _board;
+
+  void _onBoard() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    _board = _MotmBoard.of(widget.match.id)..addListener(_onBoard);
     _subscribe();
+  }
+
+  @override
+  void dispose() {
+    _board.removeListener(_onBoard);
+    super.dispose();
   }
 
   @override
@@ -5399,6 +5470,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             }
 
             final ins = widget.insights;
+            final motm = ins == null ? null : _MotmBoard.pick(match.id, ins);
             final ratings = <String, double>{};
             if (ins != null) {
               for (final r in rosters) {
@@ -5411,9 +5483,9 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                 if (v != null) ratings[r.playerId] = v;
               }
             }
-            final best = ratings.isEmpty
-                ? null
-                : ratings.values.reduce((a, b) => a > b ? a : b);
+            // Maçın oyuncusu (yıldız): iki takım, ilk 11 ve yedekler dahil
+            // tek oyuncu; her sütun kendi puanlarını maç panosuna bildirir.
+            if (ins != null) _MotmBoard.report(match.id, teamId, ratings);
 
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
@@ -5430,9 +5502,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                     line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
                     isCaptain: r.isCaptain,
                     rating: ratings[r.playerId],
-                    best:
-                        ratings[r.playerId] != null &&
-                        ratings[r.playerId] == best,
+                    best: ins != null && motm == r.playerId,
                   ),
               ];
             }

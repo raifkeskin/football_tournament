@@ -1954,9 +1954,11 @@ class VsFormationPitch extends StatelessWidget {
                       home,
                       away,
                       insights,
-                      style == PitchTokenStyle.photo && insights == null
+                      // VS'de seçici yok: hep Profil (fotoğrafsız forma);
+                      // takım sekmesindeki seçim buraya taşınmaz.
+                      insights == null
                           ? PitchTokenStyle.shirt
-                          : style,
+                          : PitchTokenStyle.photo,
                       PhotoCutouts.visible(context) ? cutouts : const {},
                     ),
                   ),
