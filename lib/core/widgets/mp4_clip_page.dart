@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
+
+import '../services/instagram_share.dart';
 
 /// Kendi depomuzdaki (yayıncının teslim ettiği) MP4 kesiti tam ekran
 /// oynatır. [endSec] başlangıçtan büyükse o saniyede durur; değilse dosya
-/// sonuna kadar. Bitince "Tekrar İzle".
+/// sonuna kadar. Bitince "Tekrar İzle". [storyUrl] varsa (gol kesitinin
+/// 9:16 hâli) altta "Instagram hikâyesinde paylaş".
 class Mp4ClipPage extends StatefulWidget {
   const Mp4ClipPage({
     super.key,
@@ -11,9 +15,11 @@ class Mp4ClipPage extends StatefulWidget {
     required this.title,
     this.startSec = 0,
     this.endSec = 0,
+    this.storyUrl,
   });
 
   final String url;
+  final String? storyUrl;
   final String title;
   final int startSec;
   final int endSec;
@@ -29,6 +35,33 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
   bool _ready = false;
   bool _ended = false;
   String? _error;
+  bool _sharing = false;
+  late final Future<bool> _igAvailable = (widget.storyUrl ?? '').isEmpty
+      ? Future.value(false)
+      : InstagramShare.isAvailable();
+
+  /// Hikâye MP4'ü indirilir, Instagram'ın hikâye ekranında açılır.
+  Future<void> _shareStory() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sharing = true);
+    if (_c.value.isPlaying) await _c.pause();
+    try {
+      final r = await http.get(Uri.parse(widget.storyUrl!));
+      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+      final ok = await InstagramShare.shareVideo(r.bodyBytes, story: true);
+      if (!ok) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
+      );
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
 
   Duration get _start => Duration(seconds: widget.startSec);
   Duration? get _end =>
@@ -169,6 +202,40 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
                       bufferedColor: Colors.white24,
                       backgroundColor: Colors.white12,
                     ),
+                  ),
+                  FutureBuilder<bool>(
+                    future: _igAvailable,
+                    builder: (context, snap) {
+                      if (snap.data != true) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: FilledButton.icon(
+                          onPressed: _sharing ? null : _shareStory,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFD62976),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: _sharing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.ios_share_rounded),
+                          label: const Text(
+                            'Instagram hikâyesinde paylaş',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

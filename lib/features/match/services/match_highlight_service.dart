@@ -34,6 +34,11 @@ class MatchHighlight {
   /// pending | approved | rejected
   final String status;
 
+  /// MP4 hâli (Mac'teki tools/goal_clips): yatay kesit ve Instagram
+  /// hikâyesi (9:16). Henüz üretilmediyse null.
+  final String? clipUrl;
+  final String? storyUrl;
+
   const MatchHighlight({
     required this.id,
     required this.matchId,
@@ -49,6 +54,8 @@ class MatchHighlight {
     this.description,
     this.confidence,
     required this.status,
+    this.clipUrl,
+    this.storyUrl,
   });
 
   bool get isApproved => status == 'approved';
@@ -77,6 +84,8 @@ class MatchHighlight {
       description: readStr(m['description']),
       confidence: readStr(m['confidence']),
       status: readStr(m['status']) ?? 'pending',
+      clipUrl: readStr(m['clip_url']),
+      storyUrl: readStr(m['story_url']),
     );
   }
 }

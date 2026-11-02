@@ -30,6 +30,7 @@ class AppSettings {
   static const _kLineupInRoster = 'lineup_in_roster_enabled';
   static const _kPhotoStandard = 'photo_standard_enabled';
   static const _kRosterIdScan = 'roster_id_scan_enabled';
+  static const _kGoalClipMp4 = 'goal_clip_mp4_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -121,6 +122,10 @@ class AppSettings {
   /// Takım kadrosunda onaysız oyuncunun satırından kimlik okutma ("Kimlik"
   /// düğmesi, "Sırayla okut") yetkililere açık mı (admin her zaman görür).
   static final rosterIdScanEnabled = ValueNotifier<bool>(false);
+
+  /// Gol kesitlerinin MP4 hâli (YouTube yerine dosya oynar) ve "Instagram
+  /// hikâyesinde paylaş" herkese açık mı (admin her zaman görür).
+  static final goalClipMp4Enabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -191,6 +196,8 @@ class AppSettings {
           photoStandardEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterIdScan) {
           rosterIdScanEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kGoalClipMp4) {
+          goalClipMp4Enabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

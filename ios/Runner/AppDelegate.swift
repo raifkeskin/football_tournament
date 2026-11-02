@@ -37,6 +37,14 @@ enum InstagramShare {
         }
         let story = args["story"] as? Bool ?? false
         let appId = (args["appId"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        if args["video"] as? Bool ?? false {
+          if story && !appId.isEmpty && shareStory(bytes.data, appId: appId, video: true) {
+            result(true)
+          } else {
+            result(shareVideoSheet(bytes.data))
+          }
+          return
+        }
         if story && !appId.isEmpty && shareStory(bytes.data, appId: appId) {
           result(true)
         } else {
@@ -54,11 +62,14 @@ enum InstagramShare {
   }
 
   /// Hikâye: görsel panoya konur, Instagram'ın hikâye düzenleyicisi açılır.
-  private static func shareStory(_ data: Data, appId: String) -> Bool {
+  private static func shareStory(_ data: Data, appId: String, video: Bool = false) -> Bool {
     guard let url = URL(string: "instagram-stories://share?source_application=\(appId)"),
           UIApplication.shared.canOpenURL(url) else { return false }
+    let key = video
+      ? "com.instagram.sharedSticker.backgroundVideo"
+      : "com.instagram.sharedSticker.backgroundImage"
     UIPasteboard.general.setItems(
-      [["com.instagram.sharedSticker.backgroundImage": data]],
+      [[key: data]],
       options: [.expirationDate: Date().addingTimeInterval(300)]
     )
     UIApplication.shared.open(url)
@@ -94,6 +105,24 @@ enum InstagramShare {
         }
       }
     }
+  }
+
+  /// Gol kesiti: Instagram hikâyesi açılamazsa paylaşım menüsü (dosya).
+  private static func shareVideoSheet(_ data: Data) -> Bool {
+    let file = FileManager.default.temporaryDirectory
+      .appendingPathComponent("gol_\(Int(Date().timeIntervalSince1970)).mp4")
+    guard (try? data.write(to: file)) != nil else { return false }
+    let root = UIApplication.shared.connectedScenes
+      .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+      .first
+    guard var top = root else { return false }
+    while let presented = top.presentedViewController { top = presented }
+    let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+    sheet.popoverPresentationController?.sourceView = top.view
+    sheet.popoverPresentationController?.sourceRect = CGRect(
+      x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+    top.present(sheet, animated: true)
+    return true
   }
 
   private static func shareSheet(_ image: UIImage) -> Bool {

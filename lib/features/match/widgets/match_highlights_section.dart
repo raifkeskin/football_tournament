@@ -438,6 +438,8 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
                 videoId: h.videoId,
                 startSec: h.startSec,
                 endSec: h.endSec,
+                clipUrl: h.clipUrl,
+                storyUrl: h.storyUrl,
                 title: _clipTitle(
                   h,
                   widget.match,
