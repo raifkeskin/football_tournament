@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
+import '../services/app_session.dart';
+import 'admin_form.dart';
 import 'admin_page.dart';
 import 'photo_standard/photo_standard.dart';
 import 'picked_image.dart';
@@ -201,6 +203,21 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
         Size(w.toDouble(), h.toDouble()),
       );
       if (!mounted) return;
+      // Yüzsüz ya da kalabalık fotoğraf kaydedilmez (admin logo/forma gibi
+      // özel durumlar için geçebilir); diğer kusurlar yalnız uyarıdır.
+      if (PhotoStandard.blocks(issues) && !_isAdmin(context)) {
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Bu fotoğraf kullanılamaz',
+          message:
+              '${issues.map((e) => '• $e').join('\n')}\n\n'
+              'Yüzünüzün ve omuzlarınızın göründüğü, yalnız sizin olduğunuz '
+              'bir fotoğraf seçin.',
+          icon: Icons.face_retouching_off_rounded,
+        );
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
       if (issues.isNotEmpty) {
         final use = await showAdminConfirmDialog(
           context: context,
@@ -219,6 +236,14 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
       }
     }
     Navigator.of(context).pop(preparedPhotoFile(jpeg));
+  }
+
+  bool _isAdmin(BuildContext context) {
+    try {
+      return AppSession.of(context).value.isAdmin;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Profil standardı kılavuzu (yuvarlak avatar kadrajında yok).

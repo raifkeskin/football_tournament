@@ -38,6 +38,34 @@ class _AdminCutoutPendingScreenState extends State<AdminCutoutPendingScreen> {
     await f;
   }
 
+  /// Kullanılamayan fotoğrafı kaldırır; hesabı olan oyuncuya bildirim gider.
+  Future<void> _remove(Map<String, dynamic> r) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Fotoğrafı kaldır',
+      message:
+          '${r['full_name']} oyuncusunun fotoğrafı kaldırılacak. Hesabı varsa '
+          'yeni fotoğraf yüklemesi için bildirim gider.',
+      confirmLabel: 'KALDIR',
+      cancelLabel: 'VAZGEÇ',
+      icon: Icons.hide_image_outlined,
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Supabase.instance.client.rpc(
+        'admin_remove_player_photo',
+        params: {'p_player_id': r['player_id']},
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Fotoğraf kaldırıldı.')),
+      );
+      await _refresh();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AdminPageScaffold(
@@ -177,6 +205,12 @@ class _AdminCutoutPendingScreenState extends State<AdminCutoutPendingScreen> {
               ],
             ),
           ),
+          if (reason.isNotEmpty)
+            IconButton(
+              tooltip: 'Fotoğrafı kaldır',
+              onPressed: () => _remove(r),
+              icon: const Icon(Icons.hide_image_outlined, color: _warn),
+            ),
         ],
       ),
     );
