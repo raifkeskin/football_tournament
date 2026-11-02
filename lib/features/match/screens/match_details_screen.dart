@@ -5312,13 +5312,13 @@ class _MotmBoard {
     });
   }
 
-  /// Elle girilen "Maçın Adamı" varsa o; yoksa iki takımın puanı da
-  /// biliniyorsa en yüksek puan. Eşitlikte gol, sonra asist sayısı.
-  static String? pick(String matchId, MatchInsights ins) {
+  /// Elle girilen "Maçın Adamı" varsa o; yoksa (yalnız admin) iki takımın
+  /// puanı da biliniyorsa en yüksek puan. Eşitlikte gol, sonra asist sayısı.
+  static String? pick(String matchId, MatchInsights ins, {bool auto = false}) {
     for (final e in ins.marks.entries) {
       if (e.value.motm && e.key.isNotEmpty) return e.key;
     }
-    if (!ins.ratingsOn) return null;
+    if (!auto || !ins.ratingsOn) return null;
     final teams = of(matchId).value;
     final m = ins.match;
     if (!teams.containsKey(m.homeTeamId) || !teams.containsKey(m.awayTeamId)) {
@@ -5525,7 +5525,14 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             }
 
             final ins = widget.insights;
-            final motm = ins == null ? null : _MotmBoard.pick(match.id, ins);
+            // Puandan otomatik yıldız şimdilik yalnız admin.
+            final motm = ins == null
+                ? null
+                : _MotmBoard.pick(
+                    match.id,
+                    ins,
+                    auto: AppSession.of(context).value.isAdmin,
+                  );
             final ratings = <String, double>{};
             if (ins != null) {
               for (final r in rosters) {
