@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../../core/services/photo_cutouts.dart';
 
+import '../../../core/widgets/match_event_icons.dart';
 import '../../match/insights/insight_widgets.dart';
 import '../../match/insights/match_insights.dart';
 import 'package:football_tournament/features/tournament/utils/pitch_layout.dart';
@@ -1506,43 +1507,49 @@ class _PlayerToken extends StatelessWidget {
   }
 
   /// Köşe ikonu: koyu daire içinde ikon, gerekirse sayı rozeti.
+  /// Köşe ikonu; adet 2+ ise sağ üstünde zeminsiz rakam (yeşil çimde
+  /// gölgeyle okunur).
   Widget _corner(Widget icon, {int count = 1}) => Stack(
     clipBehavior: Clip.none,
     children: [
-      Container(
-        width: 16,
-        height: 16,
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F172A),
-          shape: BoxShape.circle,
-        ),
-        child: icon,
-      ),
+      SizedBox(width: 16, height: 16, child: Center(child: icon)),
       if (count > 1)
         Positioned(
-          right: -5,
-          top: -5,
-          child: Container(
-            width: 12,
-            height: 12,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Color(0xFFEF4444),
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '$count',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.w900,
-                height: 1,
-              ),
+          right: -6,
+          top: -6,
+          child: Text(
+            '$count',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w900,
+              height: 1,
+              shadows: [
+                Shadow(color: Colors.black, blurRadius: 2),
+                Shadow(color: Colors.black54, blurRadius: 4),
+              ],
             ),
           ),
         ),
     ],
+  );
+
+  /// Oyuncu değişikliği: yalnız ikon, kırmızı (çıktı) / yeşil (girdi) daire.
+  static Widget _subDot({required bool out}) => Container(
+    width: 15,
+    height: 15,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: out ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 1.2),
+      boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 3)],
+    ),
+    child: Icon(
+      out ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+      size: 11,
+      color: Colors.white,
+    ),
   );
 
   static const _shadow = [
@@ -1674,65 +1681,30 @@ class _PlayerToken extends StatelessWidget {
           height: 16,
           child: Center(child: CardIcon(red: m.reds.isNotEmpty, size: 12)),
         ),
-      if (goals > 0)
-        _corner(
-          const Icon(Icons.sports_soccer, size: 13, color: Colors.white),
-          count: goals,
-        ),
+      if (goals > 0) _corner(const BallIcon(size: 15), count: goals),
       if (m.assists.isNotEmpty && !assistLeft) assist,
     ];
     return [
-      // Çıkış: işaretin solunda, dikeyde ortada (üstteki oyuncunun adıyla
-      // karışmasın).
-      if (m.subbedOut)
-        Positioned(
-          right: 44,
-          top: 0,
-          bottom: 0,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (m.subOut != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xE60F172A),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    "${m.subOut}'",
-                    style: const TextStyle(
-                      color: Color(0xFFFCA5A5),
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              const Icon(
-                Icons.arrow_downward_rounded,
-                size: 14,
-                color: Color(0xFFEF4444),
-              ),
-            ],
-          ),
-        ),
-      // Sağ sütun alt alta: kart, gol, asist. Üçü birden varsa asist sola,
-      // çıkış okunun altına geçer (sütun formadan taşmasın).
+      // Değişiklik: fotoğrafın sol üstüne yapışık daire.
+      if (m.subbedOut || m.subbedIn)
+        Positioned(left: -1, top: 0, child: _subDot(out: m.subbedOut)),
+      // Sağ sütun alt alta, fotoğrafın kenarına yapışık: kart, gol, asist.
+      // Üçü birden varsa asist sol alta geçer (sütun formadan taşmasın).
       if (right.isNotEmpty)
         Positioned(
-          right: -12,
-          top: 9,
+          right: -7,
+          top: player.isCaptain ? 12 : 2,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < right.length; i++) ...[
-                if (i > 0) const SizedBox(height: 2),
+                if (i > 0) const SizedBox(height: 1),
                 right[i],
               ],
             ],
           ),
         ),
-      if (assistLeft) Positioned(left: -10, bottom: 0, child: assist),
+      if (assistLeft) Positioned(left: -4, bottom: -2, child: assist),
     ];
   }
 
