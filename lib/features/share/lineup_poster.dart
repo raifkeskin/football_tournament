@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -550,6 +552,72 @@ class LineupPitchPoster extends StatelessWidget {
     return '${parts.first.characters.first}. ${parts.skip(1).join(' ')}';
   }
 
+  /// Dekupe oyuncu boyu; numaralı daireden bu kadar uzun (yukarı taşar).
+  static const _cutH = 56.0;
+  static const _cutExtra = _cutH - 30;
+
+  bool _hasCutout(PosterPlayer pl) =>
+      data.tokenStyle == PitchTokenStyle.photo &&
+      (pl.cutoutUrl ?? '').isNotEmpty;
+
+  /// Diziliş ekranındaki gibi: ayağının altında takım renginde zemin
+  /// halkası, kenarda ince beyaz kontur ve gölge.
+  Widget _cutout(String url, TeamPalette p) {
+    Widget img({Color? tint}) => Image.network(
+      url,
+      width: 45,
+      height: _cutH,
+      fit: BoxFit.contain,
+      alignment: Alignment.bottomCenter,
+      color: tint,
+      colorBlendMode: tint == null ? null : BlendMode.srcIn,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    );
+    return SizedBox(
+      width: 48,
+      height: _cutH + 4,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: 42,
+              height: 11,
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: const BorderRadius.all(
+                  Radius.elliptical(21, 5.5),
+                ),
+                border: Border.all(color: p.accent, width: 2),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 4,
+            child: Stack(
+              children: [
+                Transform.translate(
+                  offset: const Offset(0, 2),
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                    child: img(tint: Colors.black54),
+                  ),
+                ),
+                ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 0.9, sigmaY: 0.9),
+                  child: img(tint: Colors.white),
+                ),
+                img(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _token(PosterPlayer pl) {
     final p = data.palette;
     final number = Text(
@@ -562,7 +630,9 @@ class LineupPitchPoster extends StatelessWidget {
         fontWeight: FontWeight.w800,
       ),
     );
-    final mark = data.tokenStyle == PitchTokenStyle.shirt
+    final mark = _hasCutout(pl)
+        ? _cutout(pl.cutoutUrl!, p)
+        : data.tokenStyle == PitchTokenStyle.shirt
         ? JerseyShape(
             width: 36,
             color: p.primary,
@@ -674,15 +744,16 @@ class LineupPitchPoster extends StatelessWidget {
                                   n: data.lines[li].length,
                                   outfieldLines: outfield,
                                 );
+                                final pl = data.lines[li][i];
+                                // Dekupe uzun: ayak hizası daireyle aynı.
+                                final extra = _hasCutout(pl) ? _cutExtra : 0.0;
                                 return Positioned(
                                   left: (pos.dx * c.maxWidth - tokenW / 2)
                                       .clamp(0.0, c.maxWidth - tokenW),
-                                  top: (pos.dy * c.maxHeight - 26).clamp(
-                                    0.0,
-                                    c.maxHeight - 60,
-                                  ),
+                                  top: (pos.dy * c.maxHeight - 26 - extra)
+                                      .clamp(0.0, c.maxHeight - 60 - extra),
                                   width: tokenW,
-                                  child: _token(data.lines[li][i]),
+                                  child: _token(pl),
                                 );
                               }(),
                         ],

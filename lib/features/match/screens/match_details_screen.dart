@@ -50,6 +50,7 @@ import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
+import '../../../core/services/photo_cutouts.dart';
 import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
 import '../widgets/minute_input_dialog.dart';
@@ -7182,6 +7183,15 @@ Future<void> shareLineupPoster(
   if (kind == null || !context.mounted) return;
   await PitchTokenStylePref.load();
   if (!context.mounted) return;
+  // Profil görünümünde dekupesi olan oyuncu afişte de dekupe çıkar.
+  final useCutouts =
+      PitchTokenStylePref.notifier.value == PitchTokenStyle.photo &&
+      PhotoCutouts.visible(context);
+  if (useCutouts) await PhotoCutouts.ensureLoaded();
+  if (!context.mounted) return;
+  final cutouts = useCutouts
+      ? PhotoCutouts.map.value
+      : const <String, String>{};
   final m = match;
   final isHome = teamId == m.homeTeamId;
   final opponentId = isHome ? m.awayTeamId : m.homeTeamId;
@@ -7236,6 +7246,7 @@ Future<void> shareLineupPoster(
       players[r.playerId]?.name ?? '-',
       number: jersey(r),
       isCaptain: r.isCaptain,
+      cutoutUrl: cutouts[(players[r.playerId]?.photoUrl ?? '').trim()],
     );
     final byId = {for (final r in rosters) r.playerId: r};
     final layout = formationLinesFor(
@@ -7288,7 +7299,14 @@ Future<void> shareLineupPoster(
   await showPosterPreview(
     context: context,
     fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
-    imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
+    imageUrls: [
+      data.teamLogo,
+      data.opponentLogo,
+      data.leagueLogo,
+      if (kind != 'Esame')
+        for (final pl in data.starters)
+          if ((pl.cutoutUrl ?? '').isNotEmpty) pl.cutoutUrl!,
+    ],
     leagueId: match.leagueId,
     poster: kind == 'Esame'
         ? LineupListPoster(data: data)

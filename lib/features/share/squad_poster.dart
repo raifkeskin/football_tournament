@@ -13,6 +13,7 @@ class PosterPlayer {
     required this.lastName,
     this.number,
     this.isCaptain = false,
+    this.cutoutUrl,
   });
 
   final String firstName;
@@ -20,11 +21,15 @@ class PosterPlayer {
   final String? number;
   final bool isCaptain;
 
+  /// Diziliş afişinde (Profil görünümü) dekupe fotoğraf; yoksa numaralı daire.
+  final String? cutoutUrl;
+
   /// "Ad Soyad" → ad / soyad (soyad son kelime).
   factory PosterPlayer.fromFullName(
     String name, {
     String? number,
     bool isCaptain = false,
+    String? cutoutUrl,
   }) {
     final parts = name.trim().split(RegExp(r'\s+'));
     return PosterPlayer(
@@ -34,6 +39,7 @@ class PosterPlayer {
       lastName: parts.length > 1 ? parts.last : '',
       number: number,
       isCaptain: isCaptain,
+      cutoutUrl: cutoutUrl,
     );
   }
 }
