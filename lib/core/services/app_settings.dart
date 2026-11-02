@@ -27,6 +27,7 @@ class AppSettings {
   static const _kMatchInsights = 'match_insights_enabled';
   static const _kRegulations = 'regulations_enabled';
   static const _kLineupCutouts = 'lineup_cutouts_enabled';
+  static const _kPhotoStandard = 'photo_standard_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -106,6 +107,10 @@ class AppSettings {
   /// Dizilişte (Profil görünümü) dekupe oyuncu fotoğrafı herkese açık mı
   /// (admin her zaman görür).
   static final lineupCutoutsEnabled = ValueNotifier<bool>(false);
+
+  /// Profil fotoğrafı standardı (kadraj kılavuzu + yüz kontrolü uyarısı)
+  /// herkese açık mı (admin her zaman görür).
+  static final photoStandardEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -170,6 +175,8 @@ class AppSettings {
           regulationsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kLineupCutouts) {
           lineupCutoutsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPhotoStandard) {
+          photoStandardEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

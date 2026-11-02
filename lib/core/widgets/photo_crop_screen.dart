@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import 'admin_page.dart';
+import 'photo_standard/photo_standard.dart';
 import 'picked_image.dart';
 
 /// Profil fotoğrafının oranı: oyuncu kartındaki vesikalık (84×108).
@@ -182,6 +183,7 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
       _frame.width / s / _image!.width,
       _frame.height / s / _image!.height,
     ];
+    final guide = _guide(context);
     setState(() => _saving = true);
     final out = await compute(_cropJpeg, (widget.bytes, rect));
     if (!mounted) return;
@@ -192,8 +194,36 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
       ).showSnackBar(const SnackBar(content: Text('Fotoğraf kesilemedi.')));
       return;
     }
-    Navigator.of(context).pop(preparedPhotoFile(out));
+    final (jpeg, w, h) = out;
+    if (guide) {
+      final issues = await PhotoStandard.check(
+        jpeg,
+        Size(w.toDouble(), h.toDouble()),
+      );
+      if (!mounted) return;
+      if (issues.isNotEmpty) {
+        final use = await showAdminConfirmDialog(
+          context: context,
+          title: 'Fotoğraf standarda uymuyor',
+          message: issues.map((e) => '• $e').join('\n'),
+          confirmLabel: 'YİNE DE KULLAN',
+          cancelLabel: 'DÜZELT',
+          destructive: false,
+          icon: Icons.face_retouching_natural_rounded,
+        );
+        if (!mounted) return;
+        if (!use) {
+          setState(() => _saving = false);
+          return;
+        }
+      }
+    }
+    Navigator.of(context).pop(preparedPhotoFile(jpeg));
   }
+
+  /// Profil standardı kılavuzu (yuvarlak avatar kadrajında yok).
+  bool _guide(BuildContext context) =>
+      !widget.circle && PhotoStandard.visible(context);
 
   @override
   Widget build(BuildContext context) {
@@ -292,6 +322,7 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
                           painter: _FramePainter(
                             Rect.fromLTWH(origin.dx, origin.dy, fw, fh),
                             circle: widget.circle,
+                            guide: _guide(context),
                           ),
                         ),
                       ),
@@ -329,6 +360,10 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
             widget.circle
                 ? 'Sürükleyerek kaydırın, iki parmakla büyütün. Daire, '
                       'görünecek alandır.'
+                : _guide(context)
+                ? 'Yüzünüzü kesik çizgili başa, omuzlarınızı alttaki çizgiye '
+                      'oturtun. Önden, düz bakan, yalnız sizin olduğunuz bir '
+                      'fotoğraf seçin.'
                 : 'Sürükleyerek kaydırın, iki parmakla büyütün. Çerçeve oyuncu '
                       'kartında, daire yuvarlak fotoğraflarda görünen alandır.',
             textAlign: TextAlign.center,
@@ -342,10 +377,13 @@ class _PhotoCropScreenState extends State<_PhotoCropScreen> {
 
 /// Çerçeve dışını karartır; çerçeveyi ve içindeki daireyi çizer.
 class _FramePainter extends CustomPainter {
-  _FramePainter(this.frame, {this.circle = false});
+  _FramePainter(this.frame, {this.circle = false, this.guide = false});
 
   final Rect frame;
   final bool circle;
+
+  /// Profil standardı: baş ve omuz kılavuzu (yuvarlak görünüm dairesi yerine).
+  final bool guide;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -381,6 +419,10 @@ class _FramePainter extends CustomPainter {
         ..strokeWidth = 2
         ..color = Colors.white,
     );
+    if (guide) {
+      _drawGuide(canvas);
+      return;
+    }
     // Yuvarlak görünümler fotoğrafın ortasındaki kareyi gösterir.
     canvas.drawCircle(
       frame.center,
@@ -392,13 +434,52 @@ class _FramePainter extends CustomPainter {
     );
   }
 
+  /// Baş ovali ve omuz çizgisi, kesik çizgiyle. Ölçüler kurallarla uyumlu
+  /// (photo_standard.dart): yüz genişliği çerçevenin ~%40'ı, çenenin altında
+  /// omuzlar için bir yüz boyundan fazla yer.
+  void _drawGuide(Canvas canvas) {
+    final w = frame.width, h = frame.height;
+    Offset at(double x, double y) => frame.topLeft + Offset(x * w, y * h);
+    final head = Rect.fromCenter(
+      center: at(0.5, 0.08 + 0.3 * w / h),
+      width: 0.46 * w,
+      height: 0.6 * w,
+    );
+    final path = Path()
+      ..addOval(head)
+      ..moveTo(at(0.04, 1).dx, at(0.04, 1).dy)
+      ..quadraticBezierTo(
+        at(0.06, 0.72).dx,
+        at(0.06, 0.72).dy,
+        at(0.36, 0.68).dx,
+        at(0.36, 0.68).dy,
+      )
+      ..moveTo(at(0.96, 1).dx, at(0.96, 1).dy)
+      ..quadraticBezierTo(
+        at(0.94, 0.72).dx,
+        at(0.94, 0.72).dy,
+        at(0.64, 0.68).dx,
+        at(0.64, 0.68).dy,
+      );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = kAdminAccent.withValues(alpha: 0.9);
+    for (final m in path.computeMetrics()) {
+      for (var d = 0.0; d < m.length; d += 14) {
+        canvas.drawPath(m.extractPath(d, math.min(d + 8, m.length)), paint);
+      }
+    }
+  }
+
   @override
   bool shouldRepaint(_FramePainter old) =>
-      old.frame != frame || old.circle != circle;
+      old.frame != frame || old.circle != circle || old.guide != guide;
 }
 
 /// Kesme işi: oranlar (x, y, w, h) resmin yönü düzeltilmiş boyutuna göre.
-Uint8List? _cropJpeg((Uint8List, List<double>) args) {
+/// JPEG ve boyutu döner.
+(Uint8List, int, int)? _cropJpeg((Uint8List, List<double>) args) {
   final (bytes, r) = args;
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
@@ -409,5 +490,5 @@ Uint8List? _cropJpeg((Uint8List, List<double>) args) {
   final h = (r[3] * im.height).round().clamp(1, im.height - y);
   var out = img.copyCrop(im, x: x, y: y, width: w, height: h);
   if (out.height > 1000) out = img.copyResize(out, height: 1000);
-  return img.encodeJpg(out, quality: 88);
+  return (img.encodeJpg(out, quality: 88), out.width, out.height);
 }
