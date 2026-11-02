@@ -136,8 +136,8 @@ class PitchTokenStyleToggle extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               padding: EdgeInsets.symmetric(
-                horizontal: compact ? 9 : 12,
-                vertical: 6,
+                horizontal: compact ? 13 : 12,
+                vertical: compact ? 8 : 6,
               ),
               decoration: BoxDecoration(
                 color: sel ? const Color(0xFF10B981) : Colors.transparent,

@@ -7,6 +7,8 @@ import '../../player/widgets/player_card.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../tournament/models/age_rules.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:gal/gal.dart';
@@ -5018,7 +5020,43 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     }
   }
 
+  /// Sezonun kontenjan kuralları (sezon başına bir kez okunur).
+  static final _ageRulesCache = <String, AgeRules>{};
+  AgeRules _ageRules = const AgeRules();
+
+  Future<void> _loadAgeRules() async {
+    final sid = widget.match.seasonId;
+    final cached = _ageRulesCache[sid];
+    if (cached != null) {
+      _ageRules = cached;
+      return;
+    }
+    try {
+      final row = await Supabase.instance.client
+          .from('seasons')
+          .select('age_rules')
+          .eq('id', sid)
+          .maybeSingle();
+      final rules = AgeRules.fromJson(row?['age_rules']);
+      _ageRulesCache[sid] = rules;
+      if (mounted && sid == widget.match.seasonId) {
+        setState(() => _ageRules = rules);
+      }
+    } catch (_) {}
+  }
+
+  /// Maç günü kontenjanına sayılan oyuncunun doğum yılı; değilse null.
+  String? _quotaYear(PlayerModel? p) {
+    if (p == null || !_ageRules.hasMatchLimits) return null;
+    final year = AgeRules.birthYearOf(p.birthDate);
+    final isGk = (p.mainPosition ?? '').trim() == 'Kaleci';
+    return _ageRules.isMatchQuota(birthYear: year, isGk: isGk)
+        ? '$year'
+        : null;
+  }
+
   void _subscribe() {
+    _loadAgeRules();
     _playersStream = ServiceLocator.teamService.watchPlayers(
       teamId: widget.teamId,
       tournamentId: widget.match.seasonId,
@@ -5144,6 +5182,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                     playerId: r.playerId,
                     jersey: jerseyOf(r),
                     name: byId[r.playerId]?.name ?? '-',
+                    quotaYear: _quotaYear(byId[r.playerId]),
                     // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
                     line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
                     isCaptain: r.isCaptain,
@@ -5258,6 +5297,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     required String jersey,
     required String name,
     required int line,
+    String? quotaYear,
     bool isCaptain = false,
     double? rating,
     bool best = false,
@@ -5274,12 +5314,13 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             : () =>
                   showPlayerCard(context, playerKey: playerId, number: jersey),
         child: ins == null
-            ? _rowBody(jersey, name, badge, isCaptain)
+            ? _rowBody(jersey, name, badge, isCaptain, quotaYear)
             : _insightRow(
                 jersey,
                 name,
                 badge,
                 isCaptain,
+                quotaYear,
                 ins.of(playerId),
                 rating,
                 best,
@@ -5295,6 +5336,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     String name,
     Color badge,
     bool isCaptain,
+    String? quotaYear,
     PlayerMarks marks,
     double? rating,
     bool best,
@@ -5345,6 +5387,10 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                         ),
                       ),
                     ),
+                    if (quotaYear != null) ...[
+                      const SizedBox(width: 6),
+                      _QuotaYearTag(quotaYear),
+                    ],
                     if (isCaptain) ...[
                       const SizedBox(width: 5),
                       const CaptainBadge(size: 14),
@@ -5367,7 +5413,13 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     );
   }
 
-  Widget _rowBody(String jersey, String name, Color badge, bool isCaptain) {
+  Widget _rowBody(
+    String jersey,
+    String name,
+    Color badge,
+    bool isCaptain,
+    String? quotaYear,
+  ) {
     return SizedBox(
       height: 32,
       child: Row(
@@ -5402,11 +5454,44 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               ),
             ),
           ),
+          if (quotaYear != null) ...[
+            const SizedBox(width: 6),
+            _QuotaYearTag(quotaYear),
+          ],
           if (isCaptain) ...[
             const SizedBox(width: 5),
             const CaptainBadge(size: 14),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Kadroda kontenjan oyuncusunun doğum yılı (sarı küçük etiket).
+class _QuotaYearTag extends StatelessWidget {
+  const _QuotaYearTag(this.year);
+
+  final String year;
+
+  static const _gold = Color(0xFFFBBF24);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: _gold.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: _gold.withValues(alpha: 0.55)),
+      ),
+      child: Text(
+        year,
+        style: const TextStyle(
+          color: _gold,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
