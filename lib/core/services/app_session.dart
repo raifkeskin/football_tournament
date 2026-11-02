@@ -436,8 +436,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     try {
       final res = await _supabase
           .from('league_owners')
-          .select('league_id')
-          .eq('user_id', uid);
+          .select('league_id, leagues!inner(status)')
+          .eq('user_id', uid)
+          // Pasife alınan turnuvanın kurucu başkanlığı yetki saymaz.
+          .eq('leagues.status', 'active');
       return res
           .map((r) => (r['league_id'] ?? '').toString())
           .where((id) => id.isNotEmpty)
@@ -452,11 +454,17 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     try {
       final res = await _supabase
           .from('region_owners')
-          .select('season_regions(id, name, season_id, seasons(league_id))')
+          .select(
+            'season_regions(id, name, season_id, '
+            'seasons(league_id, leagues(status)))',
+          )
           .eq('user_id', uid);
       return [
         for (final r in res)
-          if (r['season_regions'] is Map)
+          if (r['season_regions'] is Map &&
+              // Pasif turnuvadaki bölge sorumluluğu yetki saymaz.
+              r['season_regions']['seasons']?['leagues']?['status'] !=
+                  'passive')
             OwnedRegion(
               id: (r['season_regions']['id'] ?? '').toString(),
               name: (r['season_regions']['name'] ?? '').toString(),
