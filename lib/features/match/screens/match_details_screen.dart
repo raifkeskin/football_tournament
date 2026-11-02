@@ -5189,7 +5189,10 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                     playerId: r.playerId,
                     jersey: jerseyOf(r),
                     name: byId[r.playerId]?.name ?? '-',
-                    quotaYear: _quotaYear(byId[r.playerId]),
+                    // VS'de dar sütunda ismi kapatır; yalnız tek takımda.
+                    quotaYear: widget.only != null
+                        ? null
+                        : _quotaYear(byId[r.playerId]),
                     // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
                     line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
                     isCaptain: r.isCaptain,
