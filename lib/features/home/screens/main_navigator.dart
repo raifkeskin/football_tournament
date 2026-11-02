@@ -772,15 +772,10 @@ class _MenuDrawer extends StatelessWidget {
           () => _open(t!.websiteUrl),
           'Web sitesi',
         ),
-      // Turnuva talimatnamesi (sosyal hesapların yanında).
-      if (t != null && onRegulations != null)
-        (
-          Icons.gavel_rounded,
-          const Color(0xFFD97706),
-          onRegulations!,
-          'Talimatname',
-        ),
     ];
+    // Turnuva talimatnamesi: sosyal hesapların yanında, üst banttaki
+    // talimatname düğmesiyle aynı görünüm.
+    final regulations = t != null ? onRegulations : null;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
@@ -842,11 +837,21 @@ class _MenuDrawer extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (links.isNotEmpty) ...[
+                if (links.isNotEmpty || regulations != null) ...[
                   const SizedBox(height: 8),
                   Wrap(
                     runSpacing: 6,
                     children: [
+                      if (regulations != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: BandIconButton(
+                            icon: Icons.gavel_rounded,
+                            size: 32,
+                            tooltip: 'Talimatname',
+                            onTap: regulations,
+                          ),
+                        ),
                       for (final (icon, color, onTap, label) in links)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),

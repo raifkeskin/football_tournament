@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/age_rules.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
@@ -4705,8 +4705,13 @@ class _LineupTabState extends State<_LineupTab>
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
           _vsRow(m, head: false, only: 'xi'),
-          SizedBox(height: top ? 8 : 12),
-          _vsRow(m, head: false, only: 'bench'),
+          if (top) ...[
+            const SizedBox(height: 10),
+            _benchBand(),
+            const SizedBox(height: 2),
+          ] else
+            const SizedBox(height: 12),
+          _vsRow(m, head: false, only: 'bench', benchHeader: !top),
         ] else
           // Tek takım: kadro ve yedekler yan yana.
           _TeamLineupColumn(
@@ -4764,7 +4769,52 @@ class _LineupTabState extends State<_LineupTab>
         showPlayerCard(context, playerKey: playerId, number: number);
   }
 
-  Widget _vsRow(MatchModel m, {required bool head, required String only}) {
+  /// VS'de ilk 11 ile yedekler arasında tam genişlik bant: ortada
+  /// YEDEKLER, iki yanda takım renginde çizgi.
+  Widget _benchBand() {
+    Widget line(Color c) => Expanded(
+      child: Container(
+        height: 3,
+        decoration: BoxDecoration(
+          color: c,
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1220),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          line(widget.homeColor ?? _green),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              'YEDEKLER',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          line(widget.awayColor ?? _blue),
+        ],
+      ),
+    );
+  }
+
+  Widget _vsRow(
+    MatchModel m, {
+    required bool head,
+    required String only,
+    bool benchHeader = true,
+  }) {
     Widget col(String name, Color color, String teamId) => Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4776,6 +4826,7 @@ class _LineupTabState extends State<_LineupTab>
             color: color,
             only: only,
             insights: _insights,
+            benchHeader: benchHeader,
           ),
         ],
       ),
@@ -5216,11 +5267,15 @@ class _TeamLineupColumn extends StatefulWidget {
     this.sideBySide = false,
     this.only,
     this.insights,
+    this.benchHeader = true,
   });
 
   final MatchModel match;
   final String teamId;
   final Color color;
+
+  /// VS yedeklerinde sütun başlığı (bant varken gizli).
+  final bool benchHeader;
 
   /// Verilirse satırlar olay ikonları ve puanla, sabit yükseklikte çizilir
   /// (yan yana görünümde iki takımın satırları hizalı kalır).
@@ -5236,6 +5291,64 @@ class _TeamLineupColumn extends StatefulWidget {
   State<_TeamLineupColumn> createState() => _TeamLineupColumnState();
 }
 
+/// Maç geneli puan panosu: her kadro sütunu kendi takımının puanlarını
+/// bildirir; en yüksek puanlı tek oyuncu maçın oyuncusu olur.
+class _MotmBoard {
+  _MotmBoard._();
+
+  static final _boards =
+      <String, ValueNotifier<Map<String, Map<String, double>>>>{};
+
+  static ValueNotifier<Map<String, Map<String, double>>> of(String matchId) =>
+      _boards.putIfAbsent(matchId, () => ValueNotifier(const {}));
+
+  static void report(String matchId, String teamId, Map<String, double> r) {
+    final b = of(matchId);
+    if (mapEquals(b.value[teamId], r)) return;
+    // Çizim sırasında bildirim olmasın.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mapEquals(b.value[teamId], r)) return;
+      b.value = {...b.value, teamId: Map.of(r)};
+    });
+  }
+
+  /// Elle girilen "Maçın Adamı" varsa o; yoksa iki takımın puanı da
+  /// biliniyorsa en yüksek puan. Eşitlikte gol, sonra asist sayısı.
+  static String? pick(String matchId, MatchInsights ins) {
+    for (final e in ins.marks.entries) {
+      if (e.value.motm && e.key.isNotEmpty) return e.key;
+    }
+    if (!ins.ratingsOn) return null;
+    final teams = of(matchId).value;
+    final m = ins.match;
+    if (!teams.containsKey(m.homeTeamId) || !teams.containsKey(m.awayTeamId)) {
+      return null;
+    }
+    String? best;
+    (double, int, int)? key;
+    for (final t in teams.values) {
+      for (final e in t.entries) {
+        final p = ins.of(e.key);
+        final k = (
+          e.value,
+          p.goals.length + p.penGoals.length,
+          p.assists.length,
+        );
+        final better =
+            key == null ||
+            k.$1 > key.$1 ||
+            (k.$1 == key.$1 &&
+                (k.$2 > key.$2 || (k.$2 == key.$2 && k.$3 > key.$3)));
+        if (better) {
+          best = e.key;
+          key = k;
+        }
+      }
+    }
+    return best;
+  }
+}
+
 class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   // Akışlar bir kez kurulur; üst widget yeniden çizildiğinde (ör. oyuncular
   // yüklendiğinde) kadro akışı baştan başlamaz.
@@ -5246,10 +5359,23 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   String get teamId => widget.teamId;
   Color get color => widget.color;
 
+  late ValueNotifier<Map<String, Map<String, double>>> _board;
+
+  void _onBoard() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    _board = _MotmBoard.of(widget.match.id)..addListener(_onBoard);
     _subscribe();
+  }
+
+  @override
+  void dispose() {
+    _board.removeListener(_onBoard);
+    super.dispose();
   }
 
   @override
@@ -5399,6 +5525,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             }
 
             final ins = widget.insights;
+            final motm = ins == null ? null : _MotmBoard.pick(match.id, ins);
             final ratings = <String, double>{};
             if (ins != null) {
               for (final r in rosters) {
@@ -5411,9 +5538,9 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                 if (v != null) ratings[r.playerId] = v;
               }
             }
-            final best = ratings.isEmpty
-                ? null
-                : ratings.values.reduce((a, b) => a > b ? a : b);
+            // Maçın oyuncusu (yıldız): iki takım, ilk 11 ve yedekler dahil
+            // tek oyuncu; her sütun kendi puanlarını maç panosuna bildirir.
+            if (ins != null) _MotmBoard.report(match.id, teamId, ratings);
 
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
@@ -5430,9 +5557,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                     line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
                     isCaptain: r.isCaptain,
                     rating: ratings[r.playerId],
-                    best:
-                        ratings[r.playerId] != null &&
-                        ratings[r.playerId] == best,
+                    best: ins != null && motm == r.playerId,
                   ),
               ];
             }
@@ -5447,7 +5572,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _section('Yedekler'),
+                  if (widget.benchHeader) _section('Yedekler'),
                   if (subs.isEmpty)
                     const Text(
                       '-',
