@@ -812,7 +812,7 @@ class _FormationTabState extends State<FormationTab>
                                 style:
                                     style == PitchTokenStyle.photo &&
                                         insights == null
-                                    ? PitchTokenStyle.circle
+                                    ? PitchTokenStyle.shirt
                                     : style,
                                 insights: insights,
                                 onSwap: _canEdit
@@ -1208,7 +1208,7 @@ class _TeamSwitch extends StatelessWidget {
     }
   }
   if (gap == double.infinity) return (cutH: 52, compact: false);
-  const nameH = 27.0, compactH = 23.0;
+  const nameH = 30.0, compactH = 26.0;
   final compact = gap - nameH - 6 < 44;
   final cutH = (gap - (compact ? compactH : nameH) - 6).clamp(32.0, 52.0);
   return (cutH: cutH, compact: compact);
@@ -1391,6 +1391,9 @@ class _PlayerToken extends StatelessWidget {
   /// Maçtaki olayları (köşe ikonları); null ise ikon yok.
   final PlayerMarks? marks;
 
+  /// Profil görünümünde fotoğrafı olmayan oyuncu forma ile görünür.
+  bool get _hasPhoto => (player.photoUrl ?? '').trim().isNotEmpty;
+
   Widget _photo() {
     final url = (player.photoUrl ?? '').trim();
     final initials = player.name
@@ -1535,7 +1538,7 @@ class _PlayerToken extends StatelessWidget {
 
   TextStyle get _firstStyle => TextStyle(
     color: Colors.white,
-    fontSize: compact ? 9 : 10.5,
+    fontSize: compact ? 10 : 12,
     fontWeight: FontWeight.w800,
     height: 1.1,
     shadows: _shadow,
@@ -1543,7 +1546,7 @@ class _PlayerToken extends StatelessWidget {
 
   TextStyle get _lastStyle => TextStyle(
     color: Colors.white.withValues(alpha: 0.92),
-    fontSize: compact ? 9.5 : 11,
+    fontSize: compact ? 10.5 : 12.5,
     fontWeight: FontWeight.w400,
     height: 1.1,
     letterSpacing: 0.2,
@@ -1588,7 +1591,7 @@ class _PlayerToken extends StatelessWidget {
       width(first, _firstStyle),
       width(_trUpper(last), _lastStyle),
     ].reduce((a, b) => a > b ? a : b);
-    final d = compact ? 13.0 : 15.0;
+    final d = compact ? 14.0 : 16.0;
     return LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth.isFinite ? c.maxWidth : textW + 2 * d;
@@ -1663,10 +1666,13 @@ class _PlayerToken extends StatelessWidget {
       if (m.assists.isNotEmpty && !assistLeft) assist,
     ];
     return [
+      // Çıkış: işaretin solunda, dikeyde ortada (üstteki oyuncunun adıyla
+      // karışmasın).
       if (m.subbedOut)
         Positioned(
-          left: -14,
-          top: -6,
+          right: 44,
+          top: 0,
+          bottom: 0,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1710,7 +1716,7 @@ class _PlayerToken extends StatelessWidget {
             ],
           ),
         ),
-      if (assistLeft) Positioned(left: -10, top: 14, child: assist),
+      if (assistLeft) Positioned(left: -10, bottom: 0, child: assist),
     ];
   }
 
@@ -1729,9 +1735,9 @@ class _PlayerToken extends StatelessWidget {
             children: [
               if (cutout != null)
                 Positioned.fill(child: _cutout(cutout))
-              else if (style == PitchTokenStyle.photo)
+              else if (style == PitchTokenStyle.photo && _hasPhoto)
                 _photo()
-              else if (style == PitchTokenStyle.shirt)
+              else if (style != PitchTokenStyle.circle)
                 JerseyShape(
                   width: 38,
                   color: color,
@@ -1784,7 +1790,7 @@ class _PlayerToken extends StatelessWidget {
         const SizedBox(height: 2),
         // Numara dairede/formada yazmıyorsa (fotoğraf, dekupe) yazının
         // yanında.
-        _names(cutout != null || style == PitchTokenStyle.photo),
+        _names(cutout != null || (style == PitchTokenStyle.photo && _hasPhoto)),
       ],
     );
     // Dekupe daha uzun: ayak hizası dairenin altıyla aynı kalsın diye yukarı.
@@ -1923,7 +1929,7 @@ class VsFormationPitch extends StatelessWidget {
                       away,
                       insights,
                       style == PitchTokenStyle.photo && insights == null
-                          ? PitchTokenStyle.circle
+                          ? PitchTokenStyle.shirt
                           : style,
                       PhotoCutouts.visible(context) ? cutouts : const {},
                     ),

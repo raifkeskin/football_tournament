@@ -10,10 +10,9 @@ enum PitchTokenStyle { circle, shirt, photo }
 class PitchTokenStylePref {
   PitchTokenStylePref._();
 
-  static const _key = 'pitch_token_style';
-  static final notifier = ValueNotifier<PitchTokenStyle>(
-    PitchTokenStyle.circle,
-  );
+  // v2: varsayılan Profil oldu; eski kayıtlı seçim sıfırlanır.
+  static const _key = 'pitch_token_style_v2';
+  static final notifier = ValueNotifier<PitchTokenStyle>(PitchTokenStyle.photo);
   static bool _loaded = false;
 
   static Future<void> load() async {

@@ -637,7 +637,8 @@ class LineupPitchPoster extends StatelessWidget {
     );
     final mark = _hasCutout(pl)
         ? _cutout(pl.cutoutUrl!, p, cutH)
-        : data.tokenStyle == PitchTokenStyle.shirt
+        // Profilde fotoğrafı/dekupesi olmayan da forma ile.
+        : data.tokenStyle != PitchTokenStyle.circle
         ? JerseyShape(
             width: 36,
             color: p.primary,
