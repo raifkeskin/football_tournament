@@ -992,56 +992,6 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                             _topLine(),
                             _boxesOpen ? _boxes() : _boxSummary(),
                             _tabs(),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(14, 0, 6, 2),
-                              child: Row(
-                                children: [
-                                  const Expanded(
-                                    child: Text.rich(
-                                      TextSpan(
-                                        text: 'Sürükleyin ya da dokunun · ',
-                                        children: [
-                                          TextSpan(
-                                            text: '✎ numara',
-                                            style: TextStyle(color: _gold),
-                                          ),
-                                        ],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: _mid,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_boxesOpen)
-                                    TextButton.icon(
-                                      onPressed: () => _setBoxesOpen(false),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: _mid,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        minimumSize: const Size(0, 30),
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      icon: const Icon(
-                                        Icons.keyboard_arrow_up_rounded,
-                                        size: 18,
-                                      ),
-                                      label: const Text(
-                                        'Listeyi Kapat',
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
                             Expanded(child: _squadList(keyboard)),
                             if (keyboard == 0) _footer(),
                           ],
@@ -1512,41 +1462,47 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          // İnce, tam genişlik çubuk: İlk 11 / Yedekler kutularını açar.
-          Material(
-            color: _card,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(9),
-              side: const BorderSide(color: Color(0xFF334155)),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(9),
-              onTap: () => _setBoxesOpen(true),
-              child: const SizedBox(
-                height: 30,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Listeyi Aç',
-                      style: TextStyle(
-                        color: _mid,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(width: 4),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: _mid,
-                    ),
-                  ],
+          _listToggle(open: false),
+        ],
+      ),
+    );
+  }
+
+  /// Kutuların altında ince, tam genişlik çubuk: "Listeyi Aç / Kapat".
+  Widget _listToggle({required bool open}) {
+    return Material(
+      color: _card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(9),
+        side: const BorderSide(color: Color(0xFF334155)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: () => _setBoxesOpen(!open),
+        child: SizedBox(
+          height: 30,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                open ? 'Listeyi Kapat' : 'Listeyi Aç',
+                style: const TextStyle(
+                  color: _mid,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
+              const SizedBox(width: 4),
+              Icon(
+                open
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: _mid,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1554,12 +1510,19 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   Widget _boxes() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _box(_Box.starters)),
-          const SizedBox(width: 6),
-          Expanded(child: _box(_Box.subs)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _box(_Box.starters)),
+              const SizedBox(width: 6),
+              Expanded(child: _box(_Box.subs)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _listToggle(open: true),
         ],
       ),
     );
