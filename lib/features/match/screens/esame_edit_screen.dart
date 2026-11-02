@@ -961,7 +961,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                 onPressed: _isSaving ? null : _readFromPaper,
                 icon: const Icon(Icons.document_scanner_outlined, size: 18),
                 label: const Text(
-                  'Kağıttan oku',
+                  'Kağıttan Okut',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
