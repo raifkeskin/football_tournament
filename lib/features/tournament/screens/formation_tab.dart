@@ -1,4 +1,7 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import '../../../core/services/photo_cutouts.dart';
 
 import '../../match/insights/insight_widgets.dart';
 import '../../match/insights/match_insights.dart';
@@ -414,6 +417,7 @@ class _FormationTabState extends State<FormationTab>
     super.initState();
     _loadSavedFormations();
     PitchTokenStylePref.load();
+    PhotoCutouts.ensureLoaded();
   }
 
   /// Kayıtlı dizilişi doğrudan veritabanından okur; ekranın açılışındaki
@@ -717,24 +721,32 @@ class _FormationTabState extends State<FormationTab>
                         aspectRatio: 0.8,
                         child: ValueListenableBuilder<PitchTokenStyle>(
                           valueListenable: PitchTokenStylePref.notifier,
-                          builder: (context, style, _) => _Pitch(
-                            lines: pitchLines,
-                            teamColor: teamColor,
-                            // Profil yalnız yeni özellik açıkken.
-                            style:
-                                style == PitchTokenStyle.photo &&
-                                    insights == null
-                                ? PitchTokenStyle.circle
-                                : style,
-                            insights: insights,
-                            onSwap: _canEdit
-                                ? (from, to) => _swap(currentIds, from, to)
-                                : null,
-                            picked: _picked,
-                            onPick: _canEdit
-                                ? (id) => _pick(currentIds, id)
-                                : null,
-                          ),
+                          builder: (context, style, _) =>
+                              ValueListenableBuilder<Map<String, String>>(
+                                valueListenable: PhotoCutouts.map,
+                                builder: (context, cutouts, _) => _Pitch(
+                                  lines: pitchLines,
+                                  cutouts: PhotoCutouts.visible(context)
+                                      ? cutouts
+                                      : const {},
+                                  teamColor: teamColor,
+                                  // Profil yalnız yeni özellik açıkken.
+                                  style:
+                                      style == PitchTokenStyle.photo &&
+                                          insights == null
+                                      ? PitchTokenStyle.circle
+                                      : style,
+                                  insights: insights,
+                                  onSwap: _canEdit
+                                      ? (from, to) =>
+                                            _swap(currentIds, from, to)
+                                      : null,
+                                  picked: _picked,
+                                  onPick: _canEdit
+                                      ? (id) => _pick(currentIds, id)
+                                      : null,
+                                ),
+                              ),
                         ),
                       ),
                       if (_canEdit)
@@ -1090,7 +1102,11 @@ class _Pitch extends StatelessWidget {
     this.picked,
     this.onPick,
     this.insights,
+    this.cutouts = const {},
   });
+
+  /// Profil görünümünde dekupe fotoğraflar (asıl adres → dekupe adresi).
+  final Map<String, String> cutouts;
 
   /// lines[0]: kaleci, sonrakiler defanstan hücuma dizilişin hatları.
   final List<List<_PitchPlayer>> lines;
@@ -1159,6 +1175,9 @@ class _Pitch extends StatelessWidget {
       color: selected ? const Color(0xFFFACC15) : color,
       style: style,
       marks: insights?.of(p.id),
+      cutoutUrl: style == PitchTokenStyle.photo
+          ? cutouts[(p.photoUrl ?? '').trim()]
+          : null,
     );
     if (swap == null) return token;
     final pick = onPick;
@@ -1200,9 +1219,14 @@ class _PlayerToken extends StatelessWidget {
     required this.color,
     this.style = PitchTokenStyle.circle,
     this.marks,
+    this.cutoutUrl,
   });
 
   final _PitchPlayer player;
+
+  /// Varsa oyuncu daire yerine dekupe görünür: ayağının altında takım
+  /// renginde zemin halkası, kenarda ince beyaz kontur.
+  final String? cutoutUrl;
   final Color color;
   final PitchTokenStyle style;
 
@@ -1250,6 +1274,59 @@ class _PlayerToken extends StatelessWidget {
                 errorBuilder: (_, _, _) => fallback,
               ),
       ),
+    );
+  }
+
+  static const _cutoutH = 52.0;
+
+  Widget _cutout(String url) {
+    Widget img({Color? tint}) => Image.network(
+      url,
+      width: 42,
+      height: _cutoutH,
+      fit: BoxFit.contain,
+      alignment: Alignment.bottomCenter,
+      color: tint,
+      colorBlendMode: tint == null ? null : BlendMode.srcIn,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    );
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.bottomCenter,
+      children: [
+        Positioned(
+          bottom: 0,
+          child: Container(
+            width: 38,
+            height: 10,
+            decoration: BoxDecoration(
+              color: Colors.black45,
+              borderRadius: const BorderRadius.all(Radius.elliptical(19, 5)),
+              border: Border.all(color: color, width: 2),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 4,
+          child: Stack(
+            children: [
+              // Gölge ve beyaz kontur aynı görselin bulanık kopyaları.
+              Transform.translate(
+                offset: const Offset(0, 2),
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                  child: img(tint: Colors.black54),
+                ),
+              ),
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 0.9, sigmaY: 0.9),
+                child: img(tint: Colors.white),
+              ),
+              img(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1416,17 +1493,20 @@ class _PlayerToken extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final cutout = cutoutUrl;
+    final column = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
           width: 44,
-          height: 36,
+          height: cutout != null ? _cutoutH + 4 : 36,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              if (style == PitchTokenStyle.photo)
+              if (cutout != null)
+                Positioned.fill(child: _cutout(cutout))
+              else if (style == PitchTokenStyle.photo)
                 _photo()
               else if (style == PitchTokenStyle.shirt)
                 JerseyShape(
@@ -1483,6 +1563,13 @@ class _PlayerToken extends StatelessWidget {
         ..._nameLines(player.name),
       ],
     );
+    // Dekupe daha uzun: ayak hizası dairenin altıyla aynı kalsın diye yukarı.
+    return cutout == null
+        ? column
+        : Transform.translate(
+            offset: const Offset(0, -(_cutoutH + 4 - 36)),
+            child: column,
+          );
   }
 }
 
