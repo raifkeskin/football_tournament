@@ -5349,6 +5349,165 @@ class _MotmBoard {
   }
 }
 
+/// Takımın maçtaki puanları (oyuncu id → puan); Kadro ve Detay aynı hesap.
+/// Hat: ilk 11'de sahadaki kaleci 0, diğerleri mevkisi.
+Map<String, double> _teamRatings({
+  required MatchModel match,
+  required String teamId,
+  required List<MatchRosterModel> rosters,
+  required Map<String, PlayerModel> byId,
+  required MatchInsights ins,
+}) {
+  final ids = starterIdsInFormationOrder(
+    starters: rosters.where((r) => r.isStarting).toList(),
+    players: byId,
+    formation: teamId == match.homeTeamId
+        ? match.homeFormation
+        : match.awayFormation,
+  );
+  final gkId = ids.isEmpty ? null : ids.first;
+  final out = <String, double>{};
+  for (final r in rosters) {
+    final p = byId[r.playerId];
+    final l = positionLineOf(p?.mainPosition, p?.position);
+    final v = ins.ratingFor(
+      playerId: r.playerId,
+      teamId: teamId,
+      starter: r.isStarting,
+      line: r.isStarting && r.playerId == gkId ? 0 : (l == 0 ? 1 : l),
+    );
+    if (v != null) out[r.playerId] = v;
+  }
+  return out;
+}
+
+/// Detay akışının sonunda (yalnız admin): puandan otomatik maçın oyuncusu.
+/// Her takım kendi puanını panoya bildirir; seçilen oyuncu hangi takımdansa
+/// satırı o çizer.
+class _AutoMotmRow extends StatelessWidget {
+  const _AutoMotmRow({required this.match});
+
+  final MatchModel match;
+
+  @override
+  Widget build(BuildContext context) => MatchInsightsBuilder(
+    match: match,
+    builder: (context, ins) {
+      if (ins == null || !ins.ratingsOn) return const SizedBox.shrink();
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AutoMotmTeam(match: match, teamId: match.homeTeamId, ins: ins),
+          _AutoMotmTeam(match: match, teamId: match.awayTeamId, ins: ins),
+        ],
+      );
+    },
+  );
+}
+
+class _AutoMotmTeam extends StatefulWidget {
+  const _AutoMotmTeam({
+    required this.match,
+    required this.teamId,
+    required this.ins,
+  });
+
+  final MatchModel match;
+  final String teamId;
+  final MatchInsights ins;
+
+  @override
+  State<_AutoMotmTeam> createState() => _AutoMotmTeamState();
+}
+
+class _AutoMotmTeamState extends State<_AutoMotmTeam> {
+  late final Stream<List<PlayerModel>> _players = ServiceLocator.teamService
+      .watchPlayers(
+        teamId: widget.teamId,
+        tournamentId: widget.match.seasonId,
+        matchId: widget.match.id,
+      );
+  late final Stream<List<MatchRosterModel>> _rosters = ServiceLocator
+      .matchService
+      .watchMatchRosters(widget.match.id, widget.teamId);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<PlayerModel>>(
+      stream: _players,
+      builder: (context, ps) => StreamBuilder<List<MatchRosterModel>>(
+        stream: _rosters,
+        builder: (context, rs) {
+          if (!ps.hasData || !rs.hasData) return const SizedBox.shrink();
+          final byId = {for (final p in ps.data!) p.id: p};
+          final ratings = _teamRatings(
+            match: widget.match,
+            teamId: widget.teamId,
+            rosters: rs.data!,
+            byId: byId,
+            ins: widget.ins,
+          );
+          _MotmBoard.report(widget.match.id, widget.teamId, ratings);
+          return ValueListenableBuilder(
+            valueListenable: _MotmBoard.of(widget.match.id),
+            builder: (context, _, _) {
+              final id = _MotmBoard.pick(
+                widget.match.id,
+                widget.ins,
+                auto: true,
+              );
+              final rating = ratings[id];
+              if (id == null || rating == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Center(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => showPlayerCard(context, playerKey: id),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0x1FFBBF24),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0x66FBBF24)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            color: Color(0xFFFBBF24),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Maçın Oyuncusu',
+                            style: TextStyle(color: Colors.white60, fontSize: 12),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            byId[id]?.name ?? '-',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          RatingBadge(value: rating, best: true),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   // Akışlar bir kez kurulur; üst widget yeniden çizildiğinde (ör. oyuncular
   // yüklendiğinde) kadro akışı baştan başlamaz.
@@ -5517,13 +5676,6 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             final subs = rosters.where((r) => !r.isStarting).toList()
               ..sort(hasOrder ? byList : order);
 
-            // Puan için hat: ilk 11'de sahadaki kaleci 0, diğerleri mevkisi.
-            int ratingLine(MatchRosterModel r) {
-              if (r.isStarting && r.playerId == gkId) return 0;
-              final l = lineOf(r);
-              return l == 0 ? 1 : l;
-            }
-
             final ins = widget.insights;
             // Puandan otomatik yıldız şimdilik yalnız admin.
             final motm = ins == null
@@ -5533,18 +5685,15 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                     ins,
                     auto: AppSession.of(context).value.isAdmin,
                   );
-            final ratings = <String, double>{};
-            if (ins != null) {
-              for (final r in rosters) {
-                final v = ins.ratingFor(
-                  playerId: r.playerId,
-                  teamId: teamId,
-                  starter: r.isStarting,
-                  line: ratingLine(r),
-                );
-                if (v != null) ratings[r.playerId] = v;
-              }
-            }
+            final ratings = ins == null
+                ? const <String, double>{}
+                : _teamRatings(
+                    match: match,
+                    teamId: teamId,
+                    rosters: rosters,
+                    byId: byId,
+                    ins: ins,
+                  );
             // Maçın oyuncusu (yıldız): iki takım, ilk 11 ve yedekler dahil
             // tek oyuncu; her sütun kendi puanlarını maç panosuna bildirir.
             if (ins != null) _MotmBoard.report(match.id, teamId, ratings);
@@ -6232,13 +6381,19 @@ class _DetailTabView extends StatelessWidget {
           if (!yellowSeen.add(key)) secondYellows.add(e);
         }
 
+        // Elle seçilmemişse akışın sonunda puandan maçın oyuncusu (admin).
+        final autoMotm =
+            AppSession.of(context).value.isAdmin &&
+            match.status == MatchStatus.finished &&
+            !normalized.any((e) => pickType(e) == 'man_of_the_match');
         return ListView.separated(
           // Altta sağdaki menü düğmesi son satırları örtmesin.
           padding: const EdgeInsets.fromLTRB(12, 16, 12, 104),
-          itemCount: normalized.length,
+          itemCount: normalized.length + (autoMotm ? 1 : 0),
           separatorBuilder: (_, _) =>
               const SizedBox(height: 2, child: Center(child: _TimelineLine())),
           itemBuilder: (context, i) {
+            if (i == normalized.length) return _AutoMotmRow(match: match);
             final e = normalized[i];
             final type = secondYellows.contains(e)
                 ? 'second_yellow'
