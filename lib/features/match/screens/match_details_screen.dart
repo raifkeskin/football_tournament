@@ -5421,6 +5421,49 @@ class _AutoMotmTeam extends StatefulWidget {
 }
 
 class _AutoMotmTeamState extends State<_AutoMotmTeam> {
+  bool _saving = false;
+
+  /// Puandan gelen maçın oyuncusu elle seçilmiş gibi kaydedilir (yalnız
+  /// admin; bildirim ya da haber gitmez). Kayıttan sonra satır normal
+  /// "Maçın Adamı" olayı olarak herkese görünür.
+  Future<void> _approve(String playerId, String name) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Maçın Oyuncusu',
+      message:
+          '$name puana göre maçın oyuncusu. Maçın adamı olarak kaydedilsin '
+          'mi? Bildirim gönderilmez.',
+      confirmLabel: 'KAYDET',
+      destructive: false,
+      icon: Icons.star_rounded,
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _saving = true);
+    try {
+      await ServiceLocator.matchService.addMatchEvent(
+        MatchEvent(
+          id: '',
+          matchId: widget.match.id,
+          leagueId: widget.match.leagueId,
+          teamId: widget.teamId,
+          eventType: 'man_of_the_match',
+          // Maçın adamının dakikası yoktur (sona sıralanır).
+          minute: 999,
+          eventName: name,
+          playerId: playerId,
+        ),
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Maçın adamı kaydedildi.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   late final Stream<List<PlayerModel>> _players = ServiceLocator.teamService
       .watchPlayers(
         teamId: widget.teamId,
@@ -5497,6 +5540,33 @@ class _AutoMotmTeamState extends State<_AutoMotmTeam> {
                           ),
                           const SizedBox(width: 8),
                           RatingBadge(value: rating, best: true),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            height: 28,
+                            child: FilledButton(
+                              onPressed: _saving
+                                  ? null
+                                  : () => _approve(id, byId[id]?.name ?? ''),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFFBBF24),
+                                foregroundColor: const Color(0xFF1F1500),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: const Text(
+                                'Onayla',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
