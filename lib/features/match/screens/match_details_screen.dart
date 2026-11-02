@@ -2154,6 +2154,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       lineupOnTop: _lineupInRoster,
                                       homeColor: sides.home,
                                       awayColor: sides.away,
+                                      homeLogo: homeLogo,
+                                      awayLogo: awayLogo,
                                       canEditHome: canEditHome,
                                       canEditAway: canEditAway,
                                       canShareHome: isSuperAdmin || managesHome,
@@ -4366,7 +4368,13 @@ class _LineupTab extends StatefulWidget {
     this.canShareHome = false,
     this.canShareAway = false,
     this.canAddEvents = false,
+    this.homeLogo = '',
+    this.awayLogo = '',
   });
+
+  /// Logolu takım seçici (Kadro içi dizilişle birlikte).
+  final String homeLogo;
+  final String awayLogo;
 
   /// Diziliş listenin üstünde: VS'de tam saha, takımda yarım saha (ilk 11
   /// girilmemişse saha yok). Kapalıyken diziliş ayrı sekmede.
@@ -4614,8 +4622,9 @@ class _LineupTabState extends State<_LineupTab>
 
   Widget _body(BuildContext context, MatchModel m) {
     final insights = _insights;
+    final top = widget.lineupOnTop;
     final list = ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+      padding: EdgeInsets.fromLTRB(12, top ? 8 : 12, 12, 90),
       children: [
         // Esame bilgisi: düzenleme yetkisi olanlara (yetkililer ve maçın
         // takım sorumluları) gösterilir.
@@ -4646,8 +4655,7 @@ class _LineupTabState extends State<_LineupTab>
             rivalName: widget.homeName,
           ),
         ],
-        _viewSwitch(m),
-        const SizedBox(height: 10),
+        if (!top) ...[_viewSwitch(m), const SizedBox(height: 10)],
         // Diziliş listenin üstünde (ilk 11 yoksa çizilmez).
         if (widget.lineupOnTop) ...[
           if (_view == null)
@@ -4691,13 +4699,13 @@ class _LineupTabState extends State<_LineupTab>
                     : widget.canEditAway,
               ),
             ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
         ],
         if (_view == null) ...[
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
           _vsRow(m, head: false, only: 'xi'),
-          const SizedBox(height: 12),
+          SizedBox(height: top ? 8 : 12),
           _vsRow(m, head: false, only: 'bench'),
         ] else
           // Tek takım: kadro ve yedekler yan yana.
@@ -4714,7 +4722,19 @@ class _LineupTabState extends State<_LineupTab>
     );
     return Stack(
       children: [
-        list,
+        if (top)
+          // Logolu seçici sekmelerin hemen altında sabit; liste altında kayar.
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                child: _logoSwitch(m),
+              ),
+              Expanded(child: list),
+            ],
+          )
+        else
+          list,
         Positioned(right: 16, bottom: 16, child: _lineupFab(m)),
       ],
     );
@@ -5023,6 +5043,94 @@ class _LineupTabState extends State<_LineupTab>
           const SizedBox(width: 4),
           Expanded(
             child: tab(m.awayTeamId, team(widget.awayName, _blue), _blue),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// İnce logolu seçici: Ev · Ev VS Dep · Dep. Seçili parça takım rengiyle
+  /// dolar (VS'de iki rengin geçişi).
+  Widget _logoSwitch(MatchModel m) {
+    final hc = widget.homeColor ?? _green;
+    final ac = widget.awayColor ?? _blue;
+    Widget logo(String url) => WebSafeImage(
+      url: url,
+      width: 22,
+      height: 22,
+      fit: BoxFit.contain,
+      fallbackIconSize: 14,
+    );
+    Widget seg(String? id, int flex, Widget child, Decoration on) {
+      final sel = _view == id;
+      return Expanded(
+        flex: flex,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _view = id),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: 32,
+            alignment: Alignment.center,
+            decoration: sel ? on : const BoxDecoration(),
+            child: Opacity(opacity: sel ? 1 : 0.7, child: child),
+          ),
+        ),
+      );
+    }
+
+    final r = BorderRadius.circular(9);
+    final light =
+        _view == null &&
+        (hc.computeLuminance() + ac.computeLuminance()) / 2 > 0.55;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1220),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          seg(
+            m.homeTeamId,
+            2,
+            logo(widget.homeLogo),
+            BoxDecoration(color: hc, borderRadius: r),
+          ),
+          const SizedBox(width: 4),
+          seg(
+            null,
+            3,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                logo(widget.homeLogo),
+                const SizedBox(width: 6),
+                Text(
+                  'VS',
+                  style: TextStyle(
+                    color: light ? const Color(0xFF0F172A) : Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                logo(widget.awayLogo),
+              ],
+            ),
+            BoxDecoration(
+              gradient: LinearGradient(colors: [hc, ac]),
+              borderRadius: r,
+            ),
+          ),
+          const SizedBox(width: 4),
+          seg(
+            m.awayTeamId,
+            2,
+            logo(widget.awayLogo),
+            BoxDecoration(color: ac, borderRadius: r),
           ),
         ],
       ),
