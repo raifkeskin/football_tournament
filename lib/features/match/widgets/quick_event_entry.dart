@@ -1064,11 +1064,7 @@ class _PlayerEventChooser extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                [
-                  if (number.isNotEmpty) number,
-                  name,
-                  ?minute,
-                ].join(' · '),
+                [if (number.isNotEmpty) number, name, ?minute].join(' · '),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,

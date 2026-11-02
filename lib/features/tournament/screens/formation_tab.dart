@@ -375,7 +375,13 @@ class FormationTab extends StatefulWidget {
     this.awayColor,
     this.embedded = false,
     this.onPlayerTap,
+    this.collapsed = false,
+    this.onToggleCollapsed,
   });
+
+  /// Gömülü dizilişte gizle/göster: kapalıyken yalnız başlık çubuğu.
+  final bool collapsed;
+  final VoidCallback? onToggleCollapsed;
 
   /// Kadro sekmesine gömülü: kaydırma ve kenar boşluğu dışarıda; ilk 11
   /// girilmemişse hiçbir şey çizilmez.
@@ -726,25 +732,35 @@ class _FormationTabState extends State<FormationTab>
                 final dirty = _dirty.contains(_selected);
                 _latest[_selected] = (formation, currentIds);
 
+                final fold = widget.onToggleCollapsed;
+                if (widget.embedded && fold != null && widget.collapsed) {
+                  return LineupFoldHeader(open: false, onTap: fold);
+                }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (widget.embedded && fold != null) ...[
+                      LineupFoldHeader(open: true, onTap: fold),
+                      const SizedBox(height: 6),
+                    ],
                     Row(
                       children: [
-                        const Icon(
-                          Icons.grid_view_rounded,
-                          color: _midText,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Diziliş',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
+                        if (!widget.embedded || fold == null) ...[
+                          const Icon(
+                            Icons.grid_view_rounded,
+                            color: _midText,
+                            size: 16,
                           ),
-                        ),
-                        const SizedBox(width: 10),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Diziliş',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
                         _FormationPicker(
                           value: formation,
                           options: options,
@@ -1866,11 +1882,17 @@ class VsFormationPitch extends StatelessWidget {
     this.homeColor,
     this.awayColor,
     this.onPlayerTap,
+    this.collapsed = false,
+    this.onToggleCollapsed,
   });
 
   final MatchModel match;
   final Color? homeColor;
   final Color? awayColor;
+
+  /// Gizle/göster: kapalıyken yalnız başlık çubuğu.
+  final bool collapsed;
+  final VoidCallback? onToggleCollapsed;
   final void Function(
     String teamId,
     String playerId,
@@ -1916,7 +1938,11 @@ class VsFormationPitch extends StatelessWidget {
         match.homeTeamId,
         (home) => _team(match.awayTeamId, (away) {
           if (home == null && away == null) return const SizedBox.shrink();
-          return AspectRatio(
+          final fold = onToggleCollapsed;
+          if (fold != null && collapsed) {
+            return LineupFoldHeader(open: false, onTap: fold);
+          }
+          final pitch = AspectRatio(
             aspectRatio: 0.55,
             child: ValueListenableBuilder<PitchTokenStyle>(
               valueListenable: PitchTokenStylePref.notifier,
@@ -1935,6 +1961,15 @@ class VsFormationPitch extends StatelessWidget {
                     ),
                   ),
             ),
+          );
+          if (fold == null) return pitch;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LineupFoldHeader(open: true, onTap: fold),
+              const SizedBox(height: 6),
+              pitch,
+            ],
           );
         }),
       ),
@@ -2024,4 +2059,80 @@ class VsFormationPitch extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Kadro sekmesindeki dizilişin başlık çubuğu: solda "Diziliş", sağ üstte
+/// kalın aşağı/yukarı ok ile gizle/göster.
+class LineupFoldHeader extends StatelessWidget {
+  const LineupFoldHeader({super.key, required this.open, required this.onTap});
+
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 2, 0, 2),
+        child: Row(
+          children: [
+            const Icon(Icons.grid_view_rounded, color: _midText, size: 16),
+            const SizedBox(width: 6),
+            const Text(
+              'Diziliş',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Spacer(),
+            Tooltip(
+              message: open ? 'Dizilişi gizle' : 'Dizilişi göster',
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: CustomPaint(painter: _ChevronPainter(up: open)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Kalın ok (ikon fontundaki ok ince kalıyordu).
+class _ChevronPainter extends CustomPainter {
+  _ChevronPainter({required this.up});
+
+  final bool up;
+
+  @override
+  void paint(Canvas canvas, Size s) {
+    final c = s.center(Offset.zero);
+    final dy = up ? 3.0 : -3.0;
+    final path = Path()
+      ..moveTo(c.dx - 7, c.dy + dy)
+      ..lineTo(c.dx, c.dy - dy)
+      ..lineTo(c.dx + 7, c.dy + dy);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.4
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChevronPainter old) => old.up != up;
 }
