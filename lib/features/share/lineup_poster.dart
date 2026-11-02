@@ -555,11 +555,11 @@ class LineupPitchPoster extends StatelessWidget {
   /// Dekupe oyuncu en fazla bu boyda; hatlar sıkışınca (ör. 4-2-3-1)
   /// alttaki oyuncunun başı üstteki ismin üstüne gelmesin diye küçülür.
   static const _cutMaxH = 56.0;
-  static const _cutMinH = 36.0;
+  static const _cutMinH = 34.0;
 
-  /// İsim bloğu yüksekliği: ad + soyad ya da yalnız soyad.
+  /// İsim bloğu (ad + soyad) yüksekliği: normal ve sıkışık (küçük yazı).
   static const _nameH = 28.0;
-  static const _lastNameH = 17.0;
+  static const _compactNameH = 23.0;
 
   bool _hasCutout(PosterPlayer pl) =>
       data.tokenStyle == PitchTokenStyle.photo &&
@@ -623,11 +623,7 @@ class LineupPitchPoster extends StatelessWidget {
     );
   }
 
-  Widget _token(
-    PosterPlayer pl, {
-    required double cutH,
-    bool showFirst = true,
-  }) {
+  Widget _token(PosterPlayer pl, {required double cutH, bool compact = false}) {
     final p = data.palette;
     final number = Text(
       (pl.number ?? '').isEmpty ? '–' : pl.number!,
@@ -677,15 +673,15 @@ class LineupPitchPoster extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 3),
-          if (hasLast && showFirst)
+          if (hasLast)
             Text(
               _shortFirst(pl.firstName),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white70,
-                fontSize: 9.5,
+                fontSize: compact ? 8 : 9.5,
                 height: 1.15,
                 fontWeight: FontWeight.w600,
               ),
@@ -697,7 +693,7 @@ class LineupPitchPoster extends StatelessWidget {
             textAlign: TextAlign.center,
             style: _cond(
               color: Colors.white,
-              fontSize: 12.5,
+              fontSize: compact ? 10.5 : 12.5,
               height: 1.1,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.3,
@@ -766,12 +762,16 @@ class LineupPitchPoster extends StatelessWidget {
                           }
                         }
                       }
-                      // Ad yalnız dekupeli afişte, yer darsa düşer.
-                      final showFirst =
-                          !data.starters.any(_hasCutout) ||
-                          gap - _nameH - 4 >= 48;
-                      final cutH = (gap - (showFirst ? _nameH : _lastNameH) - 4)
-                          .clamp(_cutMinH, _cutMaxH);
+                      // Ad soyad hep yazılır; dekupeli afişte yer darsa
+                      // yazı küçülür.
+                      final compact =
+                          data.starters.any(_hasCutout) &&
+                          gap - _nameH - 4 < 48;
+                      final cutH =
+                          (gap - (compact ? _compactNameH : _nameH) - 4).clamp(
+                            _cutMinH,
+                            _cutMaxH,
+                          );
                       return Stack(
                         children: [
                           for (var li = 0; li < data.lines.length; li++)
@@ -795,7 +795,7 @@ class LineupPitchPoster extends StatelessWidget {
                                   child: _token(
                                     pl,
                                     cutH: cutH,
-                                    showFirst: showFirst,
+                                    compact: compact,
                                   ),
                                 );
                               }(),
