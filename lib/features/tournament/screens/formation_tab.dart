@@ -667,9 +667,9 @@ class _FormationTabState extends State<FormationTab>
                           ),
                           const Spacer(),
                           // Gösterim tercihi diziliş afişine de uygulanır.
-                          // Kaydet butonu da varsa yer açmak için yalnız ikon.
+                          // Yalnız ikon: yazılarla dar ekranda taşıyordu.
                           PitchTokenStyleToggle(
-                            compact: _canEdit,
+                            compact: true,
                             showPhoto: insights != null,
                           ),
                           if (_canShare && widget.onShare != null)
