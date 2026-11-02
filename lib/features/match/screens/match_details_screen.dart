@@ -4470,6 +4470,10 @@ class _LineupTabState extends State<_LineupTab>
   @override
   bool get wantKeepAlive => true;
 
+  /// Kadro üstündeki diziliş: ekran açılışında hep açık.
+  bool _pitchOpen = true;
+  void _togglePitch() => setState(() => _pitchOpen = !_pitchOpen);
+
   /// Esame açılış anında ekranı yeniler (sayfa açıkken süre dolarsa).
   Timer? _openTimer;
   DateTime? _openTimerAt;
@@ -4652,6 +4656,8 @@ class _LineupTabState extends State<_LineupTab>
               homeColor: widget.homeColor,
               awayColor: widget.awayColor,
               onPlayerTap: _pitchTap(m, editing: false),
+              collapsed: !_pitchOpen,
+              onToggleCollapsed: _togglePitch,
             )
           else
             FormationTab(
@@ -4674,6 +4680,8 @@ class _LineupTabState extends State<_LineupTab>
                 kind: 'Diziliş',
               ),
               embedded: true,
+              collapsed: !_pitchOpen,
+              onToggleCollapsed: _togglePitch,
               singleTeam: true,
               initialTeam: _view == m.homeTeamId ? 0 : 1,
               onPlayerTap: _pitchTap(
