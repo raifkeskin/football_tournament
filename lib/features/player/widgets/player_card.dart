@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../team/widgets/team_page_tabs.dart';
@@ -7,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/instagram_share.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -546,7 +548,7 @@ class _PlayerCardState extends State<PlayerCard> {
     if (pid == null || pid.isEmpty) return const [];
     const cols =
         'id, match_id, minute, added_minute, video_id, start_sec, end_sec, description, '
-        'player_id';
+        'player_id, clip_url, story_url';
     final rows = <String, Map<String, dynamic>>{};
     try {
       final res = await _sb
@@ -619,6 +621,8 @@ class _PlayerCardState extends State<PlayerCard> {
               ? null
               : _readInt(r['added_minute']),
           description: (r['description'] ?? '').toString().trim(),
+          clipUrl: r['clip_url']?.toString(),
+          storyUrl: r['story_url']?.toString(),
           home: name(m['home']),
           away: name(m['away']),
           homeScore: m['home_score'] == null ? null : _readInt(m['home_score']),
@@ -1119,10 +1123,13 @@ class _PlayerCardState extends State<PlayerCard> {
                         videoId: g.videoId,
                         startSec: g.startSec,
                         endSec: g.endSec,
+                        clipUrl: g.clipUrl,
+                        storyUrl: g.storyUrl,
                         title: title,
                       ),
                       child: BroadcastThumb(videoId: g.videoId, radius: 12),
                     ),
+                    _goalShareButton(g),
                     if (g.description.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -1166,6 +1173,77 @@ class _PlayerCardState extends State<PlayerCard> {
         ),
       ),
     );
+  }
+
+  /// Gol kesitinin hikâye MP4'ü varsa Instagram'da paylaş (uygulama
+  /// yüklüyse; MP4 kesitleri açık değilse yalnız admin).
+  Widget _goalShareButton(_GoalClip g) {
+    final url = (g.storyUrl ?? '').trim();
+    if (url.isEmpty) return const SizedBox.shrink();
+    if (!AppSettings.goalClipMp4Enabled.value &&
+        !AppSession.of(context).value.isAdmin) {
+      return const SizedBox.shrink();
+    }
+    return FutureBuilder<bool>(
+      future: _igAvailable,
+      builder: (context, snap) {
+        if (snap.data != true) return const SizedBox.shrink();
+        final busy = _sharingGoal == g.id;
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FilledButton.icon(
+            onPressed: _sharingGoal != null ? null : () => _shareGoal(g, url),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFD62976),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 42),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.ios_share_rounded, size: 20),
+            label: const Text(
+              'Instagram\'da paylaş',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  late final Future<bool> _igAvailable = InstagramShare.isAvailable();
+  String? _sharingGoal;
+
+  /// Hikâye MP4'ü indirilir, Instagram'ın hikâye ekranında açılır.
+  Future<void> _shareGoal(_GoalClip g, String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sharingGoal = g.id);
+    try {
+      final r = await http.get(Uri.parse(url));
+      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+      final ok = await InstagramShare.shareVideo(r.bodyBytes, story: true);
+      if (!ok) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
+      );
+    } finally {
+      if (mounted) setState(() => _sharingGoal = null);
+    }
   }
 
   BoxDecoration _panel() => BoxDecoration(
@@ -2379,6 +2457,8 @@ class _GoalClip {
     required this.minute,
     this.addedMinute,
     required this.description,
+    this.clipUrl,
+    this.storyUrl,
     required this.home,
     required this.away,
     required this.homeScore,
@@ -2395,6 +2475,10 @@ class _GoalClip {
   final int? minute;
   final int? addedMinute;
   final String description;
+
+  /// MP4 hâli (yatay) ve Instagram hikâyesi (9:16); üretilmediyse null.
+  final String? clipUrl;
+  final String? storyUrl;
   final String home;
   final String away;
   final int? homeScore;

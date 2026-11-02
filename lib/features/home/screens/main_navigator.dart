@@ -214,20 +214,13 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
-      // Yayın Rehberi: bantta sağda takvim (gün seçimi); Ana Sayfa:
-      // turnuva talimatnamesi (metin varsa).
+      // Yayın Rehberi: bantta sağda takvim (gün seçimi). Talimatname
+      // menüde (başlıktaki düğme satırı).
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
               icon: Icons.calendar_month_rounded,
               size: 36,
               onTap: BroadcastGuideScreen.pickDate,
-            )
-          : _aktifSekme == 0 && showRegulations && regulations!.hasText
-          ? BandIconButton(
-              icon: Icons.gavel_rounded,
-              size: 36,
-              tooltip: 'Talimatname',
-              onTap: () => regulations.open(context),
             )
           : null,
     );
@@ -839,42 +832,47 @@ class _MenuDrawer extends StatelessWidget {
                 ],
                 if (links.isNotEmpty || regulations != null) ...[
                   const SizedBox(height: 8),
-                  Wrap(
-                    runSpacing: 6,
-                    children: [
-                      if (regulations != null)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: BandIconButton(
-                            icon: Icons.gavel_rounded,
-                            size: 32,
-                            tooltip: 'Talimatname',
-                            onTap: regulations,
+                  // Düğme satırı sağa hizalı.
+                  SizedBox(
+                    width: double.infinity,
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      runSpacing: 6,
+                      children: [
+                        if (regulations != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: BandIconButton(
+                              icon: Icons.gavel_rounded,
+                              size: 32,
+                              tooltip: 'Talimatname',
+                              onTap: regulations,
+                            ),
                           ),
-                        ),
-                      for (final (icon, color, onTap, label) in links)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Material(
-                            color: color,
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: onTap,
-                              child: SizedBox(
-                                width: 32,
-                                height: 32,
-                                child: Icon(
-                                  icon,
-                                  size: 18,
-                                  color: Colors.white,
-                                  semanticLabel: label,
+                        for (final (icon, color, onTap, label) in links)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Material(
+                              color: color,
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: onTap,
+                                child: SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: Icon(
+                                    icon,
+                                    size: 18,
+                                    color: Colors.white,
+                                    semanticLabel: label,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ],
