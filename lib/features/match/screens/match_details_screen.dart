@@ -4705,8 +4705,13 @@ class _LineupTabState extends State<_LineupTab>
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
           _vsRow(m, head: false, only: 'xi'),
-          SizedBox(height: top ? 8 : 12),
-          _vsRow(m, head: false, only: 'bench'),
+          if (top) ...[
+            const SizedBox(height: 10),
+            _benchBand(),
+            const SizedBox(height: 2),
+          ] else
+            const SizedBox(height: 12),
+          _vsRow(m, head: false, only: 'bench', benchHeader: !top),
         ] else
           // Tek takım: kadro ve yedekler yan yana.
           _TeamLineupColumn(
@@ -4764,7 +4769,52 @@ class _LineupTabState extends State<_LineupTab>
         showPlayerCard(context, playerKey: playerId, number: number);
   }
 
-  Widget _vsRow(MatchModel m, {required bool head, required String only}) {
+  /// VS'de ilk 11 ile yedekler arasında tam genişlik bant: ortada
+  /// YEDEKLER, iki yanda takım renginde çizgi.
+  Widget _benchBand() {
+    Widget line(Color c) => Expanded(
+      child: Container(
+        height: 3,
+        decoration: BoxDecoration(
+          color: c,
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1220),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          line(widget.homeColor ?? _green),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              'YEDEKLER',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          line(widget.awayColor ?? _blue),
+        ],
+      ),
+    );
+  }
+
+  Widget _vsRow(
+    MatchModel m, {
+    required bool head,
+    required String only,
+    bool benchHeader = true,
+  }) {
     Widget col(String name, Color color, String teamId) => Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4776,6 +4826,7 @@ class _LineupTabState extends State<_LineupTab>
             color: color,
             only: only,
             insights: _insights,
+            benchHeader: benchHeader,
           ),
         ],
       ),
@@ -5216,11 +5267,15 @@ class _TeamLineupColumn extends StatefulWidget {
     this.sideBySide = false,
     this.only,
     this.insights,
+    this.benchHeader = true,
   });
 
   final MatchModel match;
   final String teamId;
   final Color color;
+
+  /// VS yedeklerinde sütun başlığı (bant varken gizli).
+  final bool benchHeader;
 
   /// Verilirse satırlar olay ikonları ve puanla, sabit yükseklikte çizilir
   /// (yan yana görünümde iki takımın satırları hizalı kalır).
@@ -5517,7 +5572,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _section('Yedekler'),
+                  if (widget.benchHeader) _section('Yedekler'),
                   if (subs.isEmpty)
                     const Text(
                       '-',
