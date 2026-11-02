@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -224,10 +225,19 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
   // Bitiş YouTube'a bırakılmaz (endSeconds yok): video sonunda YouTube öneri
   // şeridi gösterir ve gömülü oynatıcıda kapatılamaz. Bitiş saniyesinde
   // video duraklatılır, üstü "Tekrar İzle" katmanıyla örtülür.
+  //
+  // YouTube oynatma başlarken 2-3 sn başlığı ve ortada ‖ işaretini gösterir
+  // (gömülü oynatıcıda kapatılamaz). Kesit [_lead] sn önceden başlar ve bu
+  // süre siyah kapakla örtülür; kapak kalkınca kesitin başı ekrandadır.
+  static const _lead = 3;
+  static const _coverFor = Duration(milliseconds: 2700);
+
+  late final int _from = math.max(0, widget.startSec - _lead);
+
   late final _controller = YoutubePlayerController.fromVideoId(
     videoId: widget.videoId,
     autoPlay: true,
-    startSeconds: widget.startSec.toDouble(),
+    startSeconds: _from.toDouble(),
     params: const YoutubePlayerParams(
       // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
       // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
@@ -243,6 +253,8 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
   StreamSubscription<YoutubeVideoState>? _position;
   StreamSubscription<YoutubePlayerValue>? _state;
   bool _ended = false;
+  bool _covered = true;
+  Timer? _uncover;
 
   @override
   void initState() {
@@ -253,7 +265,17 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     });
     _state = _controller.stream.listen((v) {
       if (!_ended && v.playerState == PlayerState.ended) _finish();
+      // Oynatma başlayınca YouTube'un açılış yazıları sönene kadar kapak.
+      if (_covered && _uncover == null && v.playerState == PlayerState.playing) {
+        _uncover = Timer(_coverFor, _removeCover);
+      }
     });
+    // Oynatma hiç başlamazsa (otomatik oynatma engeli) kapak takılı kalmasın.
+    Timer(const Duration(seconds: 8), _removeCover);
+  }
+
+  void _removeCover() {
+    if (mounted && _covered) setState(() => _covered = false);
   }
 
   void _finish() {
@@ -265,6 +287,7 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
   void dispose() {
     _position?.cancel();
     _state?.cancel();
+    _uncover?.cancel();
     _controller.close();
     super.dispose();
   }
@@ -322,6 +345,20 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
                       child: const Text('Kapat'),
                     ),
                   ],
+                ),
+              ),
+            )
+          : _covered
+          ? const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white54,
+                  ),
                 ),
               ),
             )
