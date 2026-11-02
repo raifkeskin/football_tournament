@@ -6,7 +6,10 @@ Onaylı gol kesitleri (match_highlights, YouTube aralığı) için:
   2. İki MP4 üretilir: yatay (16:9, köşede Lig Masası) ve Instagram hikâyesi
      (9:16: turnuva logosu, maç sonucu, GOL!, golcü, golle gelen skor).
   3. clips deposuna yüklenir; match_highlights.clip_url / story_url yazılır.
-  4. Bir kopyası ARCHIVE_DIR altına (Lig / N. Hafta / Maç) bırakılır.
+  4. Bir kopyası Drive'daki maç klasörüne (adında #LMxxxxxx kodu olan,
+     "Gol Kesitleri" alt klasörü) bırakılır; klasör yoksa ARCHIVE_DIR altına
+     (Lig / N. Hafta / Maç).
+Pasif turnuvaların maçları taranmaz.
 
 Kullanım: goal_clips.py [--match <id>] [--limit N]
 Veritabanı: ~/.config/football_tournament/db.env (yazdırılmaz).
@@ -14,6 +17,7 @@ Yükleme: admin.env'deki admin hesabıyla (clips deposuna yalnız admin yazar).
 """
 import argparse
 import datetime
+import glob
 import json
 import os
 import subprocess
@@ -30,6 +34,8 @@ APP_LOGO = os.path.join(ROOT, 'assets', 'images', 'app_logo.png')
 SUPABASE_URL = 'https://qxdjebzszikeslobrozf.supabase.co'
 ARCHIVE_DIR = os.environ.get(
     'ARCHIVE_DIR', os.path.expanduser('~/Desktop/LigMasasi-Kesitler'))
+DRIVE_ROOTS = glob.glob(os.path.expanduser(
+    '~/Library/CloudStorage/GoogleDrive-*/*/LigMasasi'))
 BREW = '/opt/homebrew/bin'
 LEAD, LENGTH = 3, 20  # özetteki başlangıçtan 3 sn önce, 20 sn
 MAX_TRIES = 3
@@ -100,7 +106,9 @@ with h as (
          m.match_date, m.week, m.league_id
     from public.match_highlights h
     join public.matches m on m.id = h.match_id
+    join public.leagues lg on lg.id = m.league_id
    where h.kind = 'goal' and h.status = 'approved'
+     and lg.status = 'active' and coalesce(lg.is_active, true)
      and h.video_id !~ '^http'
      and h.story_url is null and h.clip_tries < {tries}
      and m.status = 'finished'
@@ -305,11 +313,34 @@ def make(c, tmp):
     return wide, story
 
 
+_drive_folders = None
+
+
+def drive_match_folder(match_id):
+    """Drive'da adı '#LM' + maç kimliğinin ilk 6 hanesiyle biten klasör."""
+    global _drive_folders
+    if _drive_folders is None:
+        _drive_folders = {}
+        for root in DRIVE_ROOTS:
+            for dirpath, dirnames, _ in os.walk(root):
+                for d in dirnames:
+                    i = d.rfind('#LM')
+                    if i >= 0:
+                        _drive_folders[d[i + 3:i + 9].upper()] = os.path.join(dirpath, d)
+                # Maç klasörlerinin içine inme (fotoğraflar, kesitler).
+                dirnames[:] = [d for d in dirnames if '#LM' not in d]
+    return _drive_folders.get(match_id.replace('-', '')[:6].upper())
+
+
 def archive(c, wide, story):
-    date = datetime.date.fromisoformat(c['date']).strftime('%d.%m.%Y') if c.get('date') else ''
-    week = f"{c['week']}. Hafta" if c.get('week') else 'Diğer'
-    match = f"{short(c['home'])} {c['fh']}-{c['fa']} {short(c['away'])} ({date})"
-    folder = os.path.join(ARCHIVE_DIR, c['league'] or 'Lig', week, match)
+    folder = drive_match_folder(c['match_id'])
+    if folder:
+        folder = os.path.join(folder, 'Gol Kesitleri')
+    else:
+        date = datetime.date.fromisoformat(c['date']).strftime('%d.%m.%Y') if c.get('date') else ''
+        week = f"{c['week']}. Hafta" if c.get('week') else 'Diğer'
+        match = f"{short(c['home'])} {c['fh']}-{c['fa']} {short(c['away'])} ({date})"
+        folder = os.path.join(ARCHIVE_DIR, c['league'] or 'Lig', week, match)
     os.makedirs(folder, exist_ok=True)
     base = f"{c['minute']}' {c.get('scorer') or short(c['team'])}".replace('/', '-')
     for src, kind in ((story, 'hikaye'), (wide, 'yatay')):
