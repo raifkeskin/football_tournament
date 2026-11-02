@@ -23,6 +23,14 @@ class PhotoStandard {
     return AppSettings.photoStandardEnabled.value;
   }
 
+  /// Kaydı engelleyen kusurlar (yüz yok / birden çok kişi): dekupe ve
+  /// profil için fotoğraf kullanılamaz. Diğerleri yalnız uyarıdır.
+  static const noFace = 'Yüz bulunamadı. Yüzünüz net ve önden görünsün.';
+  static const manyFaces = 'Fotoğrafta yalnız siz olmalısınız.';
+
+  static bool blocks(List<String> issues) =>
+      issues.contains(noFace) || issues.contains(manyFaces);
+
   /// Kesilmiş fotoğrafın standarda uymayan yanları (boşsa uygun). Yüz
   /// bulma bu cihazda yoksa ya da hata verirse boş döner: kullanıcı
   /// engellenmez.
@@ -61,10 +69,10 @@ List<String> portraitIssues(List<PhotoFace> all, Size size) {
   // Arkadaki küçük yüzler sayılmaz.
   final faces = all.where((f) => f.box.width >= w * 0.12).toList();
   if (faces.isEmpty) {
-    return const ['Yüz bulunamadı. Yüzünüz net ve önden görünsün.'];
+    return const [PhotoStandard.noFace];
   }
   if (faces.length > 1) {
-    return const ['Fotoğrafta yalnız siz olmalısınız.'];
+    return const [PhotoStandard.manyFaces];
   }
   final f = faces.first;
   final b = f.box;
