@@ -23,6 +23,7 @@ class IdentityVerifyScreen extends StatefulWidget {
     this.expectedName,
     this.registration = false,
     this.rosterTarget,
+    this.targets,
   });
 
   final String? expectedPlayerId;
@@ -40,6 +41,21 @@ class IdentityVerifyScreen extends StatefulWidget {
     MaterialPageRoute(
       settings: const RouteSettings(name: 'IdentityAddToRosterScreen'),
       builder: (_) => IdentityVerifyScreen(rosterTarget: target),
+    ),
+  );
+
+  /// Kadroda kimlik okut: kart sıradaki oyuncuyla karşılaştırılır (profil
+  /// aranmaz). Birden çok oyuncu "Sırayla okut"tan gelir.
+  final List<IdScanTarget>? targets;
+
+  /// Takım kadrosundan: [targets] oyuncularının kimliği sırayla okutulur.
+  static Future<void> scanRoster(
+    BuildContext context,
+    List<IdScanTarget> targets,
+  ) => Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      settings: const RouteSettings(name: 'IdentityRosterScanScreen'),
+      builder: (_) => IdentityVerifyScreen(targets: targets),
     ),
   );
 
@@ -89,6 +105,10 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   bool _busy = false;
   int _count = 0;
 
+  /// Kadroda okutma: sıradaki oyuncu ve son okumanın sonucu.
+  int _ti = 0;
+  IdScanResult? _scan;
+
   static const _blue = kVerifiedBlue;
 
   @override
@@ -124,7 +144,19 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     _verifiedId = null;
     _error = null;
     _status = null;
+    _scan = null;
   });
+
+  /// Sırayla okutta sonraki oyuncu (okutmadan geçmek de bu).
+  void _nextTarget() {
+    final ts = widget.targets;
+    if (ts == null || _ti >= ts.length - 1) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _reset();
+    setState(() => _ti++);
+  }
 
   /// Canlı kamera: kart algılanınca kapanır; çip okuması butonla başlar.
   Future<void> _scanBack() async {
@@ -202,6 +234,19 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       if (!mounted) return;
       if (widget.registration) {
         Navigator.of(context).pop(card);
+        return;
+      }
+      if (widget.targets case final ts?) {
+        setState(() {
+          _card = card;
+          _status = 'Profille karşılaştırılıyor…';
+        });
+        final r = await IdentityService.verifyFor(ts[_ti], card);
+        if (!mounted) return;
+        setState(() {
+          _scan = r;
+          if (r.kind == 'ok' && !r.already) _count++;
+        });
         return;
       }
       setState(() {
@@ -390,6 +435,8 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           ? 'Kimliğini Doğrula'
           : widget.rosterTarget != null
           ? 'Kimlikle Oyuncu Ekle'
+          : widget.targets != null
+          ? 'Kimlik Okut'
           : 'Kimlik Doğrulama',
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -401,6 +448,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
               '(Android / iPhone) okunabilir.',
             )
           else ...[
+            if (widget.targets case final ts?) _targetCard(ts),
             if ((widget.expectedName ?? '').isNotEmpty)
               _note(
                 Icons.person_search_rounded,
@@ -419,7 +467,12 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
               _keySection(),
               if (_busy && _status != null) _reading(),
               if (_error != null) _errorBox(_error!),
-              if (_card != null) _resultSection(),
+              if (widget.targets != null) ...[
+                if (_scan case final r?) _scanResultBox(r),
+                if (_scan != null || (_card != null && _error != null))
+                  _scanNav(),
+              ] else if (_card != null)
+                _resultSection(),
             ],
             const SizedBox(height: 8),
             _privacyNote(),
@@ -923,6 +976,269 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           ],
         ),
       ),
+    );
+  }
+
+  /// Kimliği okutulacak oyuncu; sırayla okutta kaçıncı olduğu ve atlama.
+  Widget _targetCard(List<IdScanTarget> ts) {
+    final t = ts[_ti];
+    final multi = ts.length > 1;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _blue.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          ClipOval(
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: t.photoUrl.trim().isEmpty
+                  ? Container(
+                      color: const Color(0xFF334155),
+                      child: const Icon(
+                        Icons.person_rounded,
+                        color: Colors.white54,
+                      ),
+                    )
+                  : WebSafeImage(url: t.photoUrl, width: 44, height: 44),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  multi
+                      ? 'Kimliği okutulacak oyuncu · ${_ti + 1}/${ts.length}'
+                      : 'Kimliği okutulacak oyuncu',
+                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                ),
+                Text(
+                  t.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (t.subtitle.isNotEmpty)
+                  Text(
+                    t.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          if (multi && _ti < ts.length - 1 && _scan == null)
+            TextButton(
+              onPressed: _busy ? null : _nextTarget,
+              child: const Text(
+                'Sonraki',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Okumanın sonucu: onaylandı, onaya gönderildi, kart başkasının ya da
+  /// kimlik başka profilde.
+  Widget _scanResultBox(IdScanResult r) {
+    final name = widget.targets![_ti].name;
+    final Color color;
+    final Widget lead;
+    final String title;
+    final List<Widget> body;
+    TextStyle soft() =>
+        const TextStyle(color: Color(0xFFCBD5E1), fontSize: 13.5, height: 1.4);
+    switch (r.kind) {
+      case 'ok':
+        color = const Color(0xFF10B981);
+        lead = const VerifiedBadge(size: 20);
+        title = '$name onaylandı';
+        body = [
+          Text(
+            r.already
+                ? 'Bu kimlik zaten bu profile onaylı.'
+                : 'Ad, soyad ve doğum tarihi kartla aynı. Profilde mavi tik '
+                      'görünür.',
+            style: soft(),
+          ),
+        ];
+      case 'pending':
+        color = kAdminAmber;
+        lead = const Icon(Icons.hourglass_top_rounded, color: kAdminAmber);
+        title = 'Onaya gönderildi';
+        body = [
+          _compareTable(r),
+          const SizedBox(height: 8),
+          Text(
+            'Soyad tutuyor, ${!r.nameOk && !r.dateOk
+                ? 'ad ve doğum tarihi'
+                : !r.nameOk
+                ? 'ad'
+                : 'doğum tarihi'} farklı. Admin ve kurucu başkana onay '
+            'mesajı gitti; onaylanınca profil karttaki bilgilerle düzelir.',
+            style: soft(),
+          ),
+        ];
+      case 'mismatch':
+        color = kAdminDanger;
+        lead = const Icon(Icons.cancel_rounded, color: kAdminDanger);
+        title = 'Bu kart $name adlı oyuncuya ait değil';
+        body = [
+          Text(
+            'Kart: ${r.text('card_name')}, ${r.text('card_year')}. '
+            'Doğrulama yapılmadı. Doğru oyuncunun satırından tekrar deneyin.',
+            style: soft(),
+          ),
+        ];
+      default:
+        color = _blue;
+        lead = const Icon(Icons.info_rounded, color: _blue);
+        title = 'Bu kimlik başka profilde';
+        final other = [
+          r.text('other_name'),
+          if (r.text('other_teams').isNotEmpty) r.text('other_teams'),
+        ].join(' · ');
+        body = [
+          Text(
+            'Kart "$other" profilini zaten doğrulamış. Çift kayıt olabilir; '
+            'birleştirme önerisi admine gönderildi.',
+            style: soft(),
+          ),
+        ];
+    }
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              lead,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...body,
+        ],
+      ),
+    );
+  }
+
+  /// Onaya giden okumada profil ile kartın farkı (farklı olan sarı).
+  Widget _compareTable(IdScanResult r) {
+    String date(String iso) {
+      final d = DateTime.tryParse(iso);
+      if (d == null) return '-';
+      return '${d.day.toString().padLeft(2, '0')}.'
+          '${d.month.toString().padLeft(2, '0')}.${d.year}';
+    }
+
+    const head = TextStyle(
+      color: kAdminMuted,
+      fontSize: 11,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0.5,
+    );
+    const cell = TextStyle(color: Color(0xFFCBD5E1), fontSize: 13);
+    const diff = TextStyle(
+      color: Color(0xFFFBBF24),
+      fontSize: 13,
+      fontWeight: FontWeight.w800,
+    );
+    TableRow row(String label, String a, String b, bool ok) => TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 12, top: 3),
+          child: Text(label, style: head),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(right: 8, top: 3),
+          child: Text(a, style: cell),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(b, style: ok ? cell : diff),
+        ),
+      ],
+    );
+    return Table(
+      columnWidths: const {
+        0: IntrinsicColumnWidth(),
+        1: FlexColumnWidth(),
+        2: FlexColumnWidth(),
+      },
+      children: [
+        const TableRow(
+          children: [
+            SizedBox.shrink(),
+            Text('PROFİL', style: head),
+            Text('KART', style: head),
+          ],
+        ),
+        row('Ad', r.text('profile_first'), r.text('card_first'), r.nameOk),
+        row(
+          'Doğum',
+          date(r.text('profile_birth')),
+          date(r.text('card_birth')),
+          r.dateOk,
+        ),
+      ],
+    );
+  }
+
+  /// Okumadan sonra: sıradaki oyuncu ya da bitir; kart uymadıysa yeniden.
+  Widget _scanNav() {
+    final ts = widget.targets!;
+    final more = _ti < ts.length - 1;
+    final retry = _scan == null || _scan!.kind == 'mismatch';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AdminPrimaryButton(
+          label: more ? 'SIRADAKİ OYUNCU' : 'TAMAM',
+          icon: more ? Icons.skip_next_rounded : Icons.check_rounded,
+          onPressed: _busy ? null : _nextTarget,
+        ),
+        if (retry)
+          TextButton(
+            onPressed: _busy ? null : _reset,
+            child: const Text(
+              'Başka kart okut',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+      ],
     );
   }
 

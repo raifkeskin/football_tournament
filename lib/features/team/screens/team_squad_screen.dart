@@ -1,4 +1,9 @@
+import '../../identity/id_card_reader.dart';
+import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
+import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
+import '../../../core/services/app_settings.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -565,6 +570,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final Set<String> _playerPhotoFetchInFlight = {};
 
   bool _isTeamManager = false;
+
+  /// Kadroda kimlik okut: onaylı oyuncular (kadro değişince ya da bir onay
+  /// gelince yeniden okunur).
+  Future<Set<String>>? _verifiedFut;
+  String _verifiedKey = '';
 
   /// Sezonun yaş ve kontenjan kuralları (kadroda etiket ve özet için).
   AgeRules _ageRules = const AgeRules();
@@ -1819,10 +1829,19 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     _teamColors.then((c) {
       if (mounted) setState(() => _colorsResolved = c);
     });
+    IdentityService.changes.addListener(_onVerifiedChanged);
+    AppSettings.rosterIdScanEnabled.addListener(_onVerifiedChanged);
+  }
+
+  void _onVerifiedChanged() {
+    if (!mounted) return;
+    setState(() => _verifiedKey = '');
   }
 
   @override
   void dispose() {
+    IdentityService.changes.removeListener(_onVerifiedChanged);
+    AppSettings.rosterIdScanEnabled.removeListener(_onVerifiedChanged);
     _rosterSearchController.dispose();
     _rosterSearchFocus.dispose();
     super.dispose();
@@ -2284,6 +2303,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         if (_tab == 3) _warningsTab(allPlayers),
                                         if (_tab == 0) ...[
                                           const SizedBox(height: 8),
+                                          if (_idScanOn(canAdd))
+                                            _idSummary(
+                                              allPlayers,
+                                              effectiveTournamentId,
+                                            ),
                                           _positionFilter(allPlayers),
                                         ],
                                         if (_tab == 1)
@@ -2350,6 +2374,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                                       roster: allPlayers,
                                                       first: i == 0,
                                                       canAdd: canAdd,
+                                                      idScan: _idScanOn(canAdd),
                                                       tournamentId:
                                                           effectiveTournamentId,
                                                       consent: _consentCache.of(
@@ -2479,12 +2504,156 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     );
   }
 
+  /// Kadroda kimlik okut: yalnız uygulamada, kadroyu yönetebilene; yeni
+  /// özellik ayarı kapalıyken yalnız admine.
+  bool _idScanOn(bool canAdd) {
+    if (!IdCardReader.supported || !canAdd) return false;
+    if (!IdentityAccess.visibleIn(context)) return false;
+    return AppSession.of(context).value.isAdmin ||
+        AppSettings.rosterIdScanEnabled.value;
+  }
+
+  Future<Set<String>> _verifiedOf(List<PlayerModel> players) {
+    final ids = [for (final p in players) p.id]..sort();
+    final key = ids.join(',');
+    if (_verifiedFut == null || key != _verifiedKey) {
+      _verifiedKey = key;
+      _verifiedFut = IdentityService.verifiedAmong(ids);
+    }
+    return _verifiedFut!;
+  }
+
+  IdScanTarget _idTarget(PlayerModel p, String seasonId) {
+    final year = RegExp(r'\d{4}').firstMatch(p.birthDate ?? '')?.group(0);
+    final position = (p.mainPosition ?? p.position ?? '').trim();
+    final photo =
+        ((p.photoUrl ?? '').trim().isNotEmpty
+                ? p.photoUrl!
+                : _playerPhotoUrlByPhone[p.id] ?? '')
+            .trim();
+    return IdScanTarget(
+      playerId: p.id,
+      name: p.name,
+      seasonId: seasonId,
+      teamId: widget.teamId,
+      photoUrl: photo,
+      subtitle: [
+        if ((p.number ?? '').trim().isNotEmpty) p.number!.trim(),
+        if (position.isNotEmpty) position,
+        ?year,
+      ].join(' · '),
+    );
+  }
+
+  /// Kaç oyuncunun kimliği onaylı; onaysızlar için "Sırayla okut".
+  Widget _idSummary(List<PlayerModel> players, String seasonId) {
+    if (players.isEmpty) return const SizedBox.shrink();
+    return FutureBuilder<Set<String>>(
+      future: _verifiedOf(players),
+      builder: (context, snap) {
+        final set = snap.data;
+        if (set == null) return const SizedBox.shrink();
+        final total = players.length;
+        final ok = players.where((p) => set.contains(p.id)).length;
+        final left = total - ok;
+        final pending = [
+          for (final section in _positionSections(players))
+            for (final p in section.value)
+              if (!set.contains(p.id)) p,
+        ];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF22304A)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: total == 0 ? 0 : ok / total,
+                      strokeWidth: 4,
+                      color: kVerifiedBlue,
+                      backgroundColor: const Color(0xFF2B3A55),
+                    ),
+                    Text(
+                      '$ok/$total',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$ok oyuncu onaylı',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      left == 0
+                          ? 'Bütün kadronun kimliği okutuldu'
+                          : '$left oyuncunun kimliği okutulmadı',
+                      style: const TextStyle(color: _squadMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              if (left > 0)
+                FilledButton.icon(
+                  onPressed: () => IdentityVerifyScreen.scanRoster(context, [
+                    for (final p in pending) _idTarget(p, seasonId),
+                  ]),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: const Color(0xFF04130D),
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
+                    minimumSize: const Size(0, 34),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.badge_outlined, size: 17),
+                  label: const Text(
+                    'Sırayla okut',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _squadRow(
     PlayerModel p, {
     required List<PlayerModel> roster,
     required bool first,
     required bool canAdd,
     required String tournamentId,
+    bool idScan = false,
     Future<Map<String, ConsentStatus>>? consent,
   }) {
     final number = (p.number ?? '').trim();
@@ -2612,6 +2781,24 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 ],
               ),
             ),
+            if (idScan)
+              FutureBuilder<Set<String>>(
+                future: _verifiedFut,
+                builder: (context, snap) {
+                  final set = snap.data;
+                  if (set == null || set.contains(p.id)) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: _IdScanChip(
+                      onTap: () => IdentityVerifyScreen.scanRoster(context, [
+                        _idTarget(p, tournamentId),
+                      ]),
+                    ),
+                  );
+                },
+              ),
             const SizedBox(width: 8),
             Tooltip(
               message: canAdd ? 'Forma no değiştir' : 'Forma no',
@@ -2635,6 +2822,47 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 onPressed: openActions,
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Onaysız oyuncunun satırında küçük "Kimlik" düğmesi.
+class _IdScanChip extends StatelessWidget {
+  const _IdScanChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Kimliğini okut',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          decoration: BoxDecoration(
+            color: kVerifiedBlue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: kVerifiedBlue.withValues(alpha: 0.5)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.badge_outlined, size: 15, color: Color(0xFF93C5FD)),
+              SizedBox(width: 4),
+              Text(
+                'Kimlik',
+                style: TextStyle(
+                  color: Color(0xFF93C5FD),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
