@@ -35,7 +35,7 @@ begin
   return query
   select p.id,
          trim(coalesce(p.name, '') || ' ' || coalesce(p.surname, '')),
-         (select t.name
+         (select t.name::text
             from season_team_players stp
             join teams t on t.id = stp.team_id
            where stp.player_id = p.id and stp.is_active
