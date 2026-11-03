@@ -333,7 +333,7 @@ FMT_STD = 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]'
 FMT_HQ = 'bv*[height<=2160]+ba/b'
 
 
-def make(c, tmp, fmt=FMT_HQ, crf='17', preset='medium', zoom=1.18):
+def make(c, tmp, fmt=FMT_HQ, crf='17', preset='slow', zoom=1.18):
     """zoom > 1: hikâyede maç görüntüsü yanlardan kırpılıp büyütülür."""
     s = max(0, int(c['start']) - LEAD)
     src = os.path.join(tmp, 'src.mp4')
