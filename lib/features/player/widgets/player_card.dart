@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../team/widgets/team_page_tabs.dart';
@@ -8,8 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
-import '../../../core/services/instagram_share.dart';
-import '../../../core/services/whatsapp_share.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -200,9 +197,6 @@ class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
 
   late final Future<List<_GoalClip>> _goals = _loadGoals();
-
-  /// Açık gol satırı (dar listede dokununca ayrıntısı açılır).
-  String? _openGoal;
 
   /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
   int _tab = 0;
@@ -1018,8 +1012,9 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
+  /// Haber listesi gibi tek satır: dakika, maç ve tarih; sağda kesitin
+  /// küçük görseli. Dokununca gol açılır (paylaşım düğmeleri orada).
   Widget _goalRow(_GoalClip g) {
-    final open = _openGoal == g.id;
     final score = g.homeScore == null || g.awayScore == null
         ? '–'
         : '${g.homeScore}–${g.awayScore}';
@@ -1035,240 +1030,100 @@ class _PlayerCardState extends State<PlayerCard> {
         color: Colors.white.withValues(alpha: 0.04),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: open
-                ? _tone.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.07),
-          ),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: () => setState(() => _openGoal = open ? null : g.id),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _tone,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        g.minute != null
-                            ? minuteLabel(g.minute, g.addedMinute)
-                            : 'Gol',
-                        style: TextStyle(
-                          color: _on(_tone),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
+        child: InkWell(
+          onTap: () => openYoutubeClip(
+            context,
+            videoId: g.videoId,
+            startSec: g.startSec,
+            endSec: g.endSec,
+            clipUrl: g.clipUrl,
+            storyUrl: g.storyUrl,
+            title: title,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _tone,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    g.minute != null
+                        ? minuteLabel(g.minute, g.addedMinute)
+                        : 'Gol',
+                    style: TextStyle(
+                      color: _on(_tone),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${shortTeamName(g.home)} $score '
-                            '${shortTeamName(g.away)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          if (when.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              when,
-                              style: const TextStyle(
-                                color: _mid,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    AnimatedRotation(
-                      turns: open ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Icon(
-                        Icons.expand_more_rounded,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            if (open)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    GestureDetector(
-                      onTap: () => openYoutubeClip(
-                        context,
-                        videoId: g.videoId,
-                        startSec: g.startSec,
-                        endSec: g.endSec,
-                        clipUrl: g.clipUrl,
-                        storyUrl: g.storyUrl,
-                        title: title,
-                      ),
-                      child: BroadcastThumb(videoId: g.videoId, radius: 12),
-                    ),
-                    _goalShareButton(g),
-                    if (g.description.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        g.description,
+                        '${shortTeamName(g.home)} $score '
+                        '${shortTeamName(g.away)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12.5,
-                          height: 1.35,
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.25,
                         ),
                       ),
-                    ],
-                    if (g.league.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.emoji_events_outlined,
-                            size: 13,
+                      if (when.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          when,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _mid,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      if (g.league.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          g.league,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
                             color: _tone,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
                           ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              g.league,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: _mid,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Gol kesitinin hikâye MP4'ü varsa Instagram (uygulama yüklüyse) ve
-  /// WhatsApp'ta paylaş (MP4 kesitleri açık değilse yalnız admin).
-  Widget _goalShareButton(_GoalClip g) {
-    final url = (g.storyUrl ?? '').trim();
-    if (url.isEmpty) return const SizedBox.shrink();
-    if (!AppSettings.goalClipMp4Enabled.value &&
-        !AppSession.of(context).value.isAdmin) {
-      return const SizedBox.shrink();
-    }
-    Widget button(String target, String label, IconData icon, Color color) {
-      final busy = _sharingGoal == '${g.id}|$target';
-      return FilledButton.icon(
-        onPressed: _sharingGoal != null
-            ? null
-            : () => _shareGoal(g, url, target),
-        style: FilledButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          minimumSize: const Size(0, 42),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 104,
+                  child: BroadcastThumb(videoId: g.videoId, radius: 10),
+                ),
+              ],
+            ),
           ),
         ),
-        icon: busy
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(icon, size: 20),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-      );
-    }
-
-    return FutureBuilder<bool>(
-      future: _igAvailable,
-      builder: (context, snap) => Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Row(
-          children: [
-            if (snap.data == true) ...[
-              Expanded(
-                child: button(
-                  'ig',
-                  'Instagram',
-                  Icons.camera_alt_outlined,
-                  const Color(0xFFD62976),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: button(
-                'wa',
-                'WhatsApp',
-                Icons.chat_rounded,
-                const Color(0xFF1DA851),
-              ),
-            ),
-          ],
-        ),
       ),
     );
-  }
-
-  late final Future<bool> _igAvailable = InstagramShare.isAvailable();
-  String? _sharingGoal;
-
-  /// Hikâye MP4'ü indirilir; Instagram hikâyesinde ya da WhatsApp'ta açılır.
-  Future<void> _shareGoal(_GoalClip g, String url, String target) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final origin = WhatsAppShare.originOf(context);
-    setState(() => _sharingGoal = '${g.id}|$target');
-    try {
-      final r = await http.get(Uri.parse(url));
-      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      if (target == 'wa') {
-        await WhatsAppShare.shareVideo(r.bodyBytes, origin: origin);
-      } else if (!await InstagramShare.shareVideo(r.bodyBytes, story: true)) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Instagram açılamadı.')),
-        );
-      }
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
-      );
-    } finally {
-      if (mounted) setState(() => _sharingGoal = null);
-    }
   }
 
   BoxDecoration _panel() => BoxDecoration(
