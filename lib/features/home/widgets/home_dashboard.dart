@@ -40,6 +40,7 @@ import '../../sponsors/sponsor_strip.dart';
 import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
+import '../../search/search_screen.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -943,6 +944,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
           // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
           child: SponsorStrip(leagueId: widget.league.id),
         ),
+        // Bantta büyüteçle açılıp kapanan arama çubuğu.
+        const HomeSearchBar(),
         Expanded(
           child: RefreshIndicator(
             color: DashColors.accent(),
