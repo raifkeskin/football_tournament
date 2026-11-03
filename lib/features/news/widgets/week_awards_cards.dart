@@ -1,0 +1,1081 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
+import '../../../core/services/app_settings.dart';
+import '../../../core/services/instagram_share.dart';
+import '../../../core/utils/string_utils.dart';
+import '../../../core/utils/team_colors.dart';
+import '../../../core/widgets/app_logo.dart';
+import '../../../core/widgets/youtube_player_page.dart';
+import '../../tournament/models/league_extras.dart';
+import '../week_awards.dart';
+import 'result_news_cards.dart';
+
+/// Haftanın Enleri kartları (4:5, Instagram gönderisi oranı): haftanın
+/// 11'i (saha + puan) ve her en için ödül kartı. Görseller paylaşımda
+/// PNG'ye çizildiği için resimler Image.network ile yüklenir.
+
+const _card = Color(0xFF1E293B);
+const _muted = Color(0xFF94A3B8);
+const _gold = Color(0xFFE2B845);
+const _goldHi = Color(0xFFF6D77A);
+const _night = Color(0xFF0C1424);
+
+/// Puanlar kartta yalnız futbolcu puanı herkese açıksa görünür.
+bool weekAwardsShowRatings() => AppSettings.matchInsightsEnabled.value;
+
+TextStyle _cond(
+  double size, {
+  Color color = Colors.white,
+  bool italic = false,
+}) => TextStyle(
+  fontFamily: 'BarlowCondensed',
+  fontSize: size,
+  height: 1.05,
+  color: color,
+  fontWeight: FontWeight.w800,
+  fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+);
+
+/// Kart zemini: üstte koyu lacivert ışık.
+const _bgGradient = RadialGradient(
+  center: Alignment(0, -1),
+  radius: 1.4,
+  colors: [Color(0xFF17324A), _night, Color(0xFF080D18)],
+  stops: [0, 0.6, 1],
+);
+
+Widget _net(
+  String url, {
+  required double size,
+  BoxFit fit = BoxFit.cover,
+  Alignment alignment = Alignment.center,
+  required Widget fallback,
+}) {
+  if (url.trim().isEmpty) return fallback;
+  return Image.network(
+    url,
+    width: size,
+    height: size,
+    fit: fit,
+    alignment: alignment,
+    filterQuality: FilterQuality.high,
+    errorBuilder: (_, _, _) => fallback,
+  );
+}
+
+/// Turnuva logosu; yoksa altın rozet ve baş harfler.
+Widget _crest(String url, String name, double size) {
+  final initials = name
+      .split(RegExp(r'\s+'))
+      .where((e) => e.isNotEmpty)
+      .take(3)
+      .map((e) => e.characters.first)
+      .join()
+      .trUpper;
+  final badge = Container(
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: SweepGradient(
+        colors: [_goldHi, _gold, Color(0xFFA77A1F), _goldHi],
+      ),
+    ),
+    child: Text(
+      initials,
+      style: _cond(size * 0.36, color: const Color(0xFF1B1405)),
+    ),
+  );
+  return _net(url, size: size, fit: BoxFit.contain, fallback: badge);
+}
+
+/// Kartın üst satırı: turnuva logosu, adı, hafta.
+class _Head extends StatelessWidget {
+  const _Head({
+    required this.u,
+    required this.league,
+    required this.logo,
+    required this.week,
+  });
+
+  final double u;
+  final String league;
+  final String logo;
+  final int week;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _crest(logo, league, 9 * u),
+      SizedBox(width: 2.6 * u),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              league.trUpper,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _cond(
+                3.4 * u,
+                color: _gold,
+              ).copyWith(letterSpacing: 0.3 * u),
+            ),
+            SizedBox(height: 0.6 * u),
+            Text(
+              '$week. HAFTA',
+              style: _cond(
+                3 * u,
+                color: const Color(0xFFC8D3E6),
+              ).copyWith(letterSpacing: 0.36 * u),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+/// Kartın altındaki imza.
+class _Brand extends StatelessWidget {
+  const _Brand(this.u);
+  final double u;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      AppLogo(size: 5 * u),
+      SizedBox(width: 1.6 * u),
+      Text(
+        'LİG MASASI',
+        style: _cond(
+          3.4 * u,
+          color: const Color(0xFFDFE7F3),
+          italic: true,
+        ).copyWith(letterSpacing: 0.5 * u),
+      ),
+    ],
+  );
+}
+
+// ------------------------------------------------------------- haftanın 11'i
+
+/// Haftanın 11'i: saha üzerinde fotoğraf (yoksa baş harfler), ad, takım ve
+/// varsa puan rozeti. [slots] dizilişteki sırayla (0 kaleci); boş yer
+/// düzenleme ekranında "+" olarak çizilir.
+class WeekElevenCard extends StatelessWidget {
+  const WeekElevenCard({
+    super.key,
+    required this.league,
+    required this.leagueLogo,
+    required this.week,
+    required this.formation,
+    required this.slots,
+    required this.showRatings,
+    this.onTapSlot,
+  });
+
+  final String league;
+  final String leagueLogo;
+  final int week;
+  final String formation;
+  final List<ElevenSlot?> slots;
+  final bool showRatings;
+  final ValueChanged<int>? onTapSlot;
+
+  /// Her sıranın sahadaki yeri (0..1; y yukarıdan).
+  static List<Offset> layout(String formation) {
+    final counts = formationCounts(formation);
+    final out = <Offset>[const Offset(0.5, 0.89)];
+    final lines = counts.length;
+    for (var li = 0; li < lines; li++) {
+      final y = lines == 1 ? 0.45 : 0.68 - li * (0.56 / (lines - 1));
+      final n = counts[li];
+      final step = math.min(0.25, 0.8 / n);
+      for (var j = 0; j < n; j++) {
+        out.add(Offset(0.5 + (j - (n - 1) / 2) * step, y));
+      }
+    }
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final u = c.maxWidth / 100;
+          final pos = layout(formation);
+          final best = showRatings
+              ? slots.map((s) => s?.rating ?? 0).fold<double>(0, math.max)
+              : 0.0;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2 * u),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(gradient: _bgGradient),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 5 * u,
+                    right: 5 * u,
+                    top: 4 * u,
+                    child: _Head(
+                      u: u,
+                      league: league,
+                      logo: leagueLogo,
+                      week: week,
+                    ),
+                  ),
+                  Positioned(
+                    left: 5 * u,
+                    top: 14.5 * u,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          "HAFTANIN 11'İ",
+                          style: _cond(8.6 * u, italic: true),
+                        ),
+                        SizedBox(width: 2 * u),
+                        Text(
+                          formation,
+                          style: _cond(
+                            3.4 * u,
+                            color: _goldHi,
+                          ).copyWith(letterSpacing: 0.3 * u),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    left: 4 * u,
+                    right: 4 * u,
+                    top: 25 * u,
+                    bottom: 11 * u,
+                    child: LayoutBuilder(
+                      builder: (context, p) => Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(painter: _PitchPainter(u)),
+                          ),
+                          for (
+                            var i = 0;
+                            i < pos.length && i < slots.length;
+                            i++
+                          )
+                            Positioned(
+                              left: pos[i].dx * p.maxWidth - 11 * u,
+                              top: pos[i].dy * p.maxHeight - 6 * u,
+                              width: 22 * u,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: onTapSlot == null
+                                    ? null
+                                    : () => onTapSlot!(i),
+                                child: _PitchPlayer(
+                                  u: u,
+                                  slot: slots[i],
+                                  showRating: showRatings,
+                                  top: best > 0 && slots[i]?.rating == best,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 3.4 * u,
+                    child: _Brand(u),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PitchPlayer extends StatelessWidget {
+  const _PitchPlayer({
+    required this.u,
+    required this.slot,
+    required this.showRating,
+    required this.top,
+  });
+
+  final double u;
+  final ElevenSlot? slot;
+  final bool showRating;
+  final bool top;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = slot;
+    final d = 12 * u;
+    if (s == null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: d,
+            height: d,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: 0.25),
+              border: Border.all(color: Colors.white54, width: 0.5 * u),
+            ),
+            child: Icon(Icons.add_rounded, color: Colors.white70, size: 6 * u),
+          ),
+        ],
+      );
+    }
+    final color = TeamPalette.of(s.team.color, null).background;
+    final initials = Container(
+      color: color,
+      alignment: Alignment.center,
+      child: Text(s.person.initials, style: _cond(4.6 * u)),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: d + 5 * u,
+          height: d,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: d,
+                height: d,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                  border: Border.all(color: Colors.white, width: 0.6 * u),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 2 * u,
+                      offset: Offset(0, u),
+                    ),
+                  ],
+                ),
+                child: _net(
+                  s.person.photo,
+                  size: d,
+                  alignment: Alignment.topCenter,
+                  fallback: initials,
+                ),
+              ),
+              if (showRating && s.rating != null)
+                Positioned(
+                  right: -0.4 * u,
+                  top: -1.6 * u,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 1.1 * u,
+                      vertical: 0.5 * u,
+                    ),
+                    decoration: BoxDecoration(
+                      color: top ? Colors.white : _gold,
+                      borderRadius: BorderRadius.circular(u),
+                    ),
+                    child: Text(
+                      s.rating!.toStringAsFixed(1),
+                      style: _cond(2.8 * u, color: const Color(0xFF1A1404)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        SizedBox(height: 0.8 * u),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            s.person.name.trUpper,
+            maxLines: 1,
+            style: _cond(3.3 * u).copyWith(
+              shadows: [Shadow(color: Colors.black87, blurRadius: u)],
+            ),
+          ),
+        ),
+        SizedBox(height: 0.6 * u),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: 1.2 * u,
+              vertical: 0.4 * u,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(u),
+            ),
+            child: Text(
+              s.team.short.trUpper,
+              maxLines: 1,
+              style: TextStyle(
+                color: const Color(0xFFD5F5E6),
+                fontSize: 2.3 * u,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.15 * u,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Çimen şeritleri ve saha çizgileri.
+class _PitchPainter extends CustomPainter {
+  _PitchPainter(this.u);
+  final double u;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(2 * u),
+    );
+    canvas.save();
+    canvas.clipRRect(r);
+    const bands = 10;
+    final h = size.height / bands;
+    for (var i = 0; i < bands; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, i * h, size.width, h + 0.5),
+        Paint()
+          ..color = i.isEven
+              ? const Color(0xFF0F6B47)
+              : const Color(0xFF0D6141),
+      );
+    }
+    final line = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5 * u;
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      line,
+    );
+    canvas.drawCircle(size.center(Offset.zero), 11 * u, line);
+    final bw = size.width / 2, bh = size.height * 0.11;
+    canvas.drawRect(Rect.fromLTWH(size.width / 4, -1, bw, bh + 1), line);
+    canvas.drawRect(
+      Rect.fromLTWH(size.width / 4, size.height - bh, bw, bh + 1),
+      line,
+    );
+    canvas.restore();
+    canvas.drawRRect(
+      r.deflate(0.25 * u),
+      line..color = Colors.white.withValues(alpha: 0.35),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PitchPainter old) => old.u != u;
+}
+
+// ------------------------------------------------------------- ödül kartı
+
+/// Tek en kartı: başlık, ödül renginde halkalı fotoğraf, ad, kısa bilgi.
+class WeekAwardCard extends StatelessWidget {
+  const WeekAwardCard({
+    super.key,
+    required this.award,
+    required this.league,
+    required this.leagueLogo,
+    required this.week,
+    required this.showRatings,
+  });
+
+  final WeekAward award;
+  final String league;
+  final String leagueLogo;
+  final int week;
+  final bool showRatings;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = award;
+    final accent = a.kind.color;
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final u = c.maxWidth / 100;
+          final stats = [
+            ...a.stats,
+            if (a.kind == AwardKind.goal &&
+                (a.clip?['video_id'] ?? '').toString().isNotEmpty)
+              '▶ VİDEO',
+            if (showRatings && a.rating != null)
+              '${a.rating!.toStringAsFixed(1)} PUAN',
+          ];
+          final String title;
+          final String sub;
+          switch (a.kind) {
+            case AwardKind.match:
+              title = '${a.home?.short ?? ''} · ${a.away?.short ?? ''}';
+              sub = '';
+            case AwardKind.team:
+              title = a.team.short;
+              sub = a.home == null
+                  ? ''
+                  : '${a.score} · ${(a.home!.id == a.team.id ? a.away! : a.home!).short}';
+            default:
+              title = a.person?.name ?? '';
+              sub = a.team.short;
+          }
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2 * u),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(gradient: _bgGradient),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: const Alignment(0, -0.08),
+                          radius: 0.62,
+                          colors: [
+                            accent.withValues(alpha: 0.3),
+                            accent.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 5 * u,
+                    right: 5 * u,
+                    top: 4 * u,
+                    child: _Head(
+                      u: u,
+                      league: league,
+                      logo: leagueLogo,
+                      week: week,
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 17 * u,
+                    child: Column(
+                      children: [
+                        Text(
+                          'HAFTANIN',
+                          style: _cond(
+                            3.4 * u,
+                            color: accent,
+                          ).copyWith(letterSpacing: u),
+                        ),
+                        SizedBox(height: 0.8 * u),
+                        Text(
+                          a.kind.title.trUpper,
+                          style: _cond(11.5 * u, italic: true),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 37 * u,
+                    child: Center(child: _portrait(u, accent)),
+                  ),
+                  Positioned(
+                    left: 6 * u,
+                    right: 6 * u,
+                    bottom: 12 * u,
+                    child: Column(
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            title.trUpper,
+                            maxLines: 1,
+                            style: _cond(
+                              a.kind == AwardKind.match ? 6.4 * u : 9 * u,
+                            ),
+                          ),
+                        ),
+                        if (sub.isNotEmpty) ...[
+                          SizedBox(height: 1.4 * u),
+                          Text(
+                            sub.trUpper,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFFC8D3E6),
+                              fontSize: 3.2 * u,
+                              letterSpacing: 0.3 * u,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (stats.isNotEmpty) ...[
+                          SizedBox(height: 2 * u),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 1.6 * u,
+                            runSpacing: 1.2 * u,
+                            children: [
+                              for (final s in stats)
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 2 * u,
+                                    vertical: 0.8 * u,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(5 * u),
+                                    border: Border.all(
+                                      color: accent.withValues(alpha: 0.7),
+                                      width: 0.35 * u,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    s.trUpper,
+                                    style: _cond(3.4 * u, color: accent),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 3.4 * u,
+                    child: _Brand(u),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _portrait(double u, Color accent) {
+    final a = award;
+    if (a.kind == AwardKind.match && a.home != null) {
+      Widget side(AwardTeam t) => Container(
+        width: 22 * u,
+        height: 22 * u,
+        padding: EdgeInsets.all(3 * u),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: TeamPalette.of(t.color, null).background,
+          border: Border.all(color: accent, width: 0.7 * u),
+        ),
+        child: _net(
+          t.logo,
+          size: 16 * u,
+          fit: BoxFit.contain,
+          fallback: Center(
+            child: Text(
+              AwardPerson(id: '', name: t.short).initials,
+              style: _cond(7 * u),
+            ),
+          ),
+        ),
+      );
+      return SizedBox(
+        height: 40 * u,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            side(a.home!),
+            SizedBox(width: 4 * u),
+            Text(a.score, style: _cond(15 * u)),
+            SizedBox(width: 4 * u),
+            side(a.away!),
+          ],
+        ),
+      );
+    }
+    final d = 40 * u;
+    final teamColor = TeamPalette.of(a.team.color, null).background;
+    final Widget fallback = a.kind == AwardKind.team
+        ? Padding(
+            padding: EdgeInsets.all(7 * u),
+            child: _net(
+              a.team.logo,
+              size: d,
+              fit: BoxFit.contain,
+              fallback: Center(
+                child: Text(
+                  AwardPerson(id: '', name: a.team.short).initials,
+                  style: _cond(12 * u),
+                ),
+              ),
+            ),
+          )
+        : Center(child: Text(a.person?.initials ?? '?', style: _cond(15 * u)));
+    return SizedBox(
+      width: d + 4 * u,
+      height: d + 4 * u,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: d + 4 * u,
+            height: d + 4 * u,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: accent, width: 0.8 * u),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 6 * u,
+                  offset: Offset(0, 3 * u),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: d,
+            height: d,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: teamColor),
+            child: _net(
+              a.photo,
+              size: d,
+              alignment: Alignment.topCenter,
+              fallback: fallback,
+            ),
+          ),
+          Positioned(
+            right: -u,
+            bottom: 0,
+            child: Container(
+              width: 12 * u,
+              height: 12 * u,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accent,
+                border: Border.all(color: _night, width: 0.9 * u),
+              ),
+              child: Icon(a.kind.icon, size: 6.6 * u, color: _night),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------- haber kartı
+
+/// Akışta ve haber detayında bülten: kaydırılan kartlar, her kart
+/// Instagram'da (gönderi / hikâye) paylaşılabilir. Paylaşma herkese açık;
+/// yayınlamak yalnız sorumlunun.
+class WeekAwardsNewsCard extends StatefulWidget {
+  const WeekAwardsNewsCard({
+    super.key,
+    required this.item,
+    required this.meta,
+    required this.loggedIn,
+    required this.liked,
+    required this.likeCount,
+    required this.onToggleLike,
+    required this.onShare,
+  });
+
+  final NewsItem item;
+  final String meta;
+  final bool loggedIn;
+  final bool liked;
+  final int likeCount;
+  final VoidCallback onToggleLike;
+  final VoidCallback onShare;
+
+  @override
+  State<WeekAwardsNewsCard> createState() => _WeekAwardsNewsCardState();
+}
+
+class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
+  late final Future<bool> _instagram = InstagramShare.isAvailable();
+  final _pager = PageController();
+  final _keys = <int, GlobalKey>{};
+  int _page = 0;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _pager.dispose();
+    super.dispose();
+  }
+
+  Future<void> _shareInstagram() async {
+    if (_busy) return;
+    final story = await askInstagramTarget(context);
+    if (story == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      final png = await captureCard(_keys[_page]!);
+      final ok = await InstagramShare.share(png, story: story);
+      if (!ok) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Instagram\'a aktarılamadı: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _play(WeekAward a) {
+    final c = a.clip;
+    if (c == null) return;
+    final id = (c['video_id'] ?? '').toString();
+    if (id.isEmpty) return;
+    openYoutubeClip(
+      context,
+      videoId: id,
+      startSec: (c['start'] as num?)?.toInt() ?? 0,
+      endSec: (c['end'] as num?)?.toInt() ?? 0,
+      title: a.person?.name ?? 'Gol',
+      clipUrl: c['clip_url']?.toString(),
+      storyUrl: c['story_url']?.toString(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = WeekAwards.fromJson(widget.item.autoData!);
+    final league = w.leagueName.isNotEmpty
+        ? w.leagueName
+        : widget.item.leagueName;
+    final logo = w.leagueLogo.isNotEmpty
+        ? w.leagueLogo
+        : (widget.item.leagueLogoUrl ?? '');
+    final week = w.week > 0 ? w.week : (widget.item.week ?? 0);
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppSettings.matchInsightsEnabled,
+      builder: (context, ratings, _) {
+        final pages = <Widget>[
+          if (w.hasEleven)
+            WeekElevenCard(
+              league: league,
+              leagueLogo: logo,
+              week: week,
+              formation: w.formation,
+              slots: w.eleven,
+              showRatings: ratings,
+            ),
+          for (final a in w.awards)
+            GestureDetector(
+              onTap: a.kind == AwardKind.goal ? () => _play(a) : null,
+              child: WeekAwardCard(
+                award: a,
+                league: league,
+                leagueLogo: logo,
+                week: week,
+                showRatings: ratings,
+              ),
+            ),
+        ];
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _gold,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'HAFTANIN ENLERİ',
+                        style: _cond(
+                          12,
+                          color: const Color(0xFF1A1404),
+                        ).copyWith(letterSpacing: 0.6),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        [
+                          if (week > 0) '$week. Hafta',
+                          widget.meta,
+                        ].where((e) => e.isNotEmpty).join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ),
+                    if (pages.length > 1)
+                      Text(
+                        '${_page + 1}/${pages.length}',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              AspectRatio(
+                aspectRatio: 4 / 5,
+                child: PageView.builder(
+                  controller: _pager,
+                  itemCount: pages.length,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (context, i) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: RepaintBoundary(
+                      key: _keys.putIfAbsent(i, GlobalKey.new),
+                      child: pages[i],
+                    ),
+                  ),
+                ),
+              ),
+              if (pages.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < pages.length; i++)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: i == _page ? 16 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: i == _page ? _gold : Colors.white24,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 8),
+              FutureBuilder<bool>(
+                future: _instagram,
+                builder: (context, snap) => NewsCardActions(
+                  loggedIn: widget.loggedIn,
+                  liked: widget.liked,
+                  likeCount: widget.likeCount,
+                  onToggleLike: widget.onToggleLike,
+                  onShare: widget.onShare,
+                  onInstagram: snap.data == true && !_busy && pages.isNotEmpty
+                      ? _shareInstagram
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Kartı 1080 piksel genişliğinde PNG'ye çizer.
+Future<Uint8List> captureCard(GlobalKey key) async {
+  final boundary =
+      key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  final image = await boundary.toImage(pixelRatio: 1080 / boundary.size.width);
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  if (data == null) throw Exception('Görsel oluşturulamadı.');
+  return data.buffer.asUint8List();
+}
+
+/// Instagram'da gönderi mi (false) hikâye mi (true); vazgeçilirse null.
+Future<bool?> askInstagramTarget(
+  BuildContext context,
+) => showModalBottomSheet<bool>(
+  context: context,
+  backgroundColor: _card,
+  builder: (ctx) => SafeArea(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text(
+            'Instagram\'da paylaş',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Görünen kart, Instagram\'da o an açık olan hesaptan paylaşılır.',
+            style: TextStyle(color: _muted, fontSize: 12.5),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.grid_on_rounded, color: Colors.white),
+          title: const Text('Gönderi', style: TextStyle(color: Colors.white)),
+          subtitle: const Text(
+            'Açıklama yazarak',
+            style: TextStyle(color: _muted),
+          ),
+          onTap: () => Navigator.pop(ctx, false),
+        ),
+        ListTile(
+          leading: const Icon(Icons.amp_stories_outlined, color: Colors.white),
+          title: const Text('Hikâye', style: TextStyle(color: Colors.white)),
+          subtitle: const Text(
+            'Müzik, çıkartma ekleyerek',
+            style: TextStyle(color: _muted),
+          ),
+          onTap: () => Navigator.pop(ctx, true),
+        ),
+        const SizedBox(height: 8),
+      ],
+    ),
+  ),
+);

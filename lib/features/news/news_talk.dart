@@ -84,7 +84,7 @@ List<NewsReaction> newsReactionsFor(NewsItem n) {
       ('👏', 'Güzel hafta'),
     ]);
   }
-  if (n.isWeeklyPick) {
+  if (n.isWeeklyPick || n.isWeekAwards) {
     return of([('👑', 'Hak etti'), ('🔥', 'Efsane'), ('🐐', 'GOAT')]);
   }
   // Bugünün maçları: tribün tepkisi yok (yalnız yorumlar).

@@ -243,6 +243,43 @@ Color _onAccent(Color c) =>
 
 /// Alt bant: eşit bölmeler (beğeni, paylaş, Instagram) ve aralarında ince
 /// çizgi; bağlantı en sağda daha geniş bölmede.
+/// Haber kartlarının alt satırı (beğen, paylaş, Instagram, bağlantı);
+/// başka dosyalardaki kartlar için.
+class NewsCardActions extends StatelessWidget {
+  const NewsCardActions({
+    super.key,
+    required this.loggedIn,
+    required this.liked,
+    required this.likeCount,
+    required this.onToggleLike,
+    required this.onShare,
+    this.linkText,
+    this.onLink,
+    this.onInstagram,
+  });
+
+  final bool loggedIn;
+  final bool liked;
+  final int likeCount;
+  final VoidCallback onToggleLike;
+  final VoidCallback onShare;
+  final String? linkText;
+  final VoidCallback? onLink;
+  final VoidCallback? onInstagram;
+
+  @override
+  Widget build(BuildContext context) => _Actions(
+    loggedIn: loggedIn,
+    liked: liked,
+    likeCount: likeCount,
+    onToggleLike: onToggleLike,
+    onShare: onShare,
+    linkText: linkText,
+    onLink: onLink,
+    onInstagram: onInstagram,
+  );
+}
+
 class _Actions extends StatelessWidget {
   const _Actions({
     required this.loggedIn,

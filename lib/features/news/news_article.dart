@@ -25,7 +25,7 @@ extension NewsItemKind on NewsItem {
   NewsKind get kind {
     if (isMatchResult || isWeekResults) return NewsKind.result;
     if (isMatchPreview || isDayPreview) return NewsKind.preview;
-    if (isWeeklyPick) return NewsKind.pick;
+    if (isWeeklyPick || isWeekAwards) return NewsKind.pick;
     return NewsKind.announcement;
   }
 
@@ -37,6 +37,7 @@ extension NewsItemKind on NewsItem {
     if (autoKind == 'goal_of_week') return 'HAFTANIN GOLÜ';
     if (autoKind == 'player_of_week') return 'HAFTANIN OYUNCUSU';
     if (autoKind == 'team_of_week') return 'HAFTANIN TAKIMI';
+    if (autoKind == 'week_awards') return 'HAFTANIN ENLERİ';
     if (isInstagram) return 'INSTAGRAM';
     return 'DUYURU';
   }
