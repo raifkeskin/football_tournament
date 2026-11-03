@@ -832,47 +832,46 @@ class _MenuDrawer extends StatelessWidget {
                 ],
                 if (links.isNotEmpty || regulations != null) ...[
                   const SizedBox(height: 8),
-                  // Düğme satırı sağa hizalı.
-                  SizedBox(
-                    width: double.infinity,
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      runSpacing: 6,
-                      children: [
-                        if (regulations != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: BandIconButton(
-                              icon: Icons.gavel_rounded,
-                              size: 32,
-                              tooltip: 'Talimatname',
-                              onTap: regulations,
-                            ),
-                          ),
-                        for (final (icon, color, onTap, label) in links)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: Material(
-                              color: color,
-                              shape: const CircleBorder(),
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: onTap,
-                                child: SizedBox(
-                                  width: 32,
-                                  height: 32,
-                                  child: Icon(
-                                    icon,
-                                    size: 18,
-                                    color: Colors.white,
-                                    semanticLabel: label,
+                  // Bağlantılar solda, talimatname en sağda.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          runSpacing: 6,
+                          children: [
+                            for (final (icon, color, onTap, label) in links)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Material(
+                                  color: color,
+                                  shape: const CircleBorder(),
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: onTap,
+                                    child: SizedBox(
+                                      width: 32,
+                                      height: 32,
+                                      child: Icon(
+                                        icon,
+                                        size: 18,
+                                        color: Colors.white,
+                                        semanticLabel: label,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                      ],
-                    ),
+                          ],
+                        ),
+                      ),
+                      if (regulations != null)
+                        BandIconButton(
+                          icon: Icons.gavel_rounded,
+                          size: 32,
+                          tooltip: 'Talimatname',
+                          onTap: regulations,
+                        ),
+                    ],
                   ),
                 ],
               ],
