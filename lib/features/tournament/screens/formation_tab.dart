@@ -657,7 +657,10 @@ class _FormationTabState extends State<FormationTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final teamColor = _selected == 0 ? _accent : const Color(0xFF3B82F6);
+    // Takımın kendi forma rengi (VS sahasıyla aynı); yoksa eski varsayılan.
+    final teamColor = _selected == 0
+        ? (widget.homeColor ?? _accent)
+        : (widget.awayColor ?? const Color(0xFF3B82F6));
     final children = <Widget>[
       if (!widget.singleTeam) ...[
         _TeamSwitch(
