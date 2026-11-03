@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/instagram_share.dart';
+import '../../../core/services/photo_cutouts.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/app_logo.dart';
@@ -194,12 +195,12 @@ class WeekElevenCard extends StatelessWidget {
   /// Her sıranın sahadaki yeri (0..1; y yukarıdan).
   static List<Offset> layout(String formation) {
     final counts = formationCounts(formation);
-    final out = <Offset>[const Offset(0.5, 0.89)];
+    final out = <Offset>[const Offset(0.5, 0.88)];
     final lines = counts.length;
     for (var li = 0; li < lines; li++) {
-      final y = lines == 1 ? 0.45 : 0.68 - li * (0.56 / (lines - 1));
+      final y = lines == 1 ? 0.45 : 0.68 - li * (0.61 / (lines - 1));
       final n = counts[li];
-      final step = math.min(0.25, 0.8 / n);
+      final step = math.min(0.25, 0.92 / n);
       for (var j = 0; j < n; j++) {
         out.add(Offset(0.5 + (j - (n - 1) / 2) * step, y));
       }
@@ -209,12 +210,27 @@ class WeekElevenCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PhotoCutouts.ensureLoaded();
+    final showCutouts = PhotoCutouts.visible(context);
+    return ValueListenableBuilder<Map<String, String>>(
+      valueListenable: PhotoCutouts.map,
+      builder: (context, cutouts, _) =>
+          _build(context, showCutouts ? cutouts : const {}),
+    );
+  }
+
+  Widget _build(BuildContext context, Map<String, String> cutouts) {
     return AspectRatio(
       aspectRatio: 4 / 5,
       child: LayoutBuilder(
         builder: (context, c) {
           final u = c.maxWidth / 100;
           final pos = layout(formation);
+          // Hatta kaç kişi varsa o kadar dar: adlar yan yana binmesin.
+          final perLine = <double, int>{};
+          for (final o in pos) {
+            perLine[o.dy] = (perLine[o.dy] ?? 0) + 1;
+          }
           final best = showRatings
               ? slots.map((s) => s?.rating ?? 0).fold<double>(0, math.max)
               : 0.0;
@@ -260,8 +276,8 @@ class WeekElevenCard extends StatelessWidget {
                   Positioned(
                     left: 4 * u,
                     right: 4 * u,
-                    top: 25 * u,
-                    bottom: 11 * u,
+                    top: 24 * u,
+                    bottom: 9.5 * u,
                     child: LayoutBuilder(
                       builder: (context, p) => Stack(
                         clipBehavior: Clip.none,
@@ -275,9 +291,11 @@ class WeekElevenCard extends StatelessWidget {
                             i++
                           )
                             Positioned(
-                              left: pos[i].dx * p.maxWidth - 11 * u,
-                              top: pos[i].dy * p.maxHeight - 6 * u,
-                              width: 22 * u,
+                              left:
+                                  pos[i].dx * p.maxWidth -
+                                  _w(u, p, perLine[pos[i].dy]!) / 2,
+                              top: pos[i].dy * p.maxHeight - 7 * u,
+                              width: _w(u, p, perLine[pos[i].dy]!),
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onTap: onTapSlot == null
@@ -286,6 +304,9 @@ class WeekElevenCard extends StatelessWidget {
                                 child: _PitchPlayer(
                                   u: u,
                                   slot: slots[i],
+                                  cutout:
+                                      cutouts[(slots[i]?.person.photo ?? '')
+                                          .trim()],
                                   showRating: showRatings,
                                   top: best > 0 && slots[i]?.rating == best,
                                 ),
@@ -298,7 +319,7 @@ class WeekElevenCard extends StatelessWidget {
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: 3.4 * u,
+                    bottom: 2.6 * u,
                     child: _Brand(u),
                   ),
                 ],
@@ -309,6 +330,17 @@ class WeekElevenCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Oyuncu kutusunun genişliği: hattaki komşusuna değmeyecek kadar.
+  static double _w(double u, BoxConstraints p, int n) =>
+      math.min(22 * u, p.maxWidth * math.min(0.25, 0.92 / n) - 0.8 * u);
+}
+
+/// Uzun adlar sahada kısalır: "Ersel Kahraman" → "E. KAHRAMAN".
+String _pitchName(String name) {
+  final w = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty);
+  if (name.trim().length <= 12 || w.length < 2) return name.trUpper;
+  return '${w.first.characters.first}. ${w.last}'.trUpper;
 }
 
 class _PitchPlayer extends StatelessWidget {
@@ -317,6 +349,7 @@ class _PitchPlayer extends StatelessWidget {
     required this.slot,
     required this.showRating,
     required this.top,
+    this.cutout,
   });
 
   final double u;
@@ -324,10 +357,13 @@ class _PitchPlayer extends StatelessWidget {
   final bool showRating;
   final bool top;
 
+  /// Dekupe varsa daire yerine o (maç detayındaki dizilişte olduğu gibi).
+  final String? cutout;
+
   @override
   Widget build(BuildContext context) {
     final s = slot;
-    final d = 12 * u;
+    final d = 9.5 * u;
     if (s == null) {
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -356,34 +392,63 @@ class _PitchPlayer extends StatelessWidget {
       children: [
         SizedBox(
           width: d + 5 * u,
-          height: d,
+          height: d * 1.2,
           child: Stack(
             clipBehavior: Clip.none,
-            alignment: Alignment.center,
+            alignment: Alignment.bottomCenter,
             children: [
-              Container(
-                width: d,
-                height: d,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  border: Border.all(color: Colors.white, width: 0.6 * u),
-                  boxShadow: [
-                    BoxShadow(
+              if ((cutout ?? '').isNotEmpty) ...[
+                Positioned(
+                  bottom: 0,
+                  child: Container(
+                    width: d,
+                    height: 2.6 * u,
+                    decoration: BoxDecoration(
                       color: Colors.black45,
-                      blurRadius: 2 * u,
-                      offset: Offset(0, u),
+                      borderRadius: BorderRadius.all(
+                        Radius.elliptical(d / 2, 1.3 * u),
+                      ),
+                      border: Border.all(color: color, width: 0.5 * u),
                     ),
-                  ],
+                  ),
                 ),
-                child: _net(
-                  s.person.photo,
-                  size: d,
-                  alignment: Alignment.topCenter,
-                  fallback: initials,
+                Positioned(
+                  bottom: u,
+                  child: Image.network(
+                    cutout!,
+                    height: d * 1.2 - u,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomCenter,
+                    filterQuality: FilterQuality.high,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
-              ),
+              ] else
+                Container(
+                  width: d,
+                  height: d * 1.2,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(1.6 * u),
+                    border: Border(
+                      bottom: BorderSide(color: color, width: 0.8 * u),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black45,
+                        blurRadius: 2 * u,
+                        offset: Offset(0, u),
+                      ),
+                    ],
+                  ),
+                  child: _net(
+                    s.person.photo,
+                    size: d * 1.2,
+                    alignment: Alignment.topCenter,
+                    fallback: initials,
+                  ),
+                ),
               if (showRating && s.rating != null)
                 Positioned(
                   right: -0.4 * u,
@@ -410,9 +475,9 @@ class _PitchPlayer extends StatelessWidget {
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            s.person.name.trUpper,
+            _pitchName(s.person.name),
             maxLines: 1,
-            style: _cond(3.3 * u).copyWith(
+            style: _cond(3 * u).copyWith(
               shadows: [Shadow(color: Colors.black87, blurRadius: u)],
             ),
           ),
@@ -434,7 +499,7 @@ class _PitchPlayer extends StatelessWidget {
               maxLines: 1,
               style: TextStyle(
                 color: const Color(0xFFD5F5E6),
-                fontSize: 2.3 * u,
+                fontSize: 2.1 * u,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.15 * u,
               ),
