@@ -76,6 +76,18 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   bool get _editing => widget.event != null;
 
+  /// Kendi kalesine: seçili futbolcu ve takımı kalır, gol rakibe yazılır
+  /// (form golün yazıldığı takımı tutar); asist olmaz.
+  void _setOwnGoal(bool v) {
+    if (v == _isOwnGoal) return;
+    final m = widget.match;
+    setState(() {
+      _isOwnGoal = v;
+      _teamId = _teamId == m.homeTeamId ? m.awayTeamId : m.homeTeamId;
+      _selectedAssist = null;
+    });
+  }
+
   /// Kartta oyuncu değişmez: ceza olay girilirken oyuncuya yazılır.
   bool get _playerLocked =>
       _editing &&
@@ -762,7 +774,11 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                         typeRow,
                         AdminSelectRow(
                           icon: Icons.shield_outlined,
-                          label: isGoal ? 'Golü Atan Takım' : 'Takım',
+                          label: !isGoal
+                              ? 'Takım'
+                              : _isOwnGoal
+                              ? 'Gol Yazılan Takım'
+                              : 'Golü Atan Takım',
                           value: _teamId == widget.match.homeTeamId
                               ? homeName
                               : awayName,
@@ -955,22 +971,11 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                             label: 'Kendi Kalesine',
                             onTap: _isLoading
                                 ? null
-                                : () => setState(() {
-                                    _isOwnGoal = !_isOwnGoal;
-                                    // Oyuncu listesi rakip takıma geçer.
-                                    _selectedPlayer = null;
-                                    _selectedAssist = null;
-                                  }),
+                                : () => _setOwnGoal(!_isOwnGoal),
                             trailing: Switch(
                               value: _isOwnGoal,
                               activeThumbColor: kAdminAccent,
-                              onChanged: _isLoading
-                                  ? null
-                                  : (v) => setState(() {
-                                      _isOwnGoal = v;
-                                      _selectedPlayer = null;
-                                      _selectedAssist = null;
-                                    }),
+                              onChanged: _isLoading ? null : _setOwnGoal,
                             ),
                             child: Text(
                               _isOwnGoal ? 'Evet' : 'Hayır',
