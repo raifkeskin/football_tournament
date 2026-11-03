@@ -1,10 +1,9 @@
-// Saatlik trafik toplama (cron usage_collect_tick, her saatin 7. dakikası).
-//
-// Supabase yönetim API'sinin kayıt sorgusuyla (analytics/endpoints/logs,
-// ClickHouse SQL) biten saatlerin edge_logs kayıtlarından yanıt boyutları
-// türe ve önbellek durumuna göre toplanır, usage_hourly'ye yazılır. Eksik
-// kalan saatler (en çok son 24) de doldurulur. Ardından usage_alarm_check()
-// kotanın %70'ini geçen kalem için Telegram uyarısı yollar.
+// Trafik toplama: gece bir kez (cron usage_collect_tick) ve İstatistikler'deki
+// "Şimdi güncelle" (usage_collect_now). Son yazılan saatten şu ana kadarki
+// edge_logs kayıtları, saat saat, türe ve önbellek durumuna göre toplanır
+// (Supabase yönetim API'si analytics/endpoints/logs, ClickHouse SQL; tek
+// sorgu en çok 24 saat). Son saat yarımsa sonraki toplamada tamamlanır.
+// Ardından usage_alarm_check() %70'i geçen kalem için Telegram uyarısı yollar.
 //
 // Gizli ayar: ISTATISTIK_USAGE_TOKEN (yalnız okuma yetkili erişim anahtarı).
 // JWT doğrulaması kapalı yayınlanır (`--no-verify-jwt`); çağrı
@@ -20,6 +19,7 @@ const admin = createClient(
 
 const SQL = `
 SELECT
+  toStartOfHour(timestamp) AS hour,
   multiIf(
     log_attributes['request.path'] LIKE '/storage/v1/object/%/clips/%', 'video',
     log_attributes['request.path'] LIKE '/storage/%', 'dosya',
@@ -31,10 +31,23 @@ SELECT
   sum(toInt64OrZero(log_attributes['response.headers.content_length'])) AS bytes
 FROM logs
 WHERE source = 'edge_logs'
-GROUP BY kind, cache`;
+GROUP BY hour, kind, cache`;
 
-async function hourRows(start: Date) {
-  const end = new Date(start.getTime() + 36e5);
+const DAY = 24 * 36e5;
+
+/// Saat başı: "2026-11-02 12:00:00" (UTC) ya da sayısal zaman damgası.
+function hourOf(v: unknown): string {
+  if (typeof v === "number" || /^\d+$/.test(String(v))) {
+    let n = Number(v);
+    if (n > 1e15) n = n / 1000; // mikrosaniye
+    else if (n < 1e12) n = n * 1000; // saniye
+    return new Date(Math.floor(n / 36e5) * 36e5).toISOString();
+  }
+  const t = String(v).replace(" ", "T");
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : t + "Z").toISOString();
+}
+
+async function rows(start: Date, end: Date) {
   const qs = new URLSearchParams({
     sql: SQL,
     iso_timestamp_start: start.toISOString(),
@@ -47,7 +60,7 @@ async function hourRows(start: Date) {
   const j = await r.json();
   if (!r.ok || j.error) throw new Error(`logs ${r.status}: ${JSON.stringify(j.error ?? j)}`);
   return (j.result ?? []).map((x: Record<string, unknown>) => ({
-    hour: start.toISOString(),
+    hour: hourOf(x.hour),
     kind: String(x.kind ?? "diger"),
     cache: String(x.cache ?? ""),
     requests: Number(x.requests ?? 0),
@@ -61,30 +74,33 @@ Deno.serve(async (req) => {
   if (!s?.value || req.headers.get("x-sync-secret") !== s.value) {
     return new Response("forbidden", { status: 403 });
   }
-  // Biten son saat ve ondan geriye en çok 24 saat; yazılmış olanlar atlanır.
+  // Son yazılan saatten (yarım kalmış olabilir, yeniden sorulur) şu ana;
+  // kayıt yoksa son 24 saat. Kayıtlar birkaç gün tutulduğundan en çok 3 gün
+  // geriye gidilir; 24 saatlik dilimlerle.
   const now = new Date();
-  const last = new Date(Math.floor(now.getTime() / 36e5) * 36e5 - 36e5);
-  const { data: done } = await admin.from("usage_hourly").select("hour")
-    .gte("hour", new Date(last.getTime() - 23 * 36e5).toISOString());
-  const have = new Set((done ?? []).map((d) => new Date(d.hour).getTime()));
-  const written: string[] = [];
+  const { data: lastRow } = await admin.from("usage_hourly").select("hour")
+    .order("hour", { ascending: false }).limit(1).maybeSingle();
+  let start = lastRow ? new Date(lastRow.hour) : new Date(now.getTime() - DAY);
+  start = new Date(Math.max(start.getTime(), now.getTime() - 3 * DAY));
+  let count = 0;
   const errors: string[] = [];
-  for (let i = 23; i >= 0; i--) {
-    const h = new Date(last.getTime() - i * 36e5);
-    if (have.has(h.getTime())) continue;
+  while (start < now) {
+    const end = new Date(Math.min(start.getTime() + DAY, now.getTime()));
     try {
-      const rows = await hourRows(h);
-      // Kaydı olmayan saat de işaretlensin diye boş satır.
-      const out = rows.length ? rows : [{ hour: h.toISOString(), kind: "diger", cache: "", requests: 0, bytes: 0 }];
-      const { error } = await admin.from("usage_hourly").upsert(out);
-      if (error) throw error;
-      written.push(h.toISOString());
+      const out = await rows(start, end);
+      if (out.length) {
+        const { error } = await admin.from("usage_hourly").upsert(out);
+        if (error) throw error;
+        count += out.length;
+      }
     } catch (e) {
-      errors.push(`${h.toISOString()}: ${e}`);
+      errors.push(String(e));
+      break;
     }
+    start = end;
   }
   await admin.rpc("usage_alarm_check");
-  return new Response(JSON.stringify({ written, errors }), {
+  return new Response(JSON.stringify({ rows: count, errors }), {
     headers: { "Content-Type": "application/json" },
   });
 });
