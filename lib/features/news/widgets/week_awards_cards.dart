@@ -761,8 +761,6 @@ class WeekAwardCard extends StatelessWidget {
       final m = RegExp(r'^(\d+)\s+(.+)$').firstMatch(s.trim());
       if (m != null) {
         rows.add((m.group(2)!.trUpper, m.group(1)!));
-      } else if (RegExp(r'^\d+-\d+$').hasMatch(s.trim())) {
-        rows.add(('SKOR', s.trim()));
       }
     }
     if (showRatings && a.rating != null && a.kind == AwardKind.player) {
@@ -943,9 +941,10 @@ class WeekAwardCard extends StatelessWidget {
     final a = award;
     final accent = a.kind.color;
     final words = (a.person?.name ?? '').trim().split(RegExp(r'\s+'));
-    final name = words.length > 1
-        ? '${words.sublist(0, words.length - 1).join(' ')}\n${words.last}'
-        : words.join();
+    final first = words.length > 1
+        ? words.sublist(0, words.length - 1).join(' ')
+        : '';
+    final last = words.isEmpty ? '' : words.last;
     final rows = _rows();
     return AspectRatio(
       aspectRatio: 4 / 5,
@@ -1004,7 +1003,7 @@ class WeekAwardCard extends StatelessWidget {
                             _crest(leagueLogo, league, 7 * u),
                           ],
                         ),
-                        SizedBox(height: 7 * u),
+                        const Spacer(),
                         Text(
                           'HAFTANIN',
                           style: _cond(
@@ -1028,25 +1027,56 @@ class WeekAwardCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: 5 * u),
+                        if (first.isNotEmpty)
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              first.trUpper,
+                              maxLines: 1,
+                              style: _cond(
+                                5.4 * u,
+                                color: const Color(0xFFCBD5E1),
+                              ).copyWith(height: 1, letterSpacing: 0.3 * u),
+                            ),
+                          ),
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerRight,
                           child: Text(
-                            name.trUpper,
-                            maxLines: 2,
-                            textAlign: TextAlign.right,
-                            style: _cond(7.4 * u).copyWith(height: 1),
+                            last.trUpper,
+                            maxLines: 1,
+                            style: _cond(
+                              9.6 * u,
+                              color: accent,
+                              italic: true,
+                            ).copyWith(height: 1),
                           ),
                         ),
-                        SizedBox(height: 0.8 * u),
-                        Text(
-                          a.team.short.trUpper,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _cond(
-                            3 * u,
-                            color: const Color(0xFFCBD5E1),
-                          ).copyWith(letterSpacing: 0.3 * u),
+                        SizedBox(height: 1.6 * u),
+                        Container(
+                          width: 14 * u,
+                          height: 0.6 * u,
+                          color: accent,
+                        ),
+                        SizedBox(height: 2 * u),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                a.team.short.trUpper,
+                                maxLines: 2,
+                                textAlign: TextAlign.right,
+                                style: _cond(
+                                  3.4 * u,
+                                  color: const Color(0xFFE2E8F0),
+                                ).copyWith(letterSpacing: 0.3 * u),
+                              ),
+                            ),
+                            SizedBox(width: 1.8 * u),
+                            _crest(a.team.logo, a.team.short, 7.5 * u),
+                          ],
                         ),
                         if (a.kind == AwardKind.fair) ...[
                           SizedBox(height: 4 * u),
@@ -1130,6 +1160,7 @@ class WeekAwardCard extends StatelessWidget {
                           ),
                         ],
                         const Spacer(),
+                        SizedBox(height: 4 * u),
                         _Brand(u, align: MainAxisAlignment.end),
                       ],
                     ),
