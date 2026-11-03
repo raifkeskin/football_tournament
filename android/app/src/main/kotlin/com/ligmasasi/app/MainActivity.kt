@@ -76,6 +76,14 @@ class MainActivity : FlutterFragmentActivity() {
                             result.success(shareToInstagram(bytes, story, appId, video))
                         }
                     }
+                    "whatsapp" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        if (bytes == null) {
+                            result.error("args", "Video yok", null)
+                        } else {
+                            result.success(shareVideoToWhatsApp(bytes))
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -152,6 +160,32 @@ class MainActivity : FlutterFragmentActivity() {
         } catch (_: ActivityNotFoundException) {
             false
         }
+    }
+
+    // Gol videosunu WhatsApp'ta açar (sohbet ya da Durum seçimi WhatsApp'ta);
+    // WhatsApp yoksa WhatsApp Business; ikisi de yoksa false.
+    private fun shareVideoToWhatsApp(bytes: ByteArray): Boolean {
+        val dir = File(cacheDir, "ig_share").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val file = File(dir, "gol_${System.currentTimeMillis()}.mp4")
+        file.writeBytes(bytes)
+        val uri = FileProvider.getUriForFile(this, "$packageName.igshare", file)
+        for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b")) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "video/mp4"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                setPackage(pkg)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                startActivity(intent)
+                return true
+            } catch (_: ActivityNotFoundException) {
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        return false
     }
 
     companion object {

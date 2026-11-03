@@ -9,6 +9,7 @@ import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/instagram_share.dart';
+import '../../../core/services/whatsapp_share.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -1175,8 +1176,8 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
-  /// Gol kesitinin hikâye MP4'ü varsa Instagram'da paylaş (uygulama
-  /// yüklüyse; MP4 kesitleri açık değilse yalnız admin).
+  /// Gol kesitinin hikâye MP4'ü varsa Instagram (uygulama yüklüyse) ve
+  /// WhatsApp'ta paylaş (MP4 kesitleri açık değilse yalnız admin).
   Widget _goalShareButton(_GoalClip g) {
     final url = (g.storyUrl ?? '').trim();
     if (url.isEmpty) return const SizedBox.shrink();
@@ -1184,55 +1185,79 @@ class _PlayerCardState extends State<PlayerCard> {
         !AppSession.of(context).value.isAdmin) {
       return const SizedBox.shrink();
     }
+    Widget button(String target, String label, IconData icon, Color color) {
+      final busy = _sharingGoal == '${g.id}|$target';
+      return FilledButton.icon(
+        onPressed: _sharingGoal != null
+            ? null
+            : () => _shareGoal(g, url, target),
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(0, 42),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        icon: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(icon, size: 20),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      );
+    }
+
     return FutureBuilder<bool>(
       future: _igAvailable,
-      builder: (context, snap) {
-        if (snap.data != true) return const SizedBox.shrink();
-        final busy = _sharingGoal == g.id;
-        return Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: FilledButton.icon(
-            onPressed: _sharingGoal != null ? null : () => _shareGoal(g, url),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD62976),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 42),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      builder: (context, snap) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            if (snap.data == true) ...[
+              Expanded(
+                child: button(
+                  'ig',
+                  'Instagram',
+                  Icons.camera_alt_outlined,
+                  const Color(0xFFD62976),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: button(
+                'wa',
+                'WhatsApp',
+                Icons.chat_rounded,
+                const Color(0xFF1DA851),
               ),
             ),
-            icon: busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.ios_share_rounded, size: 20),
-            label: const Text(
-              'Instagram\'da paylaş',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 
   late final Future<bool> _igAvailable = InstagramShare.isAvailable();
   String? _sharingGoal;
 
-  /// Hikâye MP4'ü indirilir, Instagram'ın hikâye ekranında açılır.
-  Future<void> _shareGoal(_GoalClip g, String url) async {
+  /// Hikâye MP4'ü indirilir; Instagram hikâyesinde ya da WhatsApp'ta açılır.
+  Future<void> _shareGoal(_GoalClip g, String url, String target) async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sharingGoal = g.id);
+    final origin = WhatsAppShare.originOf(context);
+    setState(() => _sharingGoal = '${g.id}|$target');
     try {
       final r = await http.get(Uri.parse(url));
       if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      final ok = await InstagramShare.shareVideo(r.bodyBytes, story: true);
-      if (!ok) {
+      if (target == 'wa') {
+        await WhatsAppShare.shareVideo(r.bodyBytes, origin: origin);
+      } else if (!await InstagramShare.shareVideo(r.bodyBytes, story: true)) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Instagram açılamadı.')),
         );
