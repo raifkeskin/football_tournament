@@ -8,6 +8,7 @@ import '../../core/services/active_tournament.dart';
 import '../../core/services/app_session.dart';
 import '../../core/services/app_settings.dart';
 import '../../core/services/follows.dart';
+import '../../core/services/league_access.dart';
 import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/web_safe_image.dart';
 import '../player/widgets/player_card.dart';
@@ -98,6 +99,7 @@ class _Hit {
     required this.image,
     this.seasonId = '',
     required this.kind,
+    this.locked = false,
   });
 
   final String id;
@@ -106,6 +108,9 @@ class _Hit {
   final String image;
   final String seasonId;
   final FollowKind kind;
+
+  /// Gizli turnuva, kişinin erişimi yok (kod gerekir).
+  final bool locked;
   bool get player => kind == FollowKind.player;
 }
 
@@ -213,9 +218,10 @@ class _SearchScreenState extends State<SearchScreen> {
             _Hit(
               id: s(r['id']),
               name: s(r['name']),
-              sub: 'Turnuva',
+              sub: r['locked'] == true ? 'Gizli turnuva' : 'Turnuva',
               image: s(r['logo_url']),
               kind: FollowKind.league,
+              locked: r['locked'] == true,
             ),
         ];
         _teams = [
@@ -258,6 +264,11 @@ class _SearchScreenState extends State<SearchScreen> {
       showPlayerCard(context, playerKey: h.id);
       return;
     }
+    // Gizli turnuva: erişim yoksa kod istenir.
+    if (h.locked) {
+      _askCode(h);
+      return;
+    }
     // Turnuva: uygulama o turnuvaya geçer, ana sayfaya dönülür.
     if (h.kind == FollowKind.league) {
       final nav = Navigator.of(context);
@@ -277,6 +288,23 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _askCode(_Hit h) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: h.name,
+      message:
+          'Bu turnuva gizli. Görmek için turnuva yöneticisinden turnuva '
+          'kodunu isteyin ve kodu girin.',
+      confirmLabel: 'KOD GİR',
+      cancelLabel: 'VAZGEÇ',
+      destructive: false,
+      icon: Icons.lock_rounded,
+    );
+    if (!ok || !mounted) return;
+    await showLeagueCodeDialog(context);
+    if (mounted) _search();
   }
 
   /// Yazılan harfler adın içinde yeşil (Türkçe harfe duyarsız eşleşme).
@@ -376,7 +404,17 @@ class _SearchScreenState extends State<SearchScreen> {
                     ],
                   ),
                 ),
-                FollowStar(kind: h.kind, id: h.id),
+                if (h.locked)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14),
+                    child: Icon(
+                      Icons.lock_rounded,
+                      color: Color(0xFFFBBF24),
+                      size: 22,
+                    ),
+                  )
+                else
+                  FollowStar(kind: h.kind, id: h.id),
               ],
             ),
           ),
