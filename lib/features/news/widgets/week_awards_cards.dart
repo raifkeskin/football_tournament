@@ -144,12 +144,13 @@ class _Head extends StatelessWidget {
 
 /// Kartın altındaki imza.
 class _Brand extends StatelessWidget {
-  const _Brand(this.u);
+  const _Brand(this.u, {this.align = MainAxisAlignment.center});
   final double u;
+  final MainAxisAlignment align;
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
+    mainAxisAlignment: align,
     children: [
       AppLogo(size: 5 * u),
       SizedBox(width: 1.6 * u),
@@ -498,7 +499,9 @@ class _PitchPainter extends CustomPainter {
 
 // ------------------------------------------------------------- ödül kartı
 
-/// Tek en kartı: başlık, ödül renginde halkalı fotoğraf, ad, kısa bilgi.
+/// Tek en kartı. Takımı: fotoğraf tam kadraj; kişiye verilen enler (oyuncu,
+/// kaleci, centilmen, gol): solda eğik kesik fotoğraf, sağda başlık ve ad;
+/// maçı: iki arma ve skor.
 class WeekAwardCard extends StatelessWidget {
   const WeekAwardCard({
     super.key,
@@ -518,6 +521,8 @@ class WeekAwardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = award;
+    if (a.kind == AwardKind.team) return _fullBleed();
+    if (a.kind != AwardKind.match) return _split();
     final accent = a.kind.color;
     return AspectRatio(
       aspectRatio: 4 / 5,
@@ -681,6 +686,398 @@ class WeekAwardCard extends StatelessWidget {
     );
   }
 
+  /// Kartın satırları: "2 GOL" → GOL 2, "4-0" → SKOR 4-0. Kalecide ve
+  /// centilmende satır yok (centilmende FAIR PLAY rozeti).
+  List<(String, String)> _rows() {
+    final a = award;
+    if (a.kind == AwardKind.keeper || a.kind == AwardKind.fair) return const [];
+    final rows = <(String, String)>[];
+    for (final s in a.stats) {
+      final m = RegExp(r'^(\d+)\s+(.+)$').firstMatch(s.trim());
+      if (m != null) {
+        rows.add((m.group(2)!.trUpper, m.group(1)!));
+      } else if (RegExp(r'^\d+-\d+$').hasMatch(s.trim())) {
+        rows.add(('SKOR', s.trim()));
+      }
+    }
+    if (showRatings && a.rating != null && a.kind == AwardKind.player) {
+      rows.add(('PUAN', a.rating!.toStringAsFixed(1)));
+    }
+    return rows;
+  }
+
+  Widget _photoFallback(double u, {bool team = false}) {
+    final a = award;
+    final bg = TeamPalette.of(a.team.color, null).background;
+    return ColoredBox(
+      color: bg,
+      child: Center(
+        child: team
+            ? _net(
+                a.team.logo,
+                size: 40 * u,
+                fit: BoxFit.contain,
+                fallback: Text(
+                  AwardPerson(id: '', name: a.team.short).initials,
+                  style: _cond(16 * u),
+                ),
+              )
+            : Text(a.person?.initials ?? '?', style: _cond(18 * u)),
+      ),
+    );
+  }
+
+  Widget _photo(
+    double u, {
+    Alignment alignment = Alignment.topCenter,
+    bool team = false,
+  }) {
+    final url = award.photo.trim();
+    if (url.isEmpty) return _photoFallback(u, team: team);
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      alignment: alignment,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => _photoFallback(u, team: team),
+    );
+  }
+
+  /// Haftanın takımı: takım fotoğrafı bütün kartı kaplar.
+  Widget _fullBleed() {
+    final a = award;
+    final accent = a.kind.color;
+    final rival = a.home == null
+        ? null
+        : (a.home!.id == a.team.id ? a.away! : a.home!);
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final u = c.maxWidth / 100;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2 * u),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _photo(u, alignment: Alignment.center, team: true),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xD9050C14),
+                        Color(0x00050C14),
+                        Color(0x00050C14),
+                        Color(0xBF050C14),
+                        Color(0xF2050C14),
+                      ],
+                      stops: [0, 0.27, 0.5, 0.75, 1],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 4.4 * u,
+                  right: 34 * u,
+                  top: 4 * u,
+                  child: _Head(
+                    u: u,
+                    league: league,
+                    logo: leagueLogo,
+                    week: week,
+                  ),
+                ),
+                Positioned(
+                  right: 4 * u,
+                  top: 3.4 * u,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'HAFTANIN',
+                        style: _cond(
+                          2.8 * u,
+                          color: accent,
+                        ).copyWith(letterSpacing: 0.8 * u),
+                      ),
+                      Text(
+                        a.kind.title.trUpper,
+                        style: _cond(9.4 * u, italic: true),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 4.4 * u,
+                  right: 4.4 * u,
+                  bottom: 4 * u,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _crest(a.team.logo, a.team.short, 11 * u),
+                          SizedBox(width: 2.6 * u),
+                          Expanded(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                a.team.short.trUpper,
+                                maxLines: 1,
+                                style: _cond(8.4 * u),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 1.6 * u),
+                      Wrap(
+                        spacing: 1.6 * u,
+                        runSpacing: 1.2 * u,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (rival != null)
+                            Text(
+                              '${a.score} · ${rival.short}'.trUpper,
+                              style: _cond(
+                                3.8 * u,
+                                color: const Color(0xFFCBD5E1),
+                              ).copyWith(letterSpacing: 0.3 * u),
+                            ),
+                          for (final st in a.stats) _chip(u, st, accent),
+                        ],
+                      ),
+                      SizedBox(height: 2.4 * u),
+                      Container(height: 0.3 * u, color: Colors.white24),
+                      SizedBox(height: 2 * u),
+                      _Brand(u, align: MainAxisAlignment.start),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _chip(double u, String text, Color accent) => Container(
+    padding: EdgeInsets.symmetric(horizontal: 2 * u, vertical: 0.6 * u),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(5 * u),
+      border: Border.all(color: accent.withValues(alpha: 0.8), width: 0.35 * u),
+    ),
+    child: Text(text.trUpper, style: _cond(3.2 * u, color: accent)),
+  );
+
+  /// Kişiye verilen enler: solda eğik kesik fotoğraf, sağda bilgiler.
+  Widget _split() {
+    final a = award;
+    final accent = a.kind.color;
+    final words = (a.person?.name ?? '').trim().split(RegExp(r'\s+'));
+    final name = words.length > 1
+        ? '${words.sublist(0, words.length - 1).join(' ')}\n${words.last}'
+        : words.join();
+    final rows = _rows();
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final u = c.maxWidth / 100;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2 * u),
+            child: ColoredBox(
+              color: const Color(0xFF0B1A1F),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 53 * u,
+                    child: ClipPath(
+                      clipper: const _SlantClipper(),
+                      child: _photo(u),
+                    ),
+                  ),
+                  Positioned(
+                    left: 47 * u,
+                    right: 4.4 * u,
+                    top: 4.4 * u,
+                    bottom: 3.8 * u,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    league.trUpper,
+                                    maxLines: 2,
+                                    textAlign: TextAlign.right,
+                                    style: _cond(3 * u, color: _gold),
+                                  ),
+                                  Text(
+                                    '$week. HAFTA',
+                                    style: _cond(
+                                      2.8 * u,
+                                      color: const Color(0xFFC8D3E6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: 1.8 * u),
+                            _crest(leagueLogo, league, 7 * u),
+                          ],
+                        ),
+                        SizedBox(height: 7 * u),
+                        Text(
+                          'HAFTANIN',
+                          style: _cond(
+                            2.8 * u,
+                            color: accent,
+                          ).copyWith(letterSpacing: 0.8 * u),
+                        ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            a.kind.title.trUpper,
+                            maxLines: 1,
+                            style: _cond(
+                              9 * u,
+                              italic: true,
+                              color: a.kind == AwardKind.goal
+                                  ? accent
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 5 * u),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            name.trUpper,
+                            maxLines: 2,
+                            textAlign: TextAlign.right,
+                            style: _cond(7.4 * u).copyWith(height: 1),
+                          ),
+                        ),
+                        SizedBox(height: 0.8 * u),
+                        Text(
+                          a.team.short.trUpper,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _cond(
+                            3 * u,
+                            color: const Color(0xFFCBD5E1),
+                          ).copyWith(letterSpacing: 0.3 * u),
+                        ),
+                        if (a.kind == AwardKind.fair) ...[
+                          SizedBox(height: 4 * u),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 2.8 * u,
+                              vertical: 1.4 * u,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2.6 * u),
+                              border: Border.all(
+                                color: accent.withValues(alpha: 0.7),
+                                width: 0.3 * u,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(a.kind.icon, size: 5 * u, color: accent),
+                                SizedBox(width: 1.6 * u),
+                                Text(
+                                  'FAIR PLAY',
+                                  style: _cond(
+                                    4.4 * u,
+                                    color: accent,
+                                  ).copyWith(letterSpacing: 0.4 * u),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (rows.isNotEmpty) ...[
+                          SizedBox(height: 4 * u),
+                          SizedBox(
+                            width: 32 * u,
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < rows.length; i++)
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 0.6 * u,
+                                    ),
+                                    decoration: i == rows.length - 1
+                                        ? null
+                                        : BoxDecoration(
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.14,
+                                                ),
+                                                width: 0.3 * u,
+                                              ),
+                                            ),
+                                          ),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          rows[i].$1,
+                                          style: TextStyle(
+                                            color: _muted,
+                                            fontSize: 2.8 * u,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.3 * u,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          rows[i].$2,
+                                          style: _cond(
+                                            6 * u,
+                                            color: i == 0
+                                                ? accent
+                                                : Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        _Brand(u, align: MainAxisAlignment.end),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _portrait(double u, Color accent) {
     final a = award;
     if (a.kind == AwardKind.match && a.home != null) {
@@ -789,6 +1186,22 @@ class WeekAwardCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Fotoğrafın sağ kenarı eğik: üstte tam genişlik, altta %82.
+class _SlantClipper extends CustomClipper<Path> {
+  const _SlantClipper();
+
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(0, 0)
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width * 0.82, size.height)
+    ..lineTo(0, size.height)
+    ..close();
+
+  @override
+  bool shouldReclip(_SlantClipper oldClipper) => false;
 }
 
 // ------------------------------------------------------------- haber kartı
@@ -907,6 +1320,15 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
               ),
             ),
         ];
+        // Görünen kart haftanın golüyse altında "Golü izle".
+        final i = _page - (w.hasEleven ? 1 : 0);
+        final shown = i >= 0 && i < w.awards.length ? w.awards[i] : null;
+        final goal =
+            shown != null &&
+                shown.kind == AwardKind.goal &&
+                (shown.clip?['video_id'] ?? '').toString().isNotEmpty
+            ? shown
+            : null;
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -994,6 +1416,26 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                           ),
                         ),
                     ],
+                  ),
+                ),
+              if (goal != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                  child: FilledButton.icon(
+                    onPressed: () => _play(goal),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AwardKind.goal.color,
+                      foregroundColor: _night,
+                      minimumSize: const Size.fromHeight(42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text(
+                      'Golü izle',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ),
               const SizedBox(height: 8),
