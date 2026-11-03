@@ -32,6 +32,30 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
     return Map<String, dynamic>.from(r as Map);
   }
 
+  bool _collecting = false;
+
+  /// Trafiği şimdi topla: son toplamadan bu ana kadarki kayıtlar tek sorguyla
+  /// arka planda yazılır; birkaç saniye sonra kartlar yenilenir.
+  Future<void> _collect() async {
+    setState(() => _collecting = true);
+    try {
+      await Supabase.instance.client.rpc('usage_collect_now');
+      await Future<void>.delayed(const Duration(seconds: 6));
+      if (!mounted) return;
+      final u = _loadUsage();
+      setState(() => _usage = u);
+      await u;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Güncellenemedi: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _collecting = false);
+    }
+  }
+
   Future<void> _refresh() async {
     final f = _load();
     final u = _loadUsage();
@@ -81,7 +105,11 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
                 FutureBuilder<Map<String, dynamic>>(
                   future: _usage,
                   builder: (context, u) => u.hasData
-                      ? _UsageSection(data: u.data!)
+                      ? _UsageSection(
+                          data: u.data!,
+                          collecting: _collecting,
+                          onCollect: _collect,
+                        )
                       : const SizedBox.shrink(),
                 ),
                 _section('KULLANICILAR'),
@@ -234,9 +262,15 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
 /// Drive arşivi; kotaya göre çubuk (%70'te sarı, %90'da kırmızı), son 30 gün
 /// günlük trafik ve en çok yer kaplayan turnuvalar.
 class _UsageSection extends StatelessWidget {
-  const _UsageSection({required this.data});
+  const _UsageSection({
+    required this.data,
+    required this.collecting,
+    required this.onCollect,
+  });
 
   final Map<String, dynamic> data;
+  final bool collecting;
+  final VoidCallback onCollect;
 
   static String gb(num bytes) {
     final g = bytes / 1e9;
@@ -280,16 +314,37 @@ class _UsageSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(2, 0, 2, 8),
-          child: Text(
-            'KAYNAK KULLANIMI · bu ay',
-            style: TextStyle(
-              color: _muted,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 0, 0, 4),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'KAYNAK KULLANIMI · bu ay',
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: collecting ? null : onCollect,
+                style: TextButton.styleFrom(foregroundColor: _accent),
+                icon: collecting
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _accent,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Şimdi güncelle'),
+              ),
+            ],
           ),
         ),
         _meter(
@@ -368,11 +423,12 @@ class _UsageSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
           child: Text(
             since == null
-                ? 'Trafik ölçümü ilk saatlik toplamadan sonra görünür.'
+                ? 'Trafik ölçümü ilk toplamadan sonra görünür.'
                 : 'Trafik ${since.day}.${since.month}.${since.year} tarihinden '
                       'beri ölçülüyor. Uygulama verisinin (listeler, skorlar) '
                       'boyutu kayıtlarda yazmadığı için dahil değil; asıl yük '
-                      'video ve fotoğraf. %70\'te Telegram uyarısı gelir.',
+                      'video ve fotoğraf. Her gece 04:00\'te kendiliğinden '
+                      'güncellenir; %70\'te Telegram uyarısı gelir.',
             style: const TextStyle(color: _muted, fontSize: 12),
           ),
         ),
