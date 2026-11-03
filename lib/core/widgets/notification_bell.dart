@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../app_navigator.dart';
 import '../services/notification_center.dart';
+import 'app_name_band.dart' show closeLeagueSwitcher;
 
 /// Banttaki zil: okunmamış bildirim varsa kırmızı sayı (9+). Misafirde
 /// çizilmez.
@@ -17,6 +18,7 @@ class NotificationBell extends StatelessWidget {
   static Future<void> open() async {
     final nav = appNavigatorKey.currentState;
     if (nav == null || _opening) return;
+    closeLeagueSwitcher();
     _opening = true;
     try {
       await nav.push(
