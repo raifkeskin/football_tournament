@@ -1,3 +1,4 @@
+import 'core/widgets/app_snack_messenger.dart';
 import 'core/services/screen_trail.dart';
 import 'core/services/keyboard_dismiss_observer.dart';
 import 'core/app_navigator.dart';
@@ -469,12 +470,15 @@ class _MyAppState extends State<MyApp> {
           // dokunulmaz); çok büyük ayarda dar alanlar (sponsor, skor,
           // sekmeler) taşmasın.
           final mq = MediaQuery.of(context);
-          return MediaQuery(
-            data: mq.copyWith(
-              textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
-            ),
-            child: WebResponsiveFrame(
-              child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+          // Bilgi balonları tek yerden: 2 sn sonra kendiliğinden kaybolur.
+          return AppSnackMessenger(
+            child: MediaQuery(
+              data: mq.copyWith(
+                textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
+              ),
+              child: WebResponsiveFrame(
+                child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+              ),
             ),
           );
         },
