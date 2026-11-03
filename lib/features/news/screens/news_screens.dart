@@ -19,6 +19,7 @@ import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
 import '../widgets/news_talk_widgets.dart';
 import '../widgets/result_news_cards.dart';
+import '../widgets/week_awards_cards.dart';
 import 'news_feed_screen.dart';
 
 const _bg = Color(0xFF0F172A);
@@ -1051,6 +1052,17 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     void share() => shareNews(n);
     if (n.isDayPreview) {
       return DayPreviewNewsCard(
+        item: n,
+        meta: meta,
+        loggedIn: loggedIn,
+        liked: _liked,
+        likeCount: _count,
+        onToggleLike: like,
+        onShare: share,
+      );
+    }
+    if (n.isWeekAwards) {
+      return WeekAwardsNewsCard(
         item: n,
         meta: meta,
         loggedIn: loggedIn,

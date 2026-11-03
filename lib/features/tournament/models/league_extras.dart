@@ -113,6 +113,9 @@ class NewsItem {
           autoKind == 'player_of_week' ||
           autoKind == 'team_of_week');
 
+  /// Haftanın Enleri bülteni: haftanın 11'i ve sorumlunun seçtiği enler.
+  bool get isWeekAwards => autoKind == 'week_awards' && autoData != null;
+
   /// Turnuvanın Instagram hesabından aktarılan gönderi (instagram-sync).
   bool get isInstagram => autoKind == 'instagram';
 

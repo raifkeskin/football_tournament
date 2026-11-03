@@ -11,6 +11,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../widgets/result_news_cards.dart';
+import '../widgets/week_awards_cards.dart';
 
 const _bgDark = Color(0xFF0F172A);
 const _card = Color(0xFF1E293B);
@@ -222,6 +223,18 @@ class _NewsViewState extends State<NewsView> {
                       onToggleLike: () => _toggleLike(n, liked),
                       onShare: () => _share(n),
                     );
+            }
+            if (n.isWeekAwards) {
+              return WeekAwardsNewsCard(
+                key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                item: n,
+                meta: _timeAgo(n.createdAt),
+                loggedIn: loggedIn,
+                liked: liked,
+                likeCount: count,
+                onToggleLike: () => _toggleLike(n, liked),
+                onShare: () => _share(n),
+              );
             }
             if (n.isWeeklyPick) {
               return WeeklyPickNewsCard(

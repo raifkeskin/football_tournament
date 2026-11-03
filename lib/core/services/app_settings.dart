@@ -19,6 +19,7 @@ class AppSettings {
   static const _kManualPlayerCreate = 'manual_player_create_enabled';
   static const _kSuspendedTab = 'suspended_tab_enabled';
   static const _kWeeklyPicks = 'weekly_picks_enabled';
+  static const _kWeekAwards = 'week_awards_enabled';
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
@@ -84,6 +85,10 @@ class AppSettings {
   /// Haftanın Seçimi (haftanın golü / oyuncusu / takımı) herkese açık mı;
   /// kapalıyken yalnız admin seçer. Veritabanı da aynı kuralı uygular.
   static final weeklyPicksEnabled = ValueNotifier<bool>(false);
+
+  /// Haftanın Enleri bülteni herkese açık mı; kapalıyken yalnız admin
+  /// hazırlar. Veritabanı da aynı kuralı uygular.
+  static final weekAwardsEnabled = ValueNotifier<bool>(false);
 
   /// Hakemler (hakem listesi, maça hakem atama, hakem girişi) herkese açık
   /// mı; kapalıyken yalnız admin. Veritabanı da aynı kuralı uygular.
@@ -172,6 +177,8 @@ class AppSettings {
           manualPlayerCreateEnabled.value = r['value'] != false;
         } else if (r['key'] == _kWeeklyPicks) {
           weeklyPicksEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kWeekAwards) {
+          weekAwardsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kReferees) {
           refereesEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAdd) {

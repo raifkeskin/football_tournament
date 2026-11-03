@@ -16,6 +16,7 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
+import 'week_awards_screen.dart';
 import 'weekly_pick_screen.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
@@ -887,6 +888,18 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     return AdminPageScaffold(
       title: 'Haber Yönetimi',
       actions: [
+        // Haftanın Enleri bülteni: açılana dek yalnız admin.
+        if (session.isAdmin || AppSettings.weekAwardsEnabled.value)
+          AdminBarAction(
+            icon: Icons.military_tech_rounded,
+            tooltip: 'Haftanın Enleri',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                settings: const RouteSettings(name: 'WeekAwardsScreen'),
+                builder: (_) => WeekAwardsScreen(tournaments: _tournaments),
+              ),
+            ),
+          ),
         // Haftanın Seçimi: açılana dek yalnız admin.
         if (session.isAdmin || AppSettings.weeklyPicksEnabled.value)
           AdminBarAction(
