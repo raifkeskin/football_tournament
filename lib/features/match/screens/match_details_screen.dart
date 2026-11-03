@@ -737,8 +737,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   static DateTime? _scheduledStart(MatchModel m) {
     final d = DateTime.tryParse((m.matchDate ?? '').trim());
     if (d == null) return null;
-    final t = RegExp(r'^(\d{1,2}):(\d{2})')
-        .firstMatch((m.matchTime ?? '').trim());
+    final t = RegExp(
+      r'^(\d{1,2}):(\d{2})',
+    ).firstMatch((m.matchTime ?? '').trim());
     if (t == null) return null;
     return DateTime(
       d.year,
@@ -1133,8 +1134,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     final uri = Uri.tryParse(rawLocation);
     if (uri == null || uri.scheme.isEmpty) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Konum linki geçersiz.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Konum linki geçersiz.')));
       return;
     }
 
@@ -1142,8 +1144,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       final can = await canLaunchUrl(uri);
       if (!can) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
         return;
       }
       final ok = await launchUrl(
@@ -1158,8 +1161,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } catch (_) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
       }
     }
   }
@@ -2926,8 +2930,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     final m = widget.match;
     final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
     if (_selectedType == 'Takım Fotosu' && _isHomeTeam == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Takımı seçin.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Takımı seçin.')));
       return;
     }
     final teamId = _selectedType == 'Takım Fotosu'
@@ -2944,8 +2949,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     );
     void snack(String text, {Color? color}) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
     }
 
     if (_isUrlType) {
@@ -3685,8 +3691,9 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
       widget.onDataChanged();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
       }
     }
   }
@@ -3940,8 +3947,9 @@ Future<void> _openYoutubeExternally(BuildContext context, String url) async {
   final ok =
       uri != null && await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
   }
 }
 
@@ -4457,8 +4465,9 @@ int _jerseyValue(String? n) => int.tryParse((n ?? '').trim()) ?? 999;
 /// önce. Maç tarih/saati Türkiye saatidir (UTC+3). Tarih/saat yoksa null.
 DateTime? _rosterOpenAt(MatchModel m, int hours) {
   final d = DateTime.tryParse((m.matchDate ?? '').trim());
-  final t = RegExp(r'^(\d{1,2}):(\d{2})')
-      .firstMatch((m.matchTime ?? '').trim());
+  final t = RegExp(
+    r'^(\d{1,2}):(\d{2})',
+  ).firstMatch((m.matchTime ?? '').trim());
   if (d == null || t == null) return null;
   final kickoff = DateTime.utc(
     d.year,
@@ -5541,8 +5550,9 @@ class _AutoMotmTeamState extends State<_AutoMotmTeam> {
                           ),
                           const SizedBox(width: 8),
                           RatingBadge(value: rating, best: true),
-                          if (AppSession.of(context).value
-                              .canManageLeague(widget.match.leagueId)) ...[
+                          if (AppSession.of(
+                            context,
+                          ).value.canManageLeague(widget.match.leagueId)) ...[
                             const SizedBox(width: 6),
                             SizedBox(
                               height: 28,
@@ -5721,8 +5731,9 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             int order(MatchRosterModel a, MatchRosterModel b) {
               final c = lineOf(a).compareTo(lineOf(b));
               if (c != 0) return c;
-              return _jerseyValue(jerseyOf(a))
-                  .compareTo(_jerseyValue(jerseyOf(b)));
+              return _jerseyValue(
+                jerseyOf(a),
+              ).compareTo(_jerseyValue(jerseyOf(b)));
             }
 
             // İlk 11: oyuncunun kayıtlı mevkisi değil, o maçın diziliş
@@ -5800,7 +5811,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (widget.benchHeader) _section('Yedekler'),
+                  if (widget.benchHeader) _section('YEDEKLER'),
                   if (subs.isEmpty)
                     const Text(
                       '-',
@@ -5820,7 +5831,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _section('Kadro'),
+                          _section('KADRO'),
                           ...rows(starters, xi: true),
                         ],
                       ),
@@ -5834,7 +5845,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _section('Yedekler'),
+                          _section('YEDEKLER'),
                           if (subs.isEmpty)
                             const Padding(
                               padding: EdgeInsets.only(top: 8),
@@ -5861,7 +5872,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                 ...rows(starters, xi: true),
                 if (subs.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  _section('Yedekler'),
+                  _section('YEDEKLER'),
                   ...rows(subs),
                 ],
               ],
@@ -5872,18 +5883,43 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
     );
   }
 
+  /// Bölüm başlığı: VS'deki YEDEKLER bandı gibi koyu bant, iki yanda
+  /// takım renginde çizgi.
   Widget _section(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 0, 2, 6),
-      child: Text(
-        title,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 14,
-          letterSpacing: 0.3,
+    Widget line() => Expanded(
+      child: Container(
+        height: 3,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(3),
         ),
+      ),
+    );
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1220),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          line(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          line(),
+        ],
       ),
     );
   }
@@ -6126,9 +6162,9 @@ class _DetailTabState extends State<_DetailTab>
     super.initState();
     MatchHighlightService.changes.addListener(_onClipsChanged);
     if (widget.match.status == MatchStatus.finished) {
-      MatchHighlightService.fetch(widget.match.id)
-          .then((_) => _onClipsChanged())
-          .catchError((_) {});
+      MatchHighlightService.fetch(
+        widget.match.id,
+      ).then((_) => _onClipsChanged()).catchError((_) {});
     }
   }
 
