@@ -25,7 +25,7 @@ import sys
 import tempfile
 import urllib.request
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CFG = os.path.expanduser('~/.config/football_tournament')
@@ -130,6 +130,7 @@ select json_agg(json_build_object(
   'league', l.name, 'league_logo', l.logo_url,
   'home', ht.name, 'away', at.name,
   'home_logo', ht.logo_url, 'away_logo', at.logo_url,
+  'home_color', ht.first_color, 'away_color', at.first_color,
   'fh', h.home_score, 'fa', h.away_score,
   'team', st.name, 'side', case when h.team_id = h.away_team_id then 'away' else 'home' end,
   'scorer', coalesce(nullif(trim(p.name || ' ' || p.surname), ''),
@@ -177,7 +178,7 @@ def fetch(url, path):
         return None
 
 
-def story_overlay(c, out, logos):
+def story_overlay(c, out, logos, zoom=1.0):
     """9:16 katman: üstte turnuva + maç sonucu, altta GOL!, golcü, golle skor."""
     W, H = 1080, 1920
     im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -190,35 +191,72 @@ def story_overlay(c, out, logos):
         w = d.textlength(t, font=fo)
         d.text((cx - w / 2, y), t, font=fo, fill=fill)
 
-    def logo(path, cx, cy, size, alpha=1.0):
+    def logo(path, cx, cy, size, alpha=1.0, shadow=False):
         if not path:
             return
         lg = Image.open(path).convert('RGBA')
         lg.thumbnail((size, size), Image.LANCZOS)
         if alpha < 1:
             lg.putalpha(lg.getchannel('A').point(lambda v: int(v * alpha)))
+        if shadow:
+            sh = Image.new('RGBA', lg.size, (0, 0, 0, 0))
+            sh.putalpha(lg.getchannel('A').point(lambda v: int(v * 0.65)))
+            sh = sh.filter(ImageFilter.GaussianBlur(size * 0.06))
+            im.alpha_composite(sh, (int(cx - lg.width / 2), int(cy - lg.height / 2 + size * 0.05)))
         im.alpha_composite(lg, (int(cx - lg.width / 2), int(cy - lg.height / 2)))
 
-    # Turnuva logosu + adı
-    top = 300
-    if logos['league']:
-        logo(logos['league'], W / 2, 170, 150)
-    else:
-        top = 220
-    ctext(top - 45, (c['league'] or '').upper(), font('BarlowCondensed-ExtraBold.ttf', 38), GOLD)
+    def rgba(h, a=255, default='#1F2937'):
+        h = (h or default).strip().lstrip('#')
+        try:
+            return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) + (a,)
+        except ValueError:
+            return rgba(default, a)
 
-    # Maç sonucu bandı
-    y0 = top + 15
-    im.alpha_composite(Image.new('RGBA', (W - 80, 230), (11, 18, 32, 205)), (40, y0))
-    logo(logos['home'], 150, y0 + 95, 120)
-    logo(logos['away'], W - 150, y0 + 95, 120)
-    for name, cx in ((short(c['home']), 150), (short(c['away']), W - 150)):
-        fo = font('Barlow-Bold.ttf', 28)
-        if d.textlength(name, font=fo) > 260:
-            fo = font('Barlow-Bold.ttf', 23)
-        ctext(y0 + 170, name, fo, MUTED, cx)
-    ctext(y0 + 18, 'MAÇ SONUCU', font('BarlowCondensed-ExtraBold.ttf', 30), GOLD)
-    ctext(y0 + 50, f"{c['fh']} - {c['fa']}", font('BarlowCondensed-ExtraBold.ttf', 120), WHITE)
+    # Üstte okunurluk için yumuşak koyu geçiş.
+    shade = Image.linear_gradient('L').resize((W, 548)).transpose(Image.FLIP_TOP_BOTTOM)
+    dark = Image.new('RGBA', (W, 548), (0, 0, 0, 255))
+    dark.putalpha(shade.point(lambda v: int(v * 0.45)))
+    im.alpha_composite(dark, (0, 0))
+
+    # Turnuva logosu + adı
+    logo(logos['league'], W / 2, 90, 110, shadow=True)
+    ctext(152, (c['league'] or '').upper(), font('BarlowCondensed-ExtraBold.ttf', 34), GOLD)
+
+    # Maç sonucu bandı: iki takımın renginde, çapraz bölünmüş; skor beyaz kartta.
+    y0, y1 = 210, 520
+    bh = y1 - y0
+    band = Image.new('RGBA', (W, bh), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(band)
+    bd.polygon([(0, 0), (W / 2 + 60, 0), (W / 2 - 60, bh), (0, bh)],
+               fill=rgba(c.get('home_color'), 235))
+    bd.polygon([(W / 2 + 60, 0), (W, 0), (W, bh), (W / 2 - 60, bh)],
+               fill=rgba(c.get('away_color'), 235, '#334155'))
+    shade = Image.new('RGBA', (W, bh), (0, 0, 0, 255))
+    shade.putalpha(Image.linear_gradient('L').resize((W, bh)).point(lambda v: int(v * 0.55)))
+    band.alpha_composite(shade)
+    im.alpha_composite(band, (0, y0))
+    d.line([(W / 2 + 60, y0), (W / 2 - 60, y1)], fill=(255, 255, 255, 120), width=4)
+    logo(logos['home'], 200, y0 + 125, 170, shadow=True)
+    logo(logos['away'], W - 200, y0 + 125, 170, shadow=True)
+    for name, cx in ((short(c['home']).upper(), 200), (short(c['away']).upper(), W - 200)):
+        size = 36
+        while size > 22 and d.textlength(name, font=font('BarlowCondensed-ExtraBold.ttf', size)) > 330:
+            size -= 2
+        fo = font('BarlowCondensed-ExtraBold.ttf', size)
+        w = d.textlength(name, font=fo)
+        d.text((cx - w / 2 + 2, y0 + 227), name, font=fo, fill=(0, 0, 0, 150))
+        d.text((cx - w / 2, y0 + 225), name, font=fo, fill=WHITE)
+    INK = (12, 18, 32, 255)
+    bx0, bx1, by0, by1 = W / 2 - 125, W / 2 + 125, y0 + 70, y0 + 230
+    d.rounded_rectangle((bx0, by0, bx1, by1), 26, fill=(255, 255, 255, 250))
+    d.rounded_rectangle((bx0, by0 - 34, bx1, by0 + 6), 14, fill=GOLD)
+    lab, lf = 'MAÇ SONUCU', font('BarlowCondensed-ExtraBold.ttf', 28)
+    lw = sum(d.textlength(ch, font=lf) for ch in lab) + 2 * (len(lab) - 1)
+    x = W / 2 - lw / 2
+    for ch in lab:
+        d.text((x, by0 - 30), ch, font=lf, fill=INK)
+        x += d.textlength(ch, font=lf) + 2
+    ctext(by0 + 14, f"{c['fh']}-{c['fa']}", font('BarlowCondensed-ExtraBold.ttf', 120), INK)
 
     # GOL! + dakika + golcü
     minute = f"{c['minute']}+{c['added']}'" if c.get('added') else f"{c['minute']}'"
@@ -254,8 +292,10 @@ def story_overlay(c, out, logos):
     logo(APP_LOGO, x0 + 45, 1757, 90)
     d.text((x0 + 106, 1720), 'LİG MASASI', font=fb, fill=WHITE)
 
-    # Video köşe filigranı (video 1080x608, dikeyde ortada)
-    logo(APP_LOGO, W - 22 - 39, (H + 608) / 2 - 18 - 39, 78, alpha=0.9)
+    # Video köşe filigranı: maç görüntüsünün sağ alt köşesi (make ile aynı yer).
+    vh = 1080 * zoom * 9 / 16
+    bottom = (H + vh) / 2 if zoom == 1 else 545 + (735 + vh) / 2
+    logo(APP_LOGO, W - 22 - 39, bottom - 18 - 39, 78, alpha=0.9)
     im.save(out)
 
 
@@ -286,11 +326,19 @@ def hms(s):
     return f'{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}'
 
 
-def make(c, tmp):
+# Kalite ayarları. Eski (FMT_STD): YouTube'un 1080p MP4'ü (çoğu zaman düşük
+# bit hızlı AV1) + CRF 21. Varsayılan: 4K/1440p kaynak 1080p'ye küçültülür,
+# CRF 17; hikâyede maç görüntüsü %18 büyütülür.
+FMT_STD = 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]'
+FMT_HQ = 'bv*[height<=2160]+ba/b'
+
+
+def make(c, tmp, fmt=FMT_HQ, crf='17', preset='slow', zoom=1.18):
+    """zoom > 1: hikâyede maç görüntüsü yanlardan kırpılıp büyütülür."""
     s = max(0, int(c['start']) - LEAD)
     src = os.path.join(tmp, 'src.mp4')
     run([f'{BREW}/yt-dlp', '-q', '--no-warnings', '--no-playlist',
-         '-f', 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]',
+         '-f', fmt,
          '--download-sections', f'*{hms(s)}-{hms(s + LENGTH)}',
          '--force-keyframes-at-cuts', '--merge-output-format', 'mp4',
          '-o', src, f"https://www.youtube.com/watch?v={c['video_id']}"])
@@ -298,17 +346,20 @@ def make(c, tmp):
                       os.path.join(tmp, f'{k}.png'))
              for k in ('league', 'home', 'away')}
     ov, ovw = os.path.join(tmp, 'story.png'), os.path.join(tmp, 'wide.png')
-    story_overlay(c, ov, logos)
+    story_overlay(c, ov, logos, zoom)
     wide_overlay(ovw)
     story, wide = os.path.join(tmp, 'story.mp4'), os.path.join(tmp, 'wide.mp4')
     run([f'{BREW}/ffmpeg', '-v', 'error', '-y', '-i', src, '-i', ov, '-filter_complex',
          '[0:v]split[a][b];[a]scale=-2:1920,crop=1080:1920,gblur=sigma=40,eq=brightness=-0.18[bg];'
-         '[b]scale=1080:-2[fg];[bg][fg]overlay=0:(H-h)/2[v];[v][1:v]overlay=0:0,format=yuv420p[out]',
-         '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'medium', '-crf', '21',
+         f'[b]scale={round(1080 * zoom / 2) * 2}:-2:flags=lanczos,crop=1080:ih[fg];'
+         # Büyütülen görüntü maç sonucu bandı (545) ile GOL! (1280) arasına.
+         f"[bg][fg]overlay=0:{'(H-h)/2' if zoom == 1 else '545+(735-h)/2'}[v];"
+         '[v][1:v]overlay=0:0,format=yuv420p[out]',
+         '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', preset, '-crf', crf,
          '-r', '30', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', story])
     run([f'{BREW}/ffmpeg', '-v', 'error', '-y', '-i', src, '-i', ovw, '-filter_complex',
-         '[0:v]scale=1920:1080[v];[v][1:v]overlay=0:0,format=yuv420p[out]',
-         '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'medium', '-crf', '21',
+         '[0:v]scale=1920:1080:flags=lanczos[v];[v][1:v]overlay=0:0,format=yuv420p[out]',
+         '-map', '[out]', '-map', '0:a?', '-c:v', 'libx264', '-preset', preset, '-crf', crf,
          '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', wide])
     return wide, story
 
