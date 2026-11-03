@@ -8,6 +8,7 @@ import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/follows.dart';
+import '../../../core/widgets/app_name_band.dart' show BandBackPage;
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -82,68 +83,72 @@ Future<void> showPlayerCard(
             .limit(1);
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (ctx) => Scaffold(
-        backgroundColor: _bgDark,
-        body: FutureBuilder<List<Map<String, dynamic>>>(
-          future: future,
-          builder: (ctx, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(
-                child: CircularProgressIndicator(color: _accent),
-              );
-            }
-            final rows = snap.data ?? const [];
-            if (rows.isEmpty) {
-              return SafeArea(
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        onPressed: () => Navigator.of(ctx).maybePop(),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white70,
-                        ),
-                        tooltip: 'Kapat',
-                      ),
-                    ),
-                    const Expanded(
-                      child: Center(
-                        child: Text(
-                          'Oyuncu bulunamadı.',
-                          style: TextStyle(color: Colors.white70),
+      // Üst bantta solda geri (ör. Kariyerim'den profile dönüş).
+      builder: (ctx) => BandBackPage(
+        theme: ActiveTournament.theme.value,
+        child: Scaffold(
+          backgroundColor: _bgDark,
+          body: FutureBuilder<List<Map<String, dynamic>>>(
+            future: future,
+            builder: (ctx, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Center(
+                  child: CircularProgressIndicator(color: _accent),
+                );
+              }
+              final rows = snap.data ?? const [];
+              if (rows.isEmpty) {
+                return SafeArea(
+                  child: Column(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          onPressed: () => Navigator.of(ctx).maybePop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white70,
+                          ),
+                          tooltip: 'Kapat',
                         ),
                       ),
-                    ),
-                  ],
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'Oyuncu bulunamadı.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final r = rows.first;
+              String str(String k) => (r[k] ?? '').toString().trim();
+              return PlayerCard(
+                playerPhone: key,
+                playerId: str('id'),
+                name: [
+                  str('name'),
+                  str('surname'),
+                ].where((e) => e.isNotEmpty).join(' '),
+                number: number,
+                photoUrl: str('photo_url'),
+                position: _positionLabel(
+                  str('main_position'),
+                  str('sub_position'),
                 ),
+                mainPosition: str('main_position'),
+                subPosition: _subPositionLabel(str('sub_position')),
+                birthDate: str('birth_date'),
+                height: (r['height'] as num?)?.toInt(),
+                weight: (r['weight'] as num?)?.toInt(),
+                seasons: const [],
+                initialSeasonId: '',
               );
-            }
-            final r = rows.first;
-            String str(String k) => (r[k] ?? '').toString().trim();
-            return PlayerCard(
-              playerPhone: key,
-              playerId: str('id'),
-              name: [
-                str('name'),
-                str('surname'),
-              ].where((e) => e.isNotEmpty).join(' '),
-              number: number,
-              photoUrl: str('photo_url'),
-              position: _positionLabel(
-                str('main_position'),
-                str('sub_position'),
-              ),
-              mainPosition: str('main_position'),
-              subPosition: _subPositionLabel(str('sub_position')),
-              birthDate: str('birth_date'),
-              height: (r['height'] as num?)?.toInt(),
-              weight: (r['weight'] as num?)?.toInt(),
-              seasons: const [],
-              initialSeasonId: '',
-            );
-          },
+            },
+          ),
         ),
       ),
     ),
@@ -1224,9 +1229,10 @@ class _PlayerCardState extends State<PlayerCard> {
                       ),
                     )
                   : faded(
+                      // Bölümden biraz küçük (ad ve armalar ferah kalsın).
                       SizedBox(
-                        height: heroHeight,
-                        width: heroHeight * 0.82,
+                        height: heroHeight * 0.88,
+                        width: heroHeight * 0.88 * 0.82,
                         child: WebSafeImage(
                           url: photo,
                           fit: BoxFit.cover,
@@ -1258,17 +1264,15 @@ class _PlayerCardState extends State<PlayerCard> {
               children: [
                 Flexible(
                   child: Text(
-                    name.toUpperCase(),
+                    name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontFamily: 'BarlowCondensed',
                       color: Colors.white,
-                      fontSize: 32,
+                      fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      height: 1.0,
-                      letterSpacing: 0.5,
+                      height: 1.1,
                       shadows: [Shadow(color: Colors.black87, blurRadius: 12)],
                     ),
                   ),
@@ -1289,11 +1293,12 @@ class _PlayerCardState extends State<PlayerCard> {
             Positioned(
               top: topInset + 52,
               right: 12,
+              // Yalnız yıldız; eklendi/çıkarıldı bilgisi balonda.
               child: FollowStar(
                 kind: FollowKind.player,
                 id: _cardPlayerId,
-                label: true,
-                size: 20,
+                size: 28,
+                idleColor: Colors.white,
               ),
             ),
           Positioned(
