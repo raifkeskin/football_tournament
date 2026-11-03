@@ -1618,16 +1618,16 @@ class _PlayerCardState extends State<PlayerCard> {
                     stat('${t.matches}', 'Maç', Colors.white),
                     stat('${t.starts}', 'İlk 11', Colors.white),
                     stat("${t.minutes}'", 'Dakika', Colors.white),
-                    stat('${t.goals}', 'Gol', _tone),
+                    stat('${t.motm}', 'Maçın adamı', _yellow),
                   ],
                 ),
                 const SizedBox(height: 14),
                 Row(
                   children: [
+                    stat('${t.goals}', 'Gol', _tone),
                     stat('${t.assists}', 'Asist', _purple),
                     stat('${t.yellow}', 'Sarı kart', _yellow),
                     stat('${t.red}', 'Kırmızı kart', _red),
-                    stat('${t.motm}', 'Maçın adamı', _yellow),
                   ],
                 ),
               ],
