@@ -119,7 +119,7 @@ with h as (
   select e.match_id, e.id, e.team_id, e.is_own_goal,
          row_number() over (partition by e.match_id
                             order by e.minute, coalesce(e.added_minute, 0), e.created_at) as n,
-         e.minute, e.added_minute, e.player_id
+         e.minute, e.added_minute, e.player_id, e.assist_player_id
     from public.match_events e
    where e.event_type = 'goal' and e.match_id in (select match_id from h)
 )
@@ -137,6 +137,9 @@ select json_agg(json_build_object(
                      (select trim(pp.name || ' ' || pp.surname)
                         from ev join public.players pp on pp.id = ev.player_id
                        where ev.id = h.match_event_id)),
+  'assist', (select nullif(trim(pa.name || ' ' || pa.surname), '')
+               from ev join public.players pa on pa.id = ev.assist_player_id
+              where ev.id = h.match_event_id and not coalesce(ev.is_own_goal, false)),
   'rh', (select count(*) from ev where ev.match_id = h.match_id and r.upto >= ev.n
            and ((ev.team_id = h.home_team_id) <> coalesce(ev.is_own_goal, false))),
   'ra', (select count(*) from ev where ev.match_id = h.match_id and r.upto >= ev.n
@@ -258,14 +261,26 @@ def story_overlay(c, out, logos, zoom=1.0):
         x += d.textlength(ch, font=lf) + 2
     ctext(by0 + 14, f"{c['fh']}-{c['fa']}", font('BarlowCondensed-ExtraBold.ttf', 120), INK)
 
-    # GOL! + dakika + golcü
+    # GOL! + dakika + golcü; asist varsa altında küçük satır (herkes aynı
+    # hikâyeyi paylaşır, asist yapanın adı da görünür).
+    assist = (c.get('assist') or '').upper() if c.get('scorer') else ''
     minute = f"{c['minute']}+{c['added']}'" if c.get('added') else f"{c['minute']}'"
     ctext(1290, 'GOL!', font('BarlowCondensed-ExtraBoldItalic.ttf', 160), GOLD)
     who = f"{minute}  {c['scorer']}" if c.get('scorer') else f"{minute}  {short(c['team'])}"
-    fo = font('BarlowCondensed-ExtraBold.ttf', 76)
+    fo = font('BarlowCondensed-ExtraBold.ttf', 72 if assist else 76)
     if d.textlength(who, font=fo) > W - 80:
         fo = font('BarlowCondensed-ExtraBold.ttf', 60)
-    ctext(1470, who, fo, WHITE)
+    ctext(1458 if assist else 1470, who, fo, WHITE)
+    if assist:
+        GREEN = (52, 211, 153, 255)
+        tag, tf = 'ASİST', font('BarlowCondensed-ExtraBold.ttf', 34)
+        nf = font('BarlowCondensed-ExtraBold.ttf', 44)
+        tw, nw = d.textlength(tag, font=tf), d.textlength(assist, font=nf)
+        x = (W - (tw + 28 + 16 + nw)) / 2
+        y = 1534
+        d.rounded_rectangle((x, y + 4, x + tw + 28, y + 50), 10, outline=GREEN, width=3)
+        d.text((x + 14, y + 8), tag, font=tf, fill=GREEN)
+        d.text((x + tw + 28 + 16, y), assist, font=nf, fill=MUTED)
 
     # Golle gelen skor: iki takımın logosu arasında; golü atan tarafın
     # sayısı altın rengi.
@@ -275,7 +290,7 @@ def story_overlay(c, out, logos, zoom=1.0):
     w_h, w_d, w_a = (d.textlength(t, font=sf) for t in (hs, dash, as_))
     total = w_h + w_d + w_a
     x = (W - total) / 2
-    y = 1565
+    y = 1590 if assist else 1565
     pad = 26
     d.rounded_rectangle((x - 110 - pad, y - 4, x + total + 110 + pad, y + 112),
                         radius=58, fill=(11, 18, 32, 190), outline=(226, 184, 69, 140), width=2)
