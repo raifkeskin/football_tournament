@@ -1161,7 +1161,33 @@ class _PlayerCardState extends State<PlayerCard> {
       ),
     );
 
+    // Fotoğrafın kenarları zemine erir (alt ve yanlar saydamlaşır).
+    Widget faded(Widget child) => ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, 0.5, 0.94],
+      ).createShader(r),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => const LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.white,
+            Colors.white,
+            Colors.transparent,
+          ],
+          stops: [0.04, 0.28, 0.72, 0.96],
+        ).createShader(r),
+        child: child,
+      ),
+    );
+
+    const heroHeight = 260.0;
     return Container(
+      height: topInset + heroHeight,
       decoration: BoxDecoration(
         // Turnuva renginin koyulaştırılmış degradesi; beyaz yazı okunur kalır.
         gradient: LinearGradient(
@@ -1173,93 +1199,92 @@ class _PlayerCardState extends State<PlayerCard> {
           ],
         ),
       ),
-      // Tam ekran: üst bölüm durum çubuğunun altına uzanır; kapat düğmesi
-      // fotoğraf satırının üstüne biner, bölüm dar kalır.
-      padding: EdgeInsets.fromLTRB(16, topInset + 12, 16, 14),
+      // Büyük vitrin: fotoğraf üst bölüme yayılır, kenarları zemine erir; ad
+      // fotoğrafın altına biner. Fotoğraf yoksa baş harfler.
       child: Stack(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (var i = 0; i < crests.length && i < 3; i++) ...[
-                            if (i > 0) const SizedBox(height: 6),
-                            crest(crests[i]),
-                          ],
-                        ],
+          Positioned(
+            top: topInset,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: photo.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 40),
+                      child: Text(
+                        _initials(name),
+                        style: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 72,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    )
+                  : faded(
+                      SizedBox(
+                        height: heroHeight,
+                        width: heroHeight * 0.82,
+                        child: WebSafeImage(
+                          url: photo,
+                          fit: BoxFit.cover,
+                          fallbackIconSize: 32,
+                        ),
                       ),
                     ),
-                  ),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 84,
-                        height: 108,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: _bgDark,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _tone, width: 2),
-                        ),
-                        child: photo.isEmpty
-                            ? Center(
-                                child: Text(
-                                  _initials(name),
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              )
-                            : WebSafeImage(
-                                url: photo,
-                                fit: BoxFit.cover,
-                                fallbackIconSize: 32,
-                              ),
-                      ),
-                      if (widget.playerId.isNotEmpty)
-                        Positioned(
-                          top: -12,
-                          right: -12,
-                          child: _IdentityMenu(
-                            playerId: widget.playerId,
-                            playerName: widget.name,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const Expanded(child: SizedBox()),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  height: 1.1,
-                ),
-              ),
-            ],
+            ),
           ),
           Positioned(
-            top: -10,
-            right: -8,
+            left: 16,
+            top: topInset + 12,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < crests.length && i < 3; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  crest(crests[i]),
+                ],
+              ],
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 14,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    name.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'BarlowCondensed',
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      height: 1.0,
+                      letterSpacing: 0.5,
+                      shadows: [Shadow(color: Colors.black87, blurRadius: 12)],
+                    ),
+                  ),
+                ),
+                if (widget.playerId.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _IdentityMenu(
+                    playerId: widget.playerId,
+                    playerName: widget.name,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Positioned(
+            top: topInset + 2,
+            right: 8,
             child: IconButton(
               onPressed: () => Navigator.of(context).maybePop(),
               icon: const Icon(Icons.close_rounded, color: Colors.white70),
