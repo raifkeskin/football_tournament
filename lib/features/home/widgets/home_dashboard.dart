@@ -31,6 +31,8 @@ import '../../tournament/models/league_extras.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
+import 'my_week_card.dart';
+import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
@@ -953,6 +955,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 UnassignedRefereesBanner(leagueId: widget.league.id),
                 const RefereeHomeCard(),
                 AttendanceHomeCard(leagueId: widget.league.id),
+                if (session.playerId != null && MyWeekCard.enabledFor(session))
+                  MyWeekCard(leagueId: widget.league.id),
                 content,
               ],
             ),
@@ -1055,7 +1059,48 @@ class _HomeDashboardState extends State<HomeDashboard> {
             const SizedBox(width: 10),
             VerifyPromptChip(session: session),
           ],
+          // Profile kısayol: sağda profil fotoğrafı (yoksa baş harfler).
+          if (loggedIn && MyWeekCard.enabledFor(session)) ...[
+            const SizedBox(width: 10),
+            _profileShortcut(session, fullName),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _profileShortcut(AppSessionState session, String name) {
+    final photo = (session.photoUrl ?? '').trim();
+    final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final initials = words.isEmpty
+        ? '?'
+        : (words.length == 1
+                  ? words.first.characters.first
+                  : '${words.first.characters.first}${words.last.characters.first}')
+              .replaceAll('i', 'İ')
+              .toUpperCase();
+    return Semantics(
+      button: true,
+      label: 'Profilim',
+      child: GestureDetector(
+        onTap: () => MainNavigator.tabRequest.value = MainNavigator.profileTab,
+        child: Container(
+          width: 40,
+          height: 40,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: DashColors.raised,
+            border: Border.all(color: DashColors.accent(), width: 2),
+          ),
+          alignment: Alignment.center,
+          child: photo.isEmpty
+              ? Text(
+                  initials,
+                  style: _barlow(size: 14, weight: FontWeight.w800),
+                )
+              : WebSafeImage(url: photo, fit: BoxFit.cover),
+        ),
       ),
     );
   }

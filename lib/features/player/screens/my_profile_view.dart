@@ -721,32 +721,30 @@ class _MyProfileViewState extends State<MyProfileView> {
               ),
             const SizedBox(height: 8),
           ],
+          // Kariyerim: oyuncu kartı (özet, maçlar, kariyer, goller, mevki).
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _cardButton(
-                    icon: Icons.badge_outlined,
-                    label: 'Oyuncu kartım',
-                    color: kAdminAccent,
-                    onTap: () => showPlayerCard(
-                      context,
-                      playerKey: p.id,
-                      number: first?.jerseyNumber?.toString() ?? '',
-                    ),
+            child: SizedBox(
+              height: 52,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kAdminAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _cardButton(
-                    icon: Icons.edit_outlined,
-                    label: 'Bilgilerim',
-                    color: Colors.white,
-                    onTap: _openEdit,
-                  ),
+                onPressed: () => showPlayerCard(
+                  context,
+                  playerKey: p.id,
+                  number: first?.jerseyNumber?.toString() ?? '',
                 ),
-              ],
+                icon: const Icon(Icons.emoji_events_outlined, size: 22),
+                label: const Text(
+                  'Kariyerim',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
             ),
           ),
           if (ownPhoto.isEmpty && _heldPhoto != null)
@@ -792,11 +790,20 @@ class _MyProfileViewState extends State<MyProfileView> {
                 ),
               ),
             ),
-          // İzinler (eksikse sarı) ve bildirim ayarları: aynı düğme dili.
+          // Bilgiler, izinler (eksikse sarı) ve bildirim ayarları: tek satır.
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: Row(
               children: [
+                Expanded(
+                  child: _cardButton(
+                    icon: Icons.edit_outlined,
+                    label: 'Bilgilerim',
+                    color: Colors.white,
+                    onTap: _openEdit,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _consents == null
                       ? const SizedBox.shrink()
@@ -813,7 +820,7 @@ class _MyProfileViewState extends State<MyProfileView> {
                           onTap: _openConsents,
                         ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _cardButton(
                     icon: Icons.notifications_none_rounded,
@@ -1031,18 +1038,26 @@ class _MyProfileViewState extends State<MyProfileView> {
     required VoidCallback onTap,
   }) {
     return SizedBox(
-      height: 44,
+      height: 42,
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
           foregroundColor: color,
-          side: BorderSide(color: color.withValues(alpha: 0.5)),
+          side: BorderSide(color: color.withValues(alpha: 0.4)),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
         onPressed: onTap,
-        icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        icon: Icon(icon, size: 16),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+        ),
       ),
     );
   }
