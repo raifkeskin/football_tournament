@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../../core/services/follows.dart';
+import '../follows/follow_list_screen.dart';
 
 import '../../core/push/notification_prefs.dart';
 import '../../core/push/push_card.dart';
@@ -43,6 +48,7 @@ class _NotificationSettingsScreenState
   }
 
   Future<void> _load() async {
+    unawaited(Follows.load(force: true));
     try {
       final r = await Future.wait<Object>([
         NotificationPrefsService.load(),
@@ -96,6 +102,63 @@ class _NotificationSettingsScreenState
         context,
       ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
     }
+  }
+
+  /// Takip Listem açıkken: sayılar ve listeye geçiş; anahtar takip edilen
+  /// takımların bildirimini açar/kapatır.
+  Widget _followListRow(NotificationPrefs p) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        Follows.leagues,
+        Follows.teams,
+        Follows.players,
+      ]),
+      builder: (context, _) {
+        final parts = [
+          if (Follows.leagues.value.isNotEmpty)
+            '${Follows.leagues.value.length} turnuva',
+          if (Follows.teams.value.isNotEmpty)
+            '${Follows.teams.value.length} takım',
+          if (Follows.players.value.isNotEmpty)
+            '${Follows.players.value.length} futbolcu',
+        ];
+        return AdminFieldRow(
+          icon: Icons.star_rounded,
+          label: 'Takip ettiklerim',
+          onTap: () async {
+            await FollowListScreen.open(context);
+            _load();
+          },
+          trailing: Switch.adaptive(
+            value: p.scopeFollowed,
+            activeTrackColor: kAdminAccent,
+            onChanged: (v) => _update(p.copyWith(scopeFollowed: v)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                parts.isEmpty ? 'Henüz takip ettiğin yok' : parts.join(' · '),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                "Takip Listem'de düzenle ›",
+                style: TextStyle(
+                  color: kAdminAccent,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _switchRow({
@@ -168,13 +231,16 @@ class _NotificationSettingsScreenState
               value: p.scopeMyTeam,
               onChanged: (v) => _update(p.copyWith(scopeMyTeam: v)),
             ),
-            _switchRow(
-              icon: Icons.star_rounded,
-              label: 'Takip ettiğim takımlar',
-              text: followed,
-              value: p.scopeFollowed,
-              onChanged: (v) => _update(p.copyWith(scopeFollowed: v)),
-            ),
+            if (Follows.visible(context))
+              _followListRow(p)
+            else
+              _switchRow(
+                icon: Icons.star_rounded,
+                label: 'Takip ettiğim takımlar',
+                text: followed,
+                value: p.scopeFollowed,
+                onChanged: (v) => _update(p.copyWith(scopeFollowed: v)),
+              ),
             _switchRow(
               icon: Icons.radio_button_checked_rounded,
               label: 'Grubumdaki tüm maçlar',

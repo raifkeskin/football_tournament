@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/follows.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -1255,6 +1256,20 @@ class _PlayerCardState extends State<PlayerCard> {
                   height: 1.1,
                 ),
               ),
+              // Başkası takip edebilir (kendi profilinde yıldız yok).
+              if (_cardPlayerId.isNotEmpty &&
+                  _cardPlayerId != AppSession.of(context).value.playerId)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Center(
+                    child: FollowStar(
+                      kind: FollowKind.player,
+                      id: _cardPlayerId,
+                      label: true,
+                      size: 20,
+                    ),
+                  ),
+                ),
             ],
           ),
           Positioned(
