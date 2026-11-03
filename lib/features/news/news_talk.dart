@@ -84,7 +84,9 @@ List<NewsReaction> newsReactionsFor(NewsItem n) {
       ('👏', 'Güzel hafta'),
     ]);
   }
-  if (n.isWeeklyPick || n.isWeekAwards) {
+  // Haftanın Enleri: tribün tepkisi yok.
+  if (n.isWeekAwards) return const [];
+  if (n.isWeeklyPick) {
     return of([('👑', 'Hak etti'), ('🔥', 'Efsane'), ('🐐', 'GOAT')]);
   }
   // Bugünün maçları: tribün tepkisi yok (yalnız yorumlar).
