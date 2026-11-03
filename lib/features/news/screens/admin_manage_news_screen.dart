@@ -28,6 +28,10 @@ class AdminManageNewsScreen extends StatefulWidget {
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final Set<String> _busyIds = {};
+
+  /// Silinen haberler: canlı akış silmeyi her zaman bildirmez, listeden
+  /// hemen düşsün.
+  final Set<String> _deletedIds = {};
   late final Stream<List<League>> _leaguesStream = _leagueService
       .watchLeagues();
 
@@ -697,6 +701,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     setState(() => _busyIds.add(newsId));
     try {
       await _leagueService.deleteNews(newsId: newsId);
+      if (mounted) setState(() => _deletedIds.add(newsId));
       for (final url in imageUrls) {
         await SupabaseImageUploadService().deleteImageByUrl(url);
       }
@@ -960,6 +965,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                     }
                     // Sunucu created_at'e göre azalan sırada döner (en yeni üstte).
                     final docs = (snapshot.data ?? const <NewsItem>[])
+                        .where((n) => !_deletedIds.contains(n.id))
                         .where(
                           (n) => switch (_status) {
                             _NewsStatus.all => true,
