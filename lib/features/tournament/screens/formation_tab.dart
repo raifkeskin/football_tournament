@@ -1408,6 +1408,10 @@ class _PlayerToken extends StatelessWidget {
   /// Maçtaki olayları (köşe ikonları); null ise ikon yok.
   final PlayerMarks? marks;
 
+  /// Açık renkli forma (beyaz vb.): numara siyah, kontur koyu.
+  bool get _light => color.computeLuminance() > 0.5;
+  Color get _onColor => _light ? const Color(0xFF111827) : Colors.white;
+
   /// Profil görünümünde fotoğrafı olmayan oyuncu forma ile görünür.
   bool get _hasPhoto => (player.photoUrl ?? '').trim().isNotEmpty;
 
@@ -1645,8 +1649,8 @@ class _PlayerToken extends StatelessWidget {
                       padding: const EdgeInsets.all(1.5),
                       child: Text(
                         player.number,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: _onColor,
                           fontWeight: FontWeight.w800,
                           fontSize: 9,
                           height: 1,
@@ -1729,11 +1733,11 @@ class _PlayerToken extends StatelessWidget {
                 JerseyShape(
                   width: 38,
                   color: color,
-                  borderColor: Colors.white,
+                  borderColor: _light ? const Color(0x99111827) : Colors.white,
                   child: Text(
                     player.number.isEmpty ? '-' : player.number,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: _onColor,
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
                     ),
@@ -1758,8 +1762,8 @@ class _PlayerToken extends StatelessWidget {
                   ),
                   child: Text(
                     player.number.isEmpty ? '-' : player.number,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: _onColor,
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
                     ),
