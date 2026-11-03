@@ -335,7 +335,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
           MatchEvent(
             id: editing.id,
             matchId: editing.matchId,
-            teamId: editing.teamId,
+            teamId: editing.eventType == 'goal'
+                ? _playerTeamId!
+                : editing.teamId,
             eventType: editing.eventType,
             minute: isMotm ? editing.minute : minute,
             addedMinute: isMotm ? editing.addedMinute : added,
@@ -343,13 +345,15 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
             playerId: player.playerId.trim().isEmpty
                 ? null
                 : player.playerId.trim(),
-            assistPlayerId: editing.eventType == 'goal' && !_isOwnGoal
-                ? _selectedAssist?.playerId.trim()
+            assistPlayerId: editing.eventType == 'goal'
+                ? (_isOwnGoal ? null : _selectedAssist?.playerId.trim())
                 : editing.assistPlayerId,
             subInPlayerId: editing.eventType == 'substitution'
                 ? _selectedSubIn?.playerId.trim()
                 : editing.subInPlayerId,
-            isOwnGoal: editing.isOwnGoal,
+            isOwnGoal: editing.eventType == 'goal'
+                ? _isOwnGoal
+                : editing.isOwnGoal,
             isPenalty: editing.isPenalty,
           ),
         );
@@ -763,7 +767,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                               ? homeName
                               : awayName,
                           placeholder: 'Seçiniz',
-                          onTap: _isLoading || _editing
+                          // Düzenlemede yalnız golün takımı değişebilir
+                          // (ör. sonradan kendi kalesine çıkan gol).
+                          onTap: _isLoading || (_editing && !isGoal)
                               ? null
                               : () async {
                                   final picked = await _pick<String>(
@@ -947,7 +953,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                           AdminFieldRow(
                             icon: Icons.u_turn_left_rounded,
                             label: 'Kendi Kalesine',
-                            onTap: _isLoading || _editing
+                            onTap: _isLoading
                                 ? null
                                 : () => setState(() {
                                     _isOwnGoal = !_isOwnGoal;
@@ -958,7 +964,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                             trailing: Switch(
                               value: _isOwnGoal,
                               activeThumbColor: kAdminAccent,
-                              onChanged: _isLoading || _editing
+                              onChanged: _isLoading
                                   ? null
                                   : (v) => setState(() {
                                       _isOwnGoal = v;
@@ -1054,6 +1060,8 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     _selectedPlayer?.playerId,
     _selectedAssist?.playerId ?? _pendingAssistId,
     _selectedSubIn?.playerId ?? _pendingSubInId,
+    _teamId,
+    _isOwnGoal,
   ].join('|');
 
   /// Formda girilmiş ama kaydedilmemiş bir şey var mı?
