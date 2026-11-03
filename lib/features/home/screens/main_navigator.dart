@@ -30,6 +30,7 @@ import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 import '../../../core/services/follows.dart';
 import '../../follows/follow_list_screen.dart';
+import '../../search/search_screen.dart';
 import '../../tournament/regulations/regulations_screen.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
@@ -216,13 +217,23 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
-      // Yayın Rehberi: bantta sağda takvim (gün seçimi). Talimatname
-      // menüde (başlıktaki düğme satırı).
+      // Yayın Rehberi: bantta sağda takvim (gün seçimi). Ana Sayfa:
+      // büyüteç arama çubuğunu açıp kapatır. Talimatname menüde.
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
               icon: Icons.calendar_month_rounded,
               size: 36,
               onTap: BroadcastGuideScreen.pickDate,
+            )
+          : _aktifSekme == 0 && HomeSearch.visible(context)
+          ? ValueListenableBuilder<bool>(
+              valueListenable: HomeSearch.open,
+              builder: (context, open, _) => BandIconButton(
+                icon: open ? Icons.close_rounded : Icons.search_rounded,
+                size: 36,
+                tooltip: open ? 'Aramayı kapat' : 'Ara',
+                onTap: () => HomeSearch.open.value = !open,
+              ),
             )
           : null,
     );
