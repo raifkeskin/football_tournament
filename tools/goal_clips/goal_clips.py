@@ -400,7 +400,39 @@ def archive(c, wide, story):
             b.write(a.read())
 
 
+def measure_drive():
+    """Drive LigMasasi klasörünün boyutu (turnuva klasörü bazında); günde bir
+    kez usage_drive'a yazılır (İstatistikler › Drive)."""
+    if not DRIVE_ROOTS or psql("select count(*) from public.usage_drive "
+                               "where day = (now() at time zone 'Europe/Istanbul')::date") != '0':
+        return
+    total, by = 0, {}
+    for root in DRIVE_ROOTS:
+        for top in os.listdir(root):
+            path = os.path.join(root, top)
+            size = 0
+            if os.path.isdir(path):
+                for dirpath, _, files in os.walk(path):
+                    for f in files:
+                        try:
+                            size += os.path.getsize(os.path.join(dirpath, f))
+                        except OSError:
+                            pass
+            else:
+                size = os.path.getsize(path)
+            by[top] = by.get(top, 0) + size
+            total += size
+    psql("insert into public.usage_drive (day, bytes, by_league) values "
+         f"((now() at time zone 'Europe/Istanbul')::date, {total}, {q(json.dumps(by))}::jsonb) "
+         "on conflict (day) do update set bytes = excluded.bytes, by_league = excluded.by_league")
+    log('Drive ölçüldü:', round(total / 1e9, 2), 'GB')
+
+
 def main():
+    try:
+        measure_drive()
+    except Exception as e:
+        log('Drive ölçülemedi:', e)
     ap = argparse.ArgumentParser()
     ap.add_argument('--match')
     ap.add_argument('--limit', type=int, default=8)
