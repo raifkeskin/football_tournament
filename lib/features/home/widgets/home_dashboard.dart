@@ -1249,12 +1249,13 @@ class _HomeDashboardState extends State<HomeDashboard> {
         : {?_followedTeamId}.where(d.teams.containsKey).toSet();
     final groupFilter = _groupId(d);
     // Bölüm bağlantıları: Turnuva Sayfası, kişinin grubu (yoksa ilk grup).
-    void openHub(TournamentHubTab tab) => TournamentHubScreen.open(
+    void openHub(TournamentHubTab tab, {int? week}) => TournamentHubScreen.open(
       context,
       leagueId: widget.league.id,
       seasonId: d.seasonId,
       groupId: groupFilter ?? d.groups.keys.firstOrNull,
       initialTab: tab,
+      initialWeek: week,
     );
 
     final sorted = [...d.matches]
@@ -1505,7 +1506,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'GEÇEN HAFTA · $lastWeek. HAFTA',
             'Sonuçlar',
-            () => openHub(TournamentHubTab.fixture),
+            () => openHub(TournamentHubTab.fixture, week: lastWeek),
           ),
           for (final m in lastWeekMatches.take(4)) _matchRow(d, m, focusTeams),
         ],

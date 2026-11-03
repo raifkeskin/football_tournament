@@ -47,6 +47,7 @@ class TournamentHubScreen extends StatefulWidget {
     this.groupId,
     this.regionId,
     this.initialTab = TournamentHubTab.standings,
+    this.initialWeek,
   });
 
   final String leagueId;
@@ -62,6 +63,9 @@ class TournamentHubScreen extends StatefulWidget {
   final String? regionId;
   final TournamentHubTab initialTab;
 
+  /// Fikstür bu haftayla açılır (ör. ana sayfada "Geçen hafta › Sonuçlar").
+  final int? initialWeek;
+
   static Future<void> open(
     BuildContext context, {
     required String leagueId,
@@ -69,6 +73,7 @@ class TournamentHubScreen extends StatefulWidget {
     String? groupId,
     String? regionId,
     TournamentHubTab initialTab = TournamentHubTab.standings,
+    int? initialWeek,
   }) {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -79,6 +84,7 @@ class TournamentHubScreen extends StatefulWidget {
           groupId: groupId,
           regionId: regionId,
           initialTab: initialTab,
+          initialWeek: initialWeek,
         ),
       ),
     );
@@ -469,6 +475,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
             leagueId: widget.leagueId,
             seasonId: season.id,
             groupId: group.id,
+            initialWeek: widget.initialWeek,
             shareAction: _fixtureShare,
             videoAction: _fixtureVideo,
             accent: accent,
