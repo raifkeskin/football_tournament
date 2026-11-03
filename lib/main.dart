@@ -1,3 +1,4 @@
+import 'core/widgets/keyboard_inset_guard.dart';
 import 'core/widgets/app_snack_messenger.dart';
 import 'core/services/screen_trail.dart';
 import 'core/services/keyboard_dismiss_observer.dart';
@@ -476,8 +477,10 @@ class _MyAppState extends State<MyApp> {
               data: mq.copyWith(
                 textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
               ),
-              child: WebResponsiveFrame(
-                child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+              child: KeyboardInsetGuard(
+                child: WebResponsiveFrame(
+                  child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+                ),
               ),
             ),
           );
