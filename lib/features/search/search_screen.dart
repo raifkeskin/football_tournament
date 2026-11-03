@@ -71,7 +71,7 @@ class HomeSearchBar extends StatelessWidget {
                             ),
                             SizedBox(width: 10),
                             Text(
-                              'Takım ya da futbolcu ara',
+                              'Turnuva, takım ya da futbolcu ara',
                               style: TextStyle(
                                 color: Color(0xFF94A3B8),
                                 fontSize: 15,
@@ -97,7 +97,7 @@ class _Hit {
     required this.sub,
     required this.image,
     this.seasonId = '',
-    this.player = false,
+    required this.kind,
   });
 
   final String id;
@@ -105,7 +105,8 @@ class _Hit {
   final String sub;
   final String image;
   final String seasonId;
-  final bool player;
+  final FollowKind kind;
+  bool get player => kind == FollowKind.player;
 }
 
 class SearchScreen extends StatefulWidget {
@@ -132,21 +133,16 @@ class _SearchScreenState extends State<SearchScreen> {
   int _gen = 0;
   bool _loading = false;
 
-  /// 0 Tümü, 1 Takımlar, 2 Futbolcular.
+  /// 0 Tümü, 1 Turnuvalar, 2 Takımlar, 3 Futbolcular.
   int _tab = 0;
-
-  /// true: yalnız bulunulan turnuva.
-  bool _thisLeague = true;
+  List<_Hit> _leagues = const [];
   List<_Hit> _teams = const [];
   List<_Hit> _players = const [];
   List<String> _recent = const [];
 
-  String? get _leagueId => ActiveTournament.currentLeagueId.value;
-
   @override
   void initState() {
     super.initState();
-    if (_leagueId == null) _thisLeague = false;
     _loadRecent();
   }
 
@@ -194,6 +190,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final gen = ++_gen;
     if (q.length < 2) {
       setState(() {
+        _leagues = const [];
         _teams = const [];
         _players = const [];
         _loading = false;
@@ -204,13 +201,23 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final res = await Supabase.instance.client.rpc(
         'search_entities',
-        params: {'p_q': q, 'p_league': _thisLeague ? _leagueId : null},
+        params: {'p_q': q},
       );
       if (!mounted || gen != _gen) return;
       final m = Map<String, dynamic>.from(res as Map);
       String s(Object? v) => (v ?? '').toString().trim();
       setState(() {
         _loading = false;
+        _leagues = [
+          for (final r in (m['leagues'] as List? ?? const []))
+            _Hit(
+              id: s(r['id']),
+              name: s(r['name']),
+              sub: 'Turnuva',
+              image: s(r['logo_url']),
+              kind: FollowKind.league,
+            ),
+        ];
         _teams = [
           for (final r in (m['teams'] as List? ?? const []))
             _Hit(
@@ -219,6 +226,7 @@ class _SearchScreenState extends State<SearchScreen> {
               sub: s(r['league_name']),
               image: s(r['logo_url']),
               seasonId: s(r['season_id']),
+              kind: FollowKind.team,
             ),
         ];
         _players = [
@@ -226,12 +234,16 @@ class _SearchScreenState extends State<SearchScreen> {
             _Hit(
               id: s(r['id']),
               name: '${s(r['name'])} ${s(r['surname'])}'.trim(),
-              sub: [
-                s(r['team_name']),
-                if (s(r['jersey_number']).isNotEmpty) s(r['jersey_number']),
-              ].join(' · '),
+              // Kadroda değilse "Boşta".
+              sub: s(r['team_name']).isEmpty
+                  ? 'Boşta'
+                  : [
+                      s(r['team_name']),
+                      if (s(r['jersey_number']).isNotEmpty)
+                        s(r['jersey_number']),
+                    ].join(' · '),
               image: s(r['photo_url']),
-              player: true,
+              kind: FollowKind.player,
             ),
         ];
       });
@@ -244,6 +256,13 @@ class _SearchScreenState extends State<SearchScreen> {
     _remember(_ctrl.text);
     if (h.player) {
       showPlayerCard(context, playerKey: h.id);
+      return;
+    }
+    // Turnuva: uygulama o turnuvaya geçer, ana sayfaya dönülür.
+    if (h.kind == FollowKind.league) {
+      final nav = Navigator.of(context);
+      ActiveTournament.choose(h.id);
+      nav.popUntil((r) => r.isFirst);
       return;
     }
     if (h.seasonId.isEmpty) return;
@@ -357,10 +376,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     ],
                   ),
                 ),
-                FollowStar(
-                  kind: h.player ? FollowKind.player : FollowKind.team,
-                  id: h.id,
-                ),
+                FollowStar(kind: h.kind, id: h.id),
               ],
             ),
           ),
@@ -412,7 +428,9 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _results() {
     final q = _ctrl.text.trim();
     if (q.length < 2) return _start();
-    final total = _teams.length + _players.length;
+    final total = _leagues.length + _teams.length + _players.length;
+    Widget tab(int i, String label, int n) =>
+        _chip('$label $n', _tab == i, () => setState(() => _tab = i));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -421,62 +439,36 @@ class _SearchScreenState extends State<SearchScreen> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _chip('Tümü $total', _tab == 0, () => setState(() => _tab = 0)),
-              _chip(
-                'Takımlar ${_teams.length}',
-                _tab == 1,
-                () => setState(() => _tab = 1),
-              ),
-              _chip(
-                'Futbolcular ${_players.length}',
-                _tab == 2,
-                () => setState(() => _tab = 2),
-              ),
+              tab(0, 'Tümü', total),
+              tab(1, 'Turnuvalar', _leagues.length),
+              tab(2, 'Takımlar', _teams.length),
+              tab(3, 'Futbolcular', _players.length),
             ],
           ),
         ),
-        if (_leagueId != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              children: [
-                const Text(
-                  'Turnuva:',
-                  style: TextStyle(color: _muted, fontSize: 12),
-                ),
-                const SizedBox(width: 6),
-                _chip('Bu turnuva', _thisLeague, () {
-                  setState(() => _thisLeague = true);
-                  _search();
-                }),
-                _chip('Tüm turnuvalar', !_thisLeague, () {
-                  setState(() => _thisLeague = false);
-                  _search();
-                }),
-              ],
-            ),
-          ),
         if (_loading && total == 0)
           const Padding(
             padding: EdgeInsets.only(top: 32),
             child: Center(child: CircularProgressIndicator()),
           )
         else if (total == 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 32),
+          const Padding(
+            padding: EdgeInsets.only(top: 32),
             child: Text(
-              _thisLeague && _leagueId != null
-                  ? 'Bu turnuvada bulunamadı. "Tüm turnuvalar"ı deneyin.'
-                  : 'Sonuç bulunamadı.',
+              'Sonuç bulunamadı.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: _muted),
+              style: TextStyle(color: _muted),
             ),
           ),
-        if (_tab != 2 && _teams.isNotEmpty) ...[
+        if ((_tab == 0 || _tab == 1) && _leagues.isNotEmpty) ...[
+          _label('TURNUVALAR'),
+          for (final l in _leagues) _row(l),
+        ],
+        if ((_tab == 0 || _tab == 2) && _teams.isNotEmpty) ...[
           _label('TAKIMLAR'),
           for (final t in _teams) _row(t),
         ],
-        if (_tab != 1 && _players.isNotEmpty) ...[
+        if ((_tab == 0 || _tab == 3) && _players.isNotEmpty) ...[
           _label('FUTBOLCULAR'),
           for (final p in _players) _row(p),
         ],
@@ -531,7 +523,7 @@ class _SearchScreenState extends State<SearchScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(8, 32, 8, 0),
             child: Text(
-              'Takım ya da futbolcu adının en az iki harfini yazın.',
+              'Aramak için en az iki harf yazın.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _muted),
             ),
@@ -563,7 +555,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 fontWeight: FontWeight.w700,
               ),
               decoration: InputDecoration(
-                hintText: 'Takım ya da futbolcu adı',
+                hintText: 'Turnuva, takım ya da futbolcu adı',
                 hintStyle: const TextStyle(color: _muted),
                 prefixIcon: const Icon(Icons.search_rounded, color: _green),
                 suffixIcon: _ctrl.text.isEmpty
