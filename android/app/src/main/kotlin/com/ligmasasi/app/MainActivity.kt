@@ -69,10 +69,11 @@ class MainActivity : FlutterFragmentActivity() {
                         val bytes = call.argument<ByteArray>("bytes")
                         val story = call.argument<Boolean>("story") ?: false
                         val appId = call.argument<String>("appId")
+                        val video = call.argument<Boolean>("video") ?: false
                         if (bytes == null) {
                             result.error("args", "Görsel yok", null)
                         } else {
-                            result.success(shareToInstagram(bytes, story, appId))
+                            result.success(shareToInstagram(bytes, story, appId, video))
                         }
                     }
                     else -> result.notImplemented()
@@ -106,24 +107,31 @@ class MainActivity : FlutterFragmentActivity() {
         false
     }
 
-    // Afişi Instagram'ın hikâye düzenleyicisinde ya da gönderi ekranında açar.
-    // Paylaşım Instagram'da o an açık olan hesaptan yapılır.
-    private fun shareToInstagram(bytes: ByteArray, story: Boolean, appId: String?): Boolean {
+    // Afişi (ya da gol kesiti MP4'ünü) Instagram'ın hikâye düzenleyicisinde ya
+    // da gönderi ekranında açar. Paylaşım Instagram'da o an açık olan hesaptan
+    // yapılır.
+    private fun shareToInstagram(
+        bytes: ByteArray,
+        story: Boolean,
+        appId: String?,
+        video: Boolean = false,
+    ): Boolean {
         val dir = File(cacheDir, "ig_share").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
-        val file = File(dir, "afis_${System.currentTimeMillis()}.png")
+        val mime = if (video) "video/mp4" else "image/png"
+        val file = File(dir, "${if (video) "gol" else "afis"}_${System.currentTimeMillis()}.${if (video) "mp4" else "png"}")
         file.writeBytes(bytes)
         val uri = FileProvider.getUriForFile(this, "$packageName.igshare", file)
         grantUriPermission(IG, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
         val intent = if (story) {
             Intent("com.instagram.share.ADD_TO_STORY").apply {
-                setDataAndType(uri, "image/png")
+                setDataAndType(uri, mime)
                 if (!appId.isNullOrBlank()) putExtra("source_application", appId)
             }
         } else {
             Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
+                type = mime
                 putExtra(Intent.EXTRA_STREAM, uri)
             }
         }

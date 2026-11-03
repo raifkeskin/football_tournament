@@ -56,6 +56,10 @@ PODS:
   - google_mlkit_commons (0.13.0):
     - Flutter
     - MLKitVision (~> 10.0.0)
+  - google_mlkit_face_detection (0.15.1):
+    - Flutter
+    - google_mlkit_commons
+    - GoogleMLKit/FaceDetection (~> 9.0.0)
   - google_mlkit_text_recognition (0.17.1):
     - Flutter
     - google_mlkit_commons
@@ -63,6 +67,9 @@ PODS:
   - GoogleDataTransport (10.1.1):
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
+  - GoogleMLKit/FaceDetection (9.0.0):
+    - GoogleMLKit/MLKitCore
+    - MLKitFaceDetection (~> 8.0.0)
   - GoogleMLKit/MLKitCore (9.0.0):
     - MLKitCommon (~> 14.0.0)
   - GoogleMLKit/TextRecognition (9.0.0):
@@ -123,6 +130,9 @@ PODS:
     - GoogleUtilities/Logger (~> 8.0)
     - GoogleUtilities/UserDefaults (~> 8.0)
     - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
+  - MLKitFaceDetection (8.0.0):
+    - MLKitCommon (~> 14.0)
+    - MLKitVision (~> 10.0)
   - MLKitTextRecognition (7.0.0):
     - MLKitCommon (~> 14.0)
     - MLKitTextRecognitionCommon (= 6.0.0)
@@ -180,6 +190,7 @@ DEPENDENCIES:
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
   - gal (from `.symlinks/plugins/gal/darwin`)
   - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
+  - google_mlkit_face_detection (from `.symlinks/plugins/google_mlkit_face_detection/ios`)
   - google_mlkit_text_recognition (from `.symlinks/plugins/google_mlkit_text_recognition/ios`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - local_auth_darwin (from `.symlinks/plugins/local_auth_darwin/darwin`)
@@ -206,6 +217,7 @@ SPEC REPOS:
     - libwebp
     - MLImage
     - MLKitCommon
+    - MLKitFaceDetection
     - MLKitTextRecognition
     - MLKitTextRecognitionCommon
     - MLKitVision
@@ -239,6 +251,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/gal/darwin"
   google_mlkit_commons:
     :path: ".symlinks/plugins/google_mlkit_commons/ios"
+  google_mlkit_face_detection:
+    :path: ".symlinks/plugins/google_mlkit_face_detection/ios"
   google_mlkit_text_recognition:
     :path: ".symlinks/plugins/google_mlkit_text_recognition/ios"
   image_picker_ios:
@@ -278,6 +292,7 @@ SPEC CHECKSUMS:
   flutter_secure_storage_darwin: 46e401699982ee74142909676535e0f6a7321e58
   gal: baecd024ebfd13c441269ca7404792a7152fde89
   google_mlkit_commons: b2c0a76e7ef4ff555e70e5d71f21d66ce3d08a97
+  google_mlkit_face_detection: 84144f185c47be63638e22fdd81bbb781875a35b
   google_mlkit_text_recognition: 5a8cb8b73c765938fb7111de6f5f883b90f15d52
   GoogleDataTransport: a24e58982ab3ba2f64d79613e027fe7f57e88539
   GoogleMLKit: b1eee21a41c57704fe72483b15c85cb2c0cd7444
@@ -289,6 +304,7 @@ SPEC CHECKSUMS:
   local_auth_darwin: c3ee6cce0a8d56be34c8ccb66ba31f7f180aaebb
   MLImage: 0de5c6c2bf9e93b80ef752e2797f0836f03b58c0
   MLKitCommon: 47d47b50a031d00db62f1b0efe5a1d8b09a3b2e6
+  MLKitFaceDetection: 32549f1e70e6e7731261bf9cea2b74095e2531cb
   MLKitTextRecognition: c0ad24510481dfc8893ad15dfcb8a5f05ed9e826
   MLKitTextRecognitionCommon: 234ceb1cfdfb5fceb4fd664943046609a2961cc2
   MLKitVision: 39a5a812db83c4a0794445088e567f3631c11961

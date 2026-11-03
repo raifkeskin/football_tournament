@@ -42,6 +42,42 @@ class RosterTarget {
   final String? readName;
 }
 
+/// Kadroda kimlik okutulacak oyuncu (takım ekranı, "Kimlik" düğmesi).
+class IdScanTarget {
+  const IdScanTarget({
+    required this.playerId,
+    required this.name,
+    required this.seasonId,
+    required this.teamId,
+    this.subtitle = '',
+    this.photoUrl = '',
+  });
+
+  final String playerId;
+  final String name;
+  final String seasonId;
+  final String teamId;
+
+  /// Forma no · mevki · doğum yılı.
+  final String subtitle;
+  final String photoUrl;
+}
+
+/// [IdentityService.verifyFor] sonucu. [kind]: ok (onaylandı), pending
+/// (soyad tutuyor, ad ya da tarih farklı; onaya gitti), mismatch (kart bu
+/// kişiye ait değil), dup (kimlik başka profile onaylı).
+class IdScanResult {
+  const IdScanResult(this.kind, this.data);
+
+  final String kind;
+  final Map<String, dynamic> data;
+
+  String text(String key) => (data[key] ?? '').toString();
+  bool get already => data['already'] == true;
+  bool get nameOk => data['name_ok'] != false;
+  bool get dateOk => data['date_ok'] != false;
+}
+
 /// Kimlik çipinden okunan bilgilere uyan profil (`identity_candidates`).
 class IdentityCandidate {
   const IdentityCandidate({
@@ -219,6 +255,30 @@ class IdentityService {
     );
     _cache[playerId] = true;
     changes.value++;
+  }
+
+  /// Kadroda kimlik okut: kart yalnız [t] profiliyle karşılaştırılır
+  /// (`identity_verify_for`).
+  static Future<IdScanResult> verifyFor(IdScanTarget t, IdCardData card) async {
+    final r = await _sb.rpc(
+      'identity_verify_for',
+      params: {
+        'p_player_id': t.playerId,
+        'p_season_id': t.seasonId,
+        'p_team_id': t.teamId,
+        'p_first': card.firstName,
+        'p_last': card.lastName,
+        'p_birth': _date(card.birthDate),
+        'p_tc': card.tc,
+      },
+    );
+    final m = Map<String, dynamic>.from(r as Map);
+    final kind = (m['result'] ?? '').toString();
+    if (kind == 'ok') {
+      _cache[t.playerId] = true;
+      changes.value++;
+    }
+    return IdScanResult(kind, m);
   }
 
   /// Esamede "Kadroda yok": kimliği okunan oyuncuyu takıma ekler.

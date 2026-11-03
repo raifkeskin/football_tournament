@@ -16,6 +16,7 @@ import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 import '../features/stats/admin_stats_screen.dart';
+import '../features/stats/admin_cutout_pending_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
 import '../features/identity/admin_identity_screen.dart';
 import '../features/tournament_request/admin_tournament_requests_screen.dart';
@@ -303,6 +304,20 @@ class AdminPanelWidget extends StatelessWidget {
                       MaterialPageRoute(
                         settings: const RouteSettings(name: 'AdminStatsScreen'),
                         builder: (_) => const AdminStatsScreen(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSmallActionTile(
+                    context,
+                    'Dekupe Bekleyenler',
+                    Icons.person_pin_rounded,
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        settings: const RouteSettings(
+                          name: 'AdminCutoutPendingScreen',
+                        ),
+                        builder: (_) => const AdminCutoutPendingScreen(),
                       ),
                     ),
                   ),

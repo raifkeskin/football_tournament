@@ -19,6 +19,7 @@ class AppSettings {
   static const _kManualPlayerCreate = 'manual_player_create_enabled';
   static const _kSuspendedTab = 'suspended_tab_enabled';
   static const _kWeeklyPicks = 'weekly_picks_enabled';
+  static const _kWeekAwards = 'week_awards_enabled';
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
@@ -26,6 +27,11 @@ class AppSettings {
   static const _kMatchPosterDesigns = 'match_poster_designs_enabled';
   static const _kMatchInsights = 'match_insights_enabled';
   static const _kRegulations = 'regulations_enabled';
+  static const _kLineupCutouts = 'lineup_cutouts_enabled';
+  static const _kLineupInRoster = 'lineup_in_roster_enabled';
+  static const _kPhotoStandard = 'photo_standard_enabled';
+  static const _kRosterIdScan = 'roster_id_scan_enabled';
+  static const _kGoalClipMp4 = 'goal_clip_mp4_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -80,6 +86,10 @@ class AppSettings {
   /// kapalıyken yalnız admin seçer. Veritabanı da aynı kuralı uygular.
   static final weeklyPicksEnabled = ValueNotifier<bool>(false);
 
+  /// Haftanın Enleri bülteni herkese açık mı; kapalıyken yalnız admin
+  /// hazırlar. Veritabanı da aynı kuralı uygular.
+  static final weekAwardsEnabled = ValueNotifier<bool>(false);
+
   /// Hakemler (hakem listesi, maça hakem atama, hakem girişi) herkese açık
   /// mı; kapalıyken yalnız admin. Veritabanı da aynı kuralı uygular.
   static final refereesEnabled = ValueNotifier<bool>(false);
@@ -101,6 +111,26 @@ class AppSettings {
 
   /// Turnuva talimatnamesi herkese açık mı (admin her zaman görür).
   static final regulationsEnabled = ValueNotifier<bool>(false);
+
+  /// Dizilişte (Profil görünümü) dekupe oyuncu fotoğrafı herkese açık mı
+  /// (admin her zaman görür).
+  static final lineupCutoutsEnabled = ValueNotifier<bool>(false);
+
+  /// Maç detayında diziliş Kadro sekmesinin üstünde (Diziliş sekmesi yok)
+  /// herkese açık mı (admin her zaman görür).
+  static final lineupInRosterEnabled = ValueNotifier<bool>(false);
+
+  /// Profil fotoğrafı standardı (kadraj kılavuzu + yüz kontrolü uyarısı)
+  /// herkese açık mı (admin her zaman görür).
+  static final photoStandardEnabled = ValueNotifier<bool>(false);
+
+  /// Takım kadrosunda onaysız oyuncunun satırından kimlik okutma ("Kimlik"
+  /// düğmesi, "Sırayla okut") yetkililere açık mı (admin her zaman görür).
+  static final rosterIdScanEnabled = ValueNotifier<bool>(false);
+
+  /// Gol kesitlerinin MP4 hâli (YouTube yerine dosya oynar) ve "Instagram
+  /// hikâyesinde paylaş" herkese açık mı (admin her zaman görür).
+  static final goalClipMp4Enabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -147,6 +177,8 @@ class AppSettings {
           manualPlayerCreateEnabled.value = r['value'] != false;
         } else if (r['key'] == _kWeeklyPicks) {
           weeklyPicksEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kWeekAwards) {
+          weekAwardsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kReferees) {
           refereesEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAdd) {
@@ -163,6 +195,16 @@ class AppSettings {
           matchInsightsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRegulations) {
           regulationsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kLineupCutouts) {
+          lineupCutoutsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kLineupInRoster) {
+          lineupInRosterEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPhotoStandard) {
+          photoStandardEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kRosterIdScan) {
+          rosterIdScanEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kGoalClipMp4) {
+          goalClipMp4Enabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

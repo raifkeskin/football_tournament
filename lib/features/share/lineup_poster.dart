@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -550,7 +552,78 @@ class LineupPitchPoster extends StatelessWidget {
     return '${parts.first.characters.first}. ${parts.skip(1).join(' ')}';
   }
 
-  Widget _token(PosterPlayer pl) {
+  /// Dekupe oyuncu en fazla bu boyda; hatlar sıkışınca (ör. 4-2-3-1)
+  /// alttaki oyuncunun başı üstteki ismin üstüne gelmesin diye küçülür.
+  static const _cutMaxH = 56.0;
+  static const _cutMinH = 34.0;
+
+  /// İsim bloğu (ad + soyad) yüksekliği: normal ve sıkışık (küçük yazı).
+  static const _nameH = 28.0;
+  static const _compactNameH = 23.0;
+
+  bool _hasCutout(PosterPlayer pl) =>
+      data.tokenStyle == PitchTokenStyle.photo &&
+      (pl.cutoutUrl ?? '').isNotEmpty;
+
+  /// Diziliş ekranındaki gibi: ayağının altında takım renginde zemin
+  /// halkası, kenarda ince beyaz kontur ve gölge.
+  Widget _cutout(String url, TeamPalette p, double cutH) {
+    Widget img({Color? tint}) => Image.network(
+      url,
+      width: 45 * cutH / _cutMaxH,
+      height: cutH,
+      fit: BoxFit.contain,
+      alignment: Alignment.bottomCenter,
+      color: tint,
+      colorBlendMode: tint == null ? null : BlendMode.srcIn,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    );
+    return SizedBox(
+      width: 48,
+      height: cutH + 4,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: 42,
+              height: 11,
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: const BorderRadius.all(
+                  Radius.elliptical(21, 5.5),
+                ),
+                border: Border.all(color: p.accent, width: 2),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 4,
+            child: Stack(
+              children: [
+                Transform.translate(
+                  offset: const Offset(0, 2),
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                    child: img(tint: Colors.black54),
+                  ),
+                ),
+                ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 0.9, sigmaY: 0.9),
+                  child: img(tint: Colors.white),
+                ),
+                img(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _token(PosterPlayer pl, {required double cutH, bool compact = false}) {
     final p = data.palette;
     final number = Text(
       (pl.number ?? '').isEmpty ? '–' : pl.number!,
@@ -562,7 +635,10 @@ class LineupPitchPoster extends StatelessWidget {
         fontWeight: FontWeight.w800,
       ),
     );
-    final mark = data.tokenStyle == PitchTokenStyle.shirt
+    final mark = _hasCutout(pl)
+        ? _cutout(pl.cutoutUrl!, p, cutH)
+        // Profilde fotoğrafı/dekupesi olmayan da forma ile.
+        : data.tokenStyle != PitchTokenStyle.circle
         ? JerseyShape(
             width: 36,
             color: p.primary,
@@ -604,9 +680,9 @@ class LineupPitchPoster extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white70,
-                fontSize: 9.5,
+                fontSize: compact ? 8 : 9.5,
                 height: 1.15,
                 fontWeight: FontWeight.w600,
               ),
@@ -618,7 +694,7 @@ class LineupPitchPoster extends StatelessWidget {
             textAlign: TextAlign.center,
             style: _cond(
               color: Colors.white,
-              fontSize: 12.5,
+              fontSize: compact ? 10.5 : 12.5,
               height: 1.1,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.3,
@@ -663,6 +739,40 @@ class LineupPitchPoster extends StatelessWidget {
                     builder: (context, c) {
                       const tokenW = 78.0;
                       final outfield = data.lines.length - 1;
+                      // Dekupe + isim, aynı dikeyde (yatayda iç içe) duran en
+                      // yakın iki saha oyuncusu arasındaki boşluğa sığmalı.
+                      // Kaleci ortada, stoperlerin arasında kalır.
+                      final slots = [
+                        for (var li = 1; li < data.lines.length; li++)
+                          for (var i = 0; i < data.lines[li].length; i++)
+                            pitchSlot(
+                              li: li,
+                              i: i,
+                              n: data.lines[li].length,
+                              outfieldLines: outfield,
+                            ),
+                      ];
+                      var gap = 0.54 * c.maxHeight;
+                      for (final a in slots) {
+                        for (final b in slots) {
+                          final dy = (b.dy - a.dy) * c.maxHeight;
+                          if (dy > 4 &&
+                              ((b.dx - a.dx) * c.maxWidth).abs() < 56 &&
+                              dy < gap) {
+                            gap = dy;
+                          }
+                        }
+                      }
+                      // Ad soyad hep yazılır; dekupeli afişte yer darsa
+                      // yazı küçülür.
+                      final compact =
+                          data.starters.any(_hasCutout) &&
+                          gap - _nameH - 4 < 48;
+                      final cutH =
+                          (gap - (compact ? _compactNameH : _nameH) - 4).clamp(
+                            _cutMinH,
+                            _cutMaxH,
+                          );
                       return Stack(
                         children: [
                           for (var li = 0; li < data.lines.length; li++)
@@ -674,15 +784,20 @@ class LineupPitchPoster extends StatelessWidget {
                                   n: data.lines[li].length,
                                   outfieldLines: outfield,
                                 );
+                                final pl = data.lines[li][i];
+                                // Dekupe uzun: ayak hizası daireyle aynı.
+                                final extra = _hasCutout(pl) ? cutH - 30 : 0.0;
                                 return Positioned(
                                   left: (pos.dx * c.maxWidth - tokenW / 2)
                                       .clamp(0.0, c.maxWidth - tokenW),
-                                  top: (pos.dy * c.maxHeight - 26).clamp(
-                                    0.0,
-                                    c.maxHeight - 60,
-                                  ),
+                                  top: (pos.dy * c.maxHeight - 26 - extra)
+                                      .clamp(0.0, c.maxHeight - 60 - extra),
                                   width: tokenW,
-                                  child: _token(data.lines[li][i]),
+                                  child: _token(
+                                    pl,
+                                    cutH: cutH,
+                                    compact: compact,
+                                  ),
                                 );
                               }(),
                         ],
@@ -697,37 +812,55 @@ class LineupPitchPoster extends StatelessWidget {
             const SizedBox(height: 8),
             _sectionTitle(p, 'YEDEKLER'),
             const SizedBox(height: 5),
+            // Sahadaki gibi alt alta: ad üstte ince, soyad altta kalın;
+            // numara solda.
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 9,
-              runSpacing: 4,
+              spacing: 12,
+              runSpacing: 6,
               children: [
                 for (final pl in data.subs)
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text:
-                              '${(pl.number ?? '').isEmpty ? '–' : pl.number} ',
-                          style: TextStyle(
-                            color: p.accent,
-                            fontWeight: FontWeight.w800,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        (pl.number ?? '').isEmpty ? '–' : pl.number!,
+                        style: TextStyle(
+                          color: p.accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (pl.lastName.isNotEmpty)
+                            Text(
+                              _shortFirst(pl.firstName),
+                              style: const TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 8.5,
+                                height: 1.1,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          Text(
+                            (pl.lastName.isNotEmpty
+                                    ? pl.lastName
+                                    : pl.firstName)
+                                .trUpper,
+                            style: const TextStyle(
+                              color: Color(0xFFE2E8F0),
+                              fontSize: 10.5,
+                              height: 1.1,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        TextSpan(
-                          text:
-                              (pl.lastName.isNotEmpty
-                                      ? pl.lastName
-                                      : pl.firstName)
-                                  .trUpper,
-                        ),
-                      ],
-                    ),
-                    style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
               ],
             ),

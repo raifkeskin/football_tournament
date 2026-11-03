@@ -169,57 +169,59 @@ class QuickEventBar extends StatelessWidget {
       ),
     );
     if (saved == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          // Düğmeli SnackBar varsayılan olarak kalıcı; kendiliğinden kapansın.
-          persist: false,
-          duration: const Duration(seconds: 3),
-          content: Text('Kaydedildi: ${_describe(saved)}'),
-          action: SnackBarAction(
-            label: 'GERİ AL',
-            onPressed: () => _undo(messenger, saved),
-          ),
+    _showSaved(messenger, saved);
+  }
+}
+
+/// "Kaydedildi" bildirimi; GERİ AL ile olay silinir.
+void _showSaved(ScaffoldMessengerState messenger, MatchEvent saved) {
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        // Düğmeli SnackBar varsayılan olarak kalıcı; kendiliğinden kapansın.
+        persist: false,
+        duration: const Duration(seconds: 3),
+        content: Text('Kaydedildi: ${_describe(saved)}'),
+        action: SnackBarAction(
+          label: 'GERİ AL',
+          onPressed: () => _undo(messenger, saved),
         ),
-      );
-  }
+      ),
+    );
+}
 
-  Future<void> _undo(ScaffoldMessengerState messenger, MatchEvent e) async {
-    try {
-      // Az önce eklenen olay: aynı maç, oyuncu ve türdeki en yeni kayıt.
-      var q = Supabase.instance.client
-          .from('match_events')
-          .select('id')
-          .eq('match_id', e.matchId)
-          .eq('event_type', e.eventType);
-      if (e.playerId != null) q = q.eq('player_id', e.playerId!);
-      final rows = await q.order('created_at', ascending: false).limit(1);
-      if (rows.isEmpty) return;
-      await ServiceLocator.matchService.deleteMatchEvent(
-        rows.first['id'].toString(),
-      );
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Olay geri alındı.')),
-      );
-    } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('Geri alınamadı: $err')));
-    }
+Future<void> _undo(ScaffoldMessengerState messenger, MatchEvent e) async {
+  try {
+    // Az önce eklenen olay: aynı maç, oyuncu ve türdeki en yeni kayıt.
+    var q = Supabase.instance.client
+        .from('match_events')
+        .select('id')
+        .eq('match_id', e.matchId)
+        .eq('event_type', e.eventType);
+    if (e.playerId != null) q = q.eq('player_id', e.playerId!);
+    final rows = await q.order('created_at', ascending: false).limit(1);
+    if (rows.isEmpty) return;
+    await ServiceLocator.matchService.deleteMatchEvent(
+      rows.first['id'].toString(),
+    );
+    messenger.showSnackBar(const SnackBar(content: Text('Olay geri alındı.')));
+  } catch (err) {
+    messenger.showSnackBar(SnackBar(content: Text('Geri alınamadı: $err')));
   }
+}
 
-  static String _describe(MatchEvent e) {
-    final min = e.minute == null
-        ? ''
-        : '${minuteLabel(e.minute, e.addedMinute)} ';
-    return switch (e.eventType) {
-      'goal' =>
-        '$min${e.isOwnGoal ? 'Kendi kalesine' : 'Gol'} · ${e.eventName}',
-      'yellow_card' => '${min}Sarı kart · ${e.eventName}',
-      'red_card' => '${min}Kırmızı kart · ${e.eventName}',
-      'substitution' => '${min}Değişiklik · ${e.eventName} çıktı',
-      _ => '$min${e.eventName}',
-    };
-  }
+String _describe(MatchEvent e) {
+  final min = e.minute == null
+      ? ''
+      : '${minuteLabel(e.minute, e.addedMinute)} ';
+  return switch (e.eventType) {
+    'goal' => '$min${e.isOwnGoal ? 'Kendi kalesine' : 'Gol'} · ${e.eventName}',
+    'yellow_card' => '${min}Sarı kart · ${e.eventName}',
+    'red_card' => '${min}Kırmızı kart · ${e.eventName}',
+    'substitution' => '${min}Değişiklik · ${e.eventName} çıktı',
+    _ => '$min${e.eventName}',
+  };
 }
 
 enum _Kind { goal, card, sub }
@@ -246,6 +248,7 @@ class _QuickEventSheet extends StatefulWidget {
     required this.teamName,
     required this.rivalName,
     required this.kind,
+    this.preset,
   });
 
   final MatchModel match;
@@ -253,6 +256,10 @@ class _QuickEventSheet extends StatefulWidget {
   final String teamName;
   final String rivalName;
   final _Kind kind;
+
+  /// Dizilişte dokunulan oyuncu: ilk soru atlanır (ör. çıkan belli,
+  /// yalnız giren sorulur).
+  final _Pick? preset;
 
   @override
   State<_QuickEventSheet> createState() => _QuickEventSheetState();
@@ -263,7 +270,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
 
   /// Kart rengi: 'yellow_card' / 'red_card'.
   String? _card;
-  _Pick? _player;
+  late _Pick? _player = widget.preset;
 
   /// Gol türü: normal, 'pen' (penaltı golü), 'miss' (penaltı kaçtı) ya da
   /// 'own' (rakip kendi kalesine; oyuncu rakip takımdan seçilir).
@@ -916,6 +923,205 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Canlı maçta dizilişteki oyuncuya dokununca: olay seçilir, gol ve kart
+/// hemen kaydedilir (oyuncu + olay = iki dokunuş). Değişiklikte yalnız
+/// giren oyuncu sorulur. Dakika maç saatinden alınır.
+Future<void> showPlayerQuickEvent(
+  BuildContext context, {
+  required MatchModel match,
+  required String teamId,
+  required String playerId,
+  required String playerName,
+  required String number,
+  required String homeName,
+  required String awayName,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final live = MatchClock.liveMinuteParts(match);
+  final minute =
+      live?.minute ??
+      (match.status == MatchStatus.halftime
+          ? MatchClock.periodOf(match.seasonId)
+          : 1);
+  final added = live?.added;
+  final tracks =
+      SeasonMatchSettings.cached(match.seasonId)?.tracksGoalMinutes ?? true;
+  final kind = await showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _PlayerEventChooser(
+      name: playerName,
+      number: number,
+      minute: tracks ? minuteLabel(minute, added) : null,
+    ),
+  );
+  if (kind == null || !context.mounted) return;
+  if (kind == 'substitution') {
+    final saved = await showModalBottomSheet<MatchEvent>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _QuickEventSheet(
+        match: match,
+        teamId: teamId,
+        teamName: teamId == match.homeTeamId ? homeName : awayName,
+        rivalName: teamId == match.homeTeamId ? awayName : homeName,
+        kind: _Kind.sub,
+        preset: _Pick(playerId, playerName, number),
+      ),
+    );
+    if (saved != null) _showSaved(messenger, saved);
+    return;
+  }
+  final event = MatchEvent(
+    id: '',
+    matchId: match.id,
+    leagueId: match.leagueId,
+    teamId: teamId,
+    eventType: kind,
+    minute: tracks ? minute : null,
+    addedMinute: tracks ? added : null,
+    eventName: playerName,
+    playerId: playerId,
+  );
+  try {
+    await ServiceLocator.matchService.addMatchEvent(event);
+    _showSaved(messenger, event);
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+  }
+}
+
+class _PlayerEventChooser extends StatelessWidget {
+  const _PlayerEventChooser({
+    required this.name,
+    required this.number,
+    this.minute,
+  });
+
+  final String name;
+  final String number;
+  final String? minute;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget choice(String label, String kind, Widget icon, Color color) =>
+        Expanded(
+          child: Material(
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: color.withValues(alpha: 0.5)),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => Navigator.pop(context, kind),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    icon,
+                    const SizedBox(height: 6),
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+    Widget card(Color c) => Container(
+      width: 16,
+      height: 22,
+      decoration: BoxDecoration(
+        color: c,
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF111A2E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                [if (number.isNotEmpty) number, name, ?minute].join(' · '),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Hangi olay?',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  choice(
+                    'GOL',
+                    'goal',
+                    const Icon(
+                      Icons.sports_soccer_rounded,
+                      color: kAdminAccent,
+                      size: 24,
+                    ),
+                    kAdminAccent,
+                  ),
+                  const SizedBox(width: 8),
+                  choice(
+                    'SARI KART',
+                    'yellow_card',
+                    card(const Color(0xFFFACC15)),
+                    const Color(0xFFFACC15),
+                  ),
+                  const SizedBox(width: 8),
+                  choice(
+                    'KIRMIZI KART',
+                    'red_card',
+                    card(const Color(0xFFEF4444)),
+                    const Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: 8),
+                  choice(
+                    'OYUNDAN ÇIKTI',
+                    'substitution',
+                    const Icon(
+                      Icons.swap_vert_rounded,
+                      color: Color(0xFF60A5FA),
+                      size: 24,
+                    ),
+                    const Color(0xFF60A5FA),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

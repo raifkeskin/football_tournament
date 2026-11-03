@@ -214,20 +214,13 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
-      // Yayın Rehberi: bantta sağda takvim (gün seçimi); Ana Sayfa:
-      // turnuva talimatnamesi (metin varsa).
+      // Yayın Rehberi: bantta sağda takvim (gün seçimi). Talimatname
+      // menüde (başlıktaki düğme satırı).
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
               icon: Icons.calendar_month_rounded,
               size: 36,
               onTap: BroadcastGuideScreen.pickDate,
-            )
-          : _aktifSekme == 0 && showRegulations && regulations!.hasText
-          ? BandIconButton(
-              icon: Icons.gavel_rounded,
-              size: 36,
-              tooltip: 'Talimatname',
-              onTap: () => regulations.open(context),
             )
           : null,
     );
@@ -772,15 +765,10 @@ class _MenuDrawer extends StatelessWidget {
           () => _open(t!.websiteUrl),
           'Web sitesi',
         ),
-      // Turnuva talimatnamesi (sosyal hesapların yanında).
-      if (t != null && onRegulations != null)
-        (
-          Icons.gavel_rounded,
-          const Color(0xFFD97706),
-          onRegulations!,
-          'Talimatname',
-        ),
     ];
+    // Turnuva talimatnamesi: sosyal hesapların yanında, üst banttaki
+    // talimatname düğmesiyle aynı görünüm.
+    final regulations = t != null ? onRegulations : null;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
@@ -842,32 +830,46 @@ class _MenuDrawer extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (links.isNotEmpty) ...[
+                if (links.isNotEmpty || regulations != null) ...[
                   const SizedBox(height: 8),
-                  Wrap(
-                    runSpacing: 6,
+                  // Bağlantılar solda, talimatname en sağda.
+                  Row(
                     children: [
-                      for (final (icon, color, onTap, label) in links)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Material(
-                            color: color,
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: onTap,
-                              child: SizedBox(
-                                width: 32,
-                                height: 32,
-                                child: Icon(
-                                  icon,
-                                  size: 18,
-                                  color: Colors.white,
-                                  semanticLabel: label,
+                      Expanded(
+                        child: Wrap(
+                          runSpacing: 6,
+                          children: [
+                            for (final (icon, color, onTap, label) in links)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Material(
+                                  color: color,
+                                  shape: const CircleBorder(),
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: onTap,
+                                    child: SizedBox(
+                                      width: 32,
+                                      height: 32,
+                                      child: Icon(
+                                        icon,
+                                        size: 18,
+                                        color: Colors.white,
+                                        semanticLabel: label,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
+                          ],
+                        ),
+                      ),
+                      if (regulations != null)
+                        BandIconButton(
+                          icon: Icons.gavel_rounded,
+                          size: 32,
+                          tooltip: 'Talimatname',
+                          onTap: regulations,
                         ),
                     ],
                   ),
