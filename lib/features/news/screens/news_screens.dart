@@ -134,6 +134,14 @@ class NewsVisual extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (item.imageUrls.isNotEmpty) {
+      // Enler / seçim kartları 4:5: geniş kapakta kırpılmasın, ortada tam
+      // görünsün.
+      if (!compact && (item.isWeekAwards || item.isWeeklyPick)) {
+        return ColoredBox(
+          color: const Color(0xFF0C1424),
+          child: WebSafeImage(url: item.imageUrls.first, fit: BoxFit.contain),
+        );
+      }
       return WebSafeImage(url: item.imageUrls.first, fit: BoxFit.cover);
     }
     final a = NewsArticle.of(item);
