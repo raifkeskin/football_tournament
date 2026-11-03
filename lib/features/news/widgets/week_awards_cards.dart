@@ -1349,7 +1349,10 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      final png = await captureCard(_keys[_page]!);
+      final card = await captureCard(_keys[_page]!);
+      // Gönderi 4:5 (1080×1350) olduğu gibi; hikâye 9:16 tuvale ortalanır,
+      // Instagram'da büyütüp küçültmeden tam oturur.
+      final png = story ? await storyCanvas(card) : card;
       final ok = await InstagramShare.share(png, story: story);
       if (!ok) {
         messenger.showSnackBar(
@@ -1479,17 +1482,21 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   ],
                 ),
               ),
+              // Uygulamada daha alçak: kart 4:5 kalır (paylaşım görseli), kare
+              // alanda ortalanır.
               AspectRatio(
-                aspectRatio: 4 / 5,
+                aspectRatio: 1.08,
                 child: PageView.builder(
                   controller: _pager,
                   itemCount: pages.length,
                   onPageChanged: (i) => setState(() => _page = i),
-                  itemBuilder: (context, i) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: RepaintBoundary(
-                      key: _keys.putIfAbsent(i, GlobalKey.new),
-                      child: pages[i],
+                  itemBuilder: (context, i) => Center(
+                    child: AspectRatio(
+                      aspectRatio: 4 / 5,
+                      child: RepaintBoundary(
+                        key: _keys.putIfAbsent(i, GlobalKey.new),
+                        child: pages[i],
+                      ),
                     ),
                   ),
                 ),
@@ -1562,6 +1569,50 @@ Future<Uint8List> captureCard(GlobalKey key) async {
       key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
   final image = await boundary.toImage(pixelRatio: 1080 / boundary.size.width);
   final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  if (data == null) throw Exception('Görsel oluşturulamadı.');
+  return data.buffer.asUint8List();
+}
+
+/// Kartı 1080×1920 hikâye tuvaline ortalar: koyu zemin, kart yuvarlak
+/// köşeli ve gölgeli.
+Future<Uint8List> storyCanvas(Uint8List cardPng) async {
+  const w = 1080.0, h = 1920.0;
+  final codec = await ui.instantiateImageCodec(cardPng);
+  final card = (await codec.getNextFrame()).image;
+  codec.dispose();
+  final rec = ui.PictureRecorder();
+  final c = Canvas(rec, const Rect.fromLTWH(0, 0, w, h));
+  c.drawRect(
+    const Rect.fromLTWH(0, 0, w, h),
+    Paint()
+      ..shader = ui.Gradient.radial(
+        const Offset(w / 2, h * 0.3),
+        h * 0.8,
+        const [Color(0xFF17324A), _night, Color(0xFF060A12)],
+        const [0, 0.55, 1],
+      ),
+  );
+  const cw = 960.0;
+  final ch = cw * card.height / card.width;
+  final dst = Rect.fromLTWH((w - cw) / 2, (h - ch) / 2, cw, ch);
+  final r = RRect.fromRectAndRadius(dst, const Radius.circular(28));
+  c.drawRRect(
+    r.shift(const Offset(0, 16)),
+    Paint()
+      ..color = Colors.black54
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
+  );
+  c.save();
+  c.clipRRect(r);
+  c.drawImageRect(
+    card,
+    Rect.fromLTWH(0, 0, card.width.toDouble(), card.height.toDouble()),
+    dst,
+    Paint()..filterQuality = FilterQuality.high,
+  );
+  c.restore();
+  final img = await rec.endRecording().toImage(w.toInt(), h.toInt());
+  final data = await img.toByteData(format: ui.ImageByteFormat.png);
   if (data == null) throw Exception('Görsel oluşturulamadı.');
   return data.buffer.asUint8List();
 }
