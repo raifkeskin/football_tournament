@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
-import '../../../core/services/instagram_share.dart';
-import '../../../core/services/whatsapp_share.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart';
 
 /// Ana sayfada "Bu hafta sen": giriş yapan futbolcunun son maçında (son 7
-/// gün, bu turnuvada) golü ya da asisti varsa skor, gol videoları ve
-/// Instagram / WhatsApp paylaşımı. Gol ve asist yoksa hiç görünmez.
+/// gün, bu turnuvada) golü ya da asisti varsa skor ve gol videoları
+/// (paylaşım video sayfasında). Gol ve asist yoksa hiç görünmez.
 /// Yeni özellik: admin her zaman, diğerleri my_week_enabled açıksa.
 class MyWeekCard extends StatefulWidget {
   const MyWeekCard({super.key, required this.leagueId});
@@ -76,7 +73,7 @@ class _Week {
   int get assists => events.where((e) => e.assist).length;
   List<_Goal> get clips => [
     for (final e in events)
-      if (!e.assist && (e.videoId ?? '').isNotEmpty) e,
+      if ((e.videoId ?? '').isNotEmpty) e,
   ];
 }
 
@@ -85,11 +82,8 @@ class _MyWeekCardState extends State<MyWeekCard> {
   static final Map<String, _Week?> _cache = {};
 
   final _sb = Supabase.instance.client;
-  late final Future<bool> _ig = InstagramShare.isAvailable();
   String? _pid;
   _Week? _data;
-  String? _selected;
-  String? _sharing;
 
   @override
   void didChangeDependencies() {
@@ -168,7 +162,7 @@ class _MyWeekCardState extends State<MyWeekCard> {
 
           _Goal goal(Map e) {
             final own = e['player_id'] == pid;
-            final c = own ? clipOf[e['id']] : null;
+            final c = clipOf[e['id']];
             return _Goal(
               id: e['id'].toString(),
               label: label(e),
@@ -201,13 +195,7 @@ class _MyWeekCardState extends State<MyWeekCard> {
       }
       _cache['${widget.leagueId}|$pid'] = week;
       if (!mounted || _pid != pid) return;
-      setState(() {
-        _data = week;
-        final clips = week?.clips ?? const [];
-        if (!clips.any((c) => c.id == _selected)) {
-          _selected = clips.isEmpty ? null : clips.first.id;
-        }
-      });
+      setState(() => _data = week);
     } catch (_) {
       // Kart isteğe bağlı: okunamazsa görünmez.
     }
@@ -216,15 +204,7 @@ class _MyWeekCardState extends State<MyWeekCard> {
   static int _minute(String label) =>
       int.tryParse(label.split(RegExp(r"[+']")).first) ?? 0;
 
-  _Goal? get _current =>
-      _data?.clips.where((c) => c.id == _selected).firstOrNull;
-
-  bool get _mp4Allowed =>
-      AppSettings.goalClipMp4Enabled.value ||
-      AppSession.of(context).value.isAdmin;
-
   void _play(_Goal g) {
-    setState(() => _selected = g.id);
     openYoutubeClip(
       context,
       videoId: g.videoId!,
@@ -232,34 +212,8 @@ class _MyWeekCardState extends State<MyWeekCard> {
       endSec: g.end,
       clipUrl: g.clipUrl,
       storyUrl: g.storyUrl,
-      title: 'Gol ${g.label}'.trim(),
+      title: '${g.assist ? 'Asist' : 'Gol'} ${g.label}'.trim(),
     );
-  }
-
-  Future<void> _share(String target) async {
-    final g = _current;
-    final url = (g?.storyUrl ?? '').trim();
-    if (g == null || url.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
-    final origin = WhatsAppShare.originOf(context);
-    setState(() => _sharing = target);
-    try {
-      final r = await http.get(Uri.parse(url));
-      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      if (target == 'wa') {
-        await WhatsAppShare.shareVideo(r.bodyBytes, origin: origin);
-      } else if (!await InstagramShare.shareVideo(r.bodyBytes, story: true)) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Instagram açılamadı.')),
-        );
-      }
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
-      );
-    } finally {
-      if (mounted) setState(() => _sharing = null);
-    }
   }
 
   @override
@@ -279,8 +233,6 @@ class _MyWeekCardState extends State<MyWeekCard> {
           : WebSafeImage(url: url, fit: BoxFit.contain),
     );
     final clips = d.clips;
-    final canShare =
-        _mp4Allowed && (_current?.storyUrl ?? '').trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
       child: Container(
@@ -372,21 +324,38 @@ class _MyWeekCardState extends State<MyWeekCard> {
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, i) {
                     final g = clips[i];
-                    final on = g.id == _selected && clips.length > 1;
                     return GestureDetector(
                       onTap: () => _play(g),
-                      child: Container(
+                      child: SizedBox(
                         width: 152,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: on ? gold : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
                         child: Stack(
                           children: [
-                            BroadcastThumb(videoId: g.videoId!, radius: 8),
+                            BroadcastThumb(videoId: g.videoId!, radius: 10),
+                            Positioned(
+                              right: 6,
+                              top: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: g.assist
+                                      ? const Color(0xFF34D399)
+                                      : gold,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  g.assist ? 'ASİST' : 'GOL',
+                                  style: const TextStyle(
+                                    color: Color(0xFF0A1020),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
                             if (g.label.isNotEmpty)
                               Positioned(
                                 left: 6,
@@ -416,6 +385,11 @@ class _MyWeekCardState extends State<MyWeekCard> {
                     );
                   },
                 ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Videoya dokun: izle, Instagram'da ya da WhatsApp'ta paylaş.",
+                style: TextStyle(color: Colors.white54, fontSize: 11.5),
               ),
             ] else ...[
               const SizedBox(height: 10),
@@ -454,63 +428,9 @@ class _MyWeekCardState extends State<MyWeekCard> {
                 ],
               ),
             ],
-            if (canShare) ...[
-              const SizedBox(height: 12),
-              FutureBuilder<bool>(
-                future: _ig,
-                builder: (context, snap) => Row(
-                  children: [
-                    if (snap.data == true) ...[
-                      Expanded(
-                        child: _button(
-                          'ig',
-                          'Instagram',
-                          Icons.camera_alt_outlined,
-                          const Color(0xFFD62976),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: _button(
-                        'wa',
-                        'WhatsApp',
-                        Icons.chat_rounded,
-                        const Color(0xFF1DA851),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
       ),
-    );
-  }
-
-  Widget _button(String target, String label, IconData icon, Color color) {
-    final busy = _sharing == target;
-    return FilledButton.icon(
-      onPressed: _sharing == null ? () => _share(target) : null,
-      style: FilledButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: color.withValues(alpha: 0.5),
-        minimumSize: const Size(0, 42),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      icon: busy
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Icon(icon, size: 20),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
     );
   }
 }
