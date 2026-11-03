@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
+import '../services/follows.dart';
 import 'app_logo.dart';
 import 'notification_bell.dart';
 import 'web_safe_image.dart';
@@ -736,6 +737,7 @@ Future<void> showLeagueSwitcher() async {
       : box.localToGlobal(Offset.zero) - overlayBox.localToGlobal(Offset.zero);
   final band = topLeft & box.size;
   _switcherOpen.value = true;
+  await Follows.load();
   final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
   _switcherOpen.value = false;
   if (picked == null || picked == ActiveTournament.currentLeagueId.value) {
@@ -767,7 +769,14 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    final leagues = ActiveTournament.myLeagues.value;
+    // Diğer turnuvalarda yıldızlananlar üstte (liste açılırken sıralanır).
+    final all = ActiveTournament.myLeagues.value;
+    final followed = Follows.leagues.value;
+    final leagues = [
+      ...all.where((l) => l.isOwn),
+      ...all.where((l) => !l.isOwn && followed.contains(l.id)),
+      ...all.where((l) => !l.isOwn && !followed.contains(l.id)),
+    ];
     final current = ActiveTournament.currentLeagueId.value;
     final accent =
         ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
@@ -920,6 +929,12 @@ class _LeagueRow extends StatelessWidget {
               ),
             ),
             if (selected) Icon(Icons.check_rounded, color: accent, size: 20),
+            FollowStar(
+              kind: FollowKind.league,
+              id: league.id,
+              dense: true,
+              idleColor: const Color(0xFF64748B),
+            ),
           ],
         ),
       ),

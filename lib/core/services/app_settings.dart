@@ -33,6 +33,7 @@ class AppSettings {
   static const _kPhotoStandard = 'photo_standard_enabled';
   static const _kRosterIdScan = 'roster_id_scan_enabled';
   static const _kGoalClipMp4 = 'goal_clip_mp4_enabled';
+  static const _kFollowList = 'follow_list_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -136,6 +137,10 @@ class AppSettings {
   /// Gol kesitlerinin MP4 hâli (YouTube yerine dosya oynar) ve "Instagram
   /// hikâyesinde paylaş" herkese açık mı (admin her zaman görür).
   static final goalClipMp4Enabled = ValueNotifier<bool>(false);
+
+  /// Takip Listem: turnuva / takım / futbolcu yıldızla takip herkese açık
+  /// mı (admin her zaman görür).
+  static final followListEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -212,6 +217,8 @@ class AppSettings {
           rosterIdScanEnabled.value = r['value'] == true;
         } else if (r['key'] == _kGoalClipMp4) {
           goalClipMp4Enabled.value = r['value'] == true;
+        } else if (r['key'] == _kFollowList) {
+          followListEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {
