@@ -1120,13 +1120,45 @@ class _ManagerHalf extends StatelessWidget {
   Widget build(BuildContext context) {
     final st = PosterOptions.of(context);
     final head = st.pick(52.0, 40.0);
-    final photo = SizedBox(
-      width: st.pick(168, 140),
-      child: Padding(
-        padding: EdgeInsets.only(top: top ? head : st.pick(14, 10)),
-        child: _photo(st.pick(118, 88)),
+    final hasPhoto = (manager?.photo ?? '').trim().isNotEmpty;
+    // Fotoğraf yazının altına doğru uzar ve kenarlarından zemine erir;
+    // vesikalık gibi keskin kutu görünmesin.
+    final photoW = hasPhoto ? st.pick(230.0, 190.0) : st.pick(168.0, 140.0);
+    final inner = top ? Alignment.centerRight : Alignment.centerLeft;
+    final outer = top ? Alignment.centerLeft : Alignment.centerRight;
+    Widget blend(Widget child) => ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) => LinearGradient(
+        begin: outer,
+        end: inner,
+        colors: const [Colors.white, Colors.white, Colors.transparent],
+        stops: const [0, 0.5, 0.98],
+      ).createShader(r),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.white],
+          stops: [0, 0.22],
+        ).createShader(r),
+        child: child,
       ),
     );
+    final photo = Positioned(
+      top: top ? head * 0.4 : 0,
+      bottom: 0,
+      left: top ? 0 : null,
+      right: top ? null : 0,
+      width: photoW,
+      child: hasPhoto
+          ? blend(_photo(st.pick(118, 88)))
+          : Padding(
+              padding: EdgeInsets.only(top: top ? head : st.pick(14, 10)),
+              child: _photo(st.pick(118, 88)),
+            ),
+    );
+    final gap = SizedBox(width: st.pick(168, 140));
     final text = Expanded(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -1160,7 +1192,7 @@ class _ManagerHalf extends StatelessWidget {
                 manager!.name.trim().trUpper,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: _cond(st.pick(13, 11.5)),
+                style: _cond(st.pick(13, 11.5), shadows: _shadow),
               ),
               const SizedBox(height: 2),
               Text(
@@ -1184,9 +1216,10 @@ class _ManagerHalf extends StatelessWidget {
             ),
           ),
         ),
+        photo,
         Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: top ? [photo, text] : [text, photo],
+          children: top ? [gap, text] : [text, gap],
         ),
         if (top)
           Positioned(
