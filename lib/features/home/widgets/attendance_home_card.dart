@@ -17,6 +17,13 @@ class AttendanceHomeCard extends StatefulWidget {
   /// Ana sayfa yenilenince artırılır.
   static final refresh = ValueNotifier<int>(0);
 
+  /// Bütün sorgular yanıtlandıysa kart kalkar; selamlamada yeşil tikli
+  /// katılım ikonu çıkar (ilk cevabın durumu: yes / no).
+  static final answered = ValueNotifier<String?>(null);
+
+  /// İkona dokununca kart yeniden açılır (yanıt değiştirmek için).
+  static final expanded = ValueNotifier<bool>(false);
+
   @override
   State<AttendanceHomeCard> createState() => _AttendanceHomeCardState();
 }
@@ -40,6 +47,19 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
     super.initState();
     _polls = _cache[widget.leagueId] ?? const [];
     AttendanceHomeCard.refresh.addListener(_load);
+    AttendanceHomeCard.expanded.addListener(_rebuild);
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  /// Selamlamadaki ikonun durumu (çizim sırasında değiştirilmez).
+  void _publish(String? v) {
+    if (AttendanceHomeCard.answered.value == v) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AttendanceHomeCard.answered.value = v;
+    });
   }
 
   @override
@@ -64,6 +84,7 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
   @override
   void dispose() {
     AttendanceHomeCard.refresh.removeListener(_load);
+    AttendanceHomeCard.expanded.removeListener(_rebuild);
     super.dispose();
   }
 
@@ -114,6 +135,10 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
       p['status'] = status;
       _openId = null;
       _editingId = null;
+      // Yanıt değiştirmek için açıldıysa: hepsi yanıtlıysa yeniden ikona döner.
+      if (_polls.every((x) => x['status'] != null)) {
+        AttendanceHomeCard.expanded.value = false;
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -137,7 +162,17 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (_uid == null || _polls.isEmpty) return const SizedBox.shrink();
+    if (_uid == null || _polls.isEmpty) {
+      _publish(null);
+      return const SizedBox.shrink();
+    }
+    // Hepsi yanıtlandıysa kart yer kaplamaz: selamlamada ikon olur.
+    if (_polls.every((p) => p['status'] != null)) {
+      _publish('${_polls.first['status']}');
+      if (!AttendanceHomeCard.expanded.value) return const SizedBox.shrink();
+    } else {
+      _publish(null);
+    }
     // Cevapsızlar üstte, sonra maç sırası (RPC tarih sırasıyla döner).
     final sorted = [
       ..._polls.where((p) => p['status'] == null),
