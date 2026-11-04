@@ -20,6 +20,7 @@ import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
 import '../widgets/news_talk_widgets.dart';
 import '../widgets/result_news_cards.dart';
+import '../week_awards.dart';
 import '../widgets/week_awards_cards.dart';
 import 'news_feed_screen.dart';
 
@@ -134,6 +135,10 @@ class NewsVisual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Enler bülteni: kazananların yuvarlak fotoğraflarıyla ortak kapak.
+    if (!compact && item.isWeekAwards) {
+      return WeekAwardsCover(data: WeekAwards.fromJson(item.autoData!));
+    }
     if (item.imageUrls.isNotEmpty) {
       // Enler / seçim kartları 4:5: geniş kapakta kırpılmasın, ortada tam
       // görünsün.
