@@ -42,6 +42,9 @@ class _AttendanceCardState extends State<AttendanceCard> {
   _Summary? _s;
   bool _busy = false;
 
+  /// Yanıt verdiyse kart küçük satıra iner; dokununca açılır.
+  bool _expanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -116,16 +119,91 @@ class _AttendanceCardState extends State<AttendanceCard> {
     ),
   );
 
-  Future<void> _set(String playerId, String? status) => _run(
-    () => _sb.rpc(
+  Widget _compact(_Summary s, bool yes) {
+    final c = yes ? kAdminAccent : kAdminDanger;
+    final going = s.players.where((p) => p.status == 'yes').length;
+    final not = s.players.where((p) => p.status == 'no').length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () => setState(() => _expanded = true),
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: c.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                  child: Icon(
+                    yes ? Icons.check_rounded : Icons.close_rounded,
+                    size: 16,
+                    color: const Color(0xFF04211A),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: yes ? 'Geliyorsun' : 'Gelemiyorsun',
+                          style: TextStyle(
+                            color: c,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        TextSpan(text: ' · ${widget.teamName}'),
+                      ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+                Text(
+                  '● $going  ',
+                  style: const TextStyle(color: kAdminAccent, fontSize: 12),
+                ),
+                Text(
+                  '● $not',
+                  style: const TextStyle(color: kAdminDanger, fontSize: 12),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.expand_more_rounded,
+                  color: kAdminMuted,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _set(String playerId, String? status) => _run(() async {
+    await _sb.rpc(
       'attendance_set',
       params: {
         'p_poll_id': _s!.pollId,
         'p_player_id': playerId,
         'p_status': status,
       },
-    ),
-  );
+    );
+    // Yanıt kaydedilince kart yeniden tek satıra iner.
+    _expanded = false;
+  });
 
   /// "Cumartesi 25 Ekim 20:00" (tarih yoksa boş).
   String _when() {
@@ -283,6 +361,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
         ? null
         : s.players.where((p) => p.id == s.me).firstOrNull;
     final canAnswer = me != null && !s.closed && s.matchOpen;
+    // Yanıtlayan oyuncu (sorumlu değilse): kart yer kaplamaz, tek satır.
+    if (canAnswer && me.status != null && !s.canManage && !_expanded) {
+      return _compact(s, me.status == 'yes');
+    }
     return _frame(
       children: [
         _title(closed: s.closed),

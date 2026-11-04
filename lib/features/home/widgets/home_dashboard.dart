@@ -37,6 +37,7 @@ import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
+import 'unscheduled_matches_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
@@ -422,6 +423,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   Future<void> _refresh() async {
     OverdueResultsBanner.refresh.value++;
     UnassignedRefereesBanner.refresh.value++;
+    UnscheduledMatchesBanner.refresh.value++;
     RefereeHomeCard.refresh.value++;
     AttendanceHomeCard.refresh.value++;
     final session = AppSession.of(context).value;
@@ -973,6 +975,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 _greeting(session, data),
                 OverdueResultsBanner(leagueId: widget.league.id),
                 UnassignedRefereesBanner(leagueId: widget.league.id),
+                UnscheduledMatchesBanner(leagueId: widget.league.id),
                 const RefereeHomeCard(),
                 AttendanceHomeCard(leagueId: widget.league.id),
                 if (session.playerId != null && MyWeekCard.enabledFor(session))
@@ -2550,6 +2553,7 @@ class _HomePollButtonState extends State<_HomePollButton> {
       if (!mounted) return;
       setState(() => _active = true);
       AttendanceHomeCard.refresh.value++;
+      UnscheduledMatchesBanner.refresh.value++;
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Anket başlatıldı; kadrona bildirim gitti.'),

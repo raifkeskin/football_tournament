@@ -120,7 +120,7 @@ class _MyWeekCardState extends State<MyWeekCard> {
       final (rosters, evs) = await (
         _sb
             .from('match_rosters')
-            .select('match_id')
+            .select('match_id, team_id')
             .eq('player_id', pid)
             .order('created_at', ascending: false)
             .limit(30),
@@ -185,7 +185,7 @@ class _MyWeekCardState extends State<MyWeekCard> {
                       ]),
             _sb
                 .from('match_media')
-                .select('url, media_type')
+                .select('id, url, media_type, team_id')
                 .eq('match_id', m['id'])
                 .inFilter('media_type', ['Önemli An', 'Takım Fotosu'])
                 .order('created_at')
@@ -247,6 +247,24 @@ class _MyWeekCardState extends State<MyWeekCard> {
             }
           }
 
+          // Fotoğraf sırası: önce kendi takımının takım fotoğrafı, sonra
+          // futbolcunun yıldızladıkları, sonra diğerleri.
+          String? myTeam;
+          for (final r in rosters) {
+            if (r['match_id'] == m['id']) myTeam = r['team_id']?.toString();
+          }
+          var starred = <String>{};
+          if (media.isNotEmpty) {
+            try {
+              final st = await _sb
+                  .from('player_photo_stars')
+                  .select('media_id')
+                  .eq('player_id', pid)
+                  .inFilter('media_id', [for (final r in media) r['id']]);
+              starred = {for (final r in st) r['media_id'].toString()};
+            } catch (_) {}
+          }
+
           final events = [for (final e in here) goal(e)]
             ..sort((a, b) => _minute(a.label).compareTo(_minute(b.label)));
           week = _Week(
@@ -263,11 +281,7 @@ class _MyWeekCardState extends State<MyWeekCard> {
             as: (m['away_score'] as num?)?.toInt() ?? 0,
             events: events,
             awards: awards,
-            photos: [
-              for (final r in media)
-                if ((r['url'] ?? '').toString().trim().isNotEmpty)
-                  r['url'].toString().trim(),
-            ],
+            photos: _orderPhotos(media, myTeam: myTeam, starred: starred),
           );
         }
       }
@@ -277,6 +291,34 @@ class _MyWeekCardState extends State<MyWeekCard> {
     } catch (_) {
       // Kart isteğe bağlı: okunamazsa görünmez.
     }
+  }
+
+  static List<String> _orderPhotos(
+    List<Map<String, dynamic>> media, {
+    required String? myTeam,
+    required Set<String> starred,
+  }) {
+    int rank(Map r) {
+      if (r['media_type'] == 'Takım Fotosu' &&
+          myTeam != null &&
+          r['team_id']?.toString() == myTeam) {
+        return 0;
+      }
+      if (starred.contains(r['id'].toString())) return 1;
+      return 2;
+    }
+
+    final list = [
+      for (final r in media)
+        if ((r['url'] ?? '').toString().trim().isNotEmpty) r,
+    ];
+    // Sıralama kararlı: aynı gruptakiler eklenme sırasını korur.
+    final sorted = [
+      for (var g = 0; g < 3; g++)
+        for (final r in list)
+          if (rank(r) == g) r['url'].toString().trim(),
+    ];
+    return sorted;
   }
 
   static int _minute(String label) =>
