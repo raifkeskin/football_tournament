@@ -1079,12 +1079,78 @@ class _HomeDashboardState extends State<HomeDashboard> {
             const SizedBox(width: 10),
             VerifyPromptChip(session: session),
           ],
+          // Katılım sorguları yanıtlandıysa kart yerine küçük ikon.
+          if (loggedIn)
+            ValueListenableBuilder<String?>(
+              valueListenable: AttendanceHomeCard.answered,
+              builder: (_, status, _) => status == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: _attendanceIcon(status),
+                    ),
+            ),
           // Profile kısayol: sağda profil fotoğrafı (yoksa baş harfler).
           if (loggedIn && MyWeekCard.enabledFor(session)) ...[
             const SizedBox(width: 10),
             _profileShortcut(session, fullName),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Yanıtlanmış katılım sorgusu: yeşil (geliyor) ya da kırmızı (gelemiyor)
+  /// tikli ikon; dokununca katılım kartı açılır/kapanır.
+  Widget _attendanceIcon(String status) {
+    final yes = status == 'yes';
+    final c = yes ? const Color(0xFF10B981) : const Color(0xFFF87171);
+    return Semantics(
+      button: true,
+      label: yes ? 'Katılım: geliyorsun' : 'Katılım: gelemiyorsun',
+      child: GestureDetector(
+        onTap: () => AttendanceHomeCard.expanded.value =
+            !AttendanceHomeCard.expanded.value,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: AttendanceHomeCard.expanded,
+          builder: (_, open, _) => SizedBox(
+            width: 44,
+            height: 40,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c.withValues(alpha: open ? 0.3 : 0.15),
+                    border: Border.all(color: c.withValues(alpha: 0.7)),
+                  ),
+                  child: Icon(Icons.how_to_reg_rounded, color: c, size: 21),
+                ),
+                Positioned(
+                  right: 0,
+                  top: -2,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: DashColors.ground, width: 1.5),
+                    ),
+                    child: Icon(
+                      yes ? Icons.check_rounded : Icons.close_rounded,
+                      size: 11,
+                      color: const Color(0xFF04211A),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
