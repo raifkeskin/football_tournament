@@ -20,6 +20,7 @@ class AppSettings {
   static const _kSuspendedTab = 'suspended_tab_enabled';
   static const _kWeeklyPicks = 'weekly_picks_enabled';
   static const _kWeekAwards = 'week_awards_enabled';
+  static const _kPlayerPoster = 'player_poster_enabled';
   static const _kMyWeek = 'my_week_enabled';
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
@@ -92,6 +93,10 @@ class AppSettings {
   /// Haftanın Enleri bülteni herkese açık mı; kapalıyken yalnız admin
   /// hazırlar. Veritabanı da aynı kuralı uygular.
   static final weekAwardsEnabled = ValueNotifier<bool>(false);
+
+  /// Bireysel sezon afişi ve maç fotoğrafında "Bu benim" yıldızı herkese
+  /// açık mı; kapalıyken yalnız admin görür.
+  static final playerPosterEnabled = ValueNotifier<bool>(false);
 
   /// Ana sayfada "Bu hafta sen" kartı ve selamlamadaki profil kısayolu
   /// herkese açık mı; kapalıyken yalnız admin görür.
@@ -194,6 +199,8 @@ class AppSettings {
           weeklyPicksEnabled.value = r['value'] == true;
         } else if (r['key'] == _kWeekAwards) {
           weekAwardsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPlayerPoster) {
+          playerPosterEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMyWeek) {
           myWeekEnabled.value = r['value'] == true;
         } else if (r['key'] == _kReferees) {

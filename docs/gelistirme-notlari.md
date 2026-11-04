@@ -308,3 +308,14 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
 - **Prompt (sağa bakan; sola bakan için LEFT↔RIGHT ve facing right↔left değişir):** Photo 1 = kişi, photo 2 = POSE REFERENCE. Yalnız kişi, referanstaki LEFT man'in yerinde ve pozunda: strict side profile facing right, leaning forward, chin down, intense stare. Kafa boyu referansla birebir: saçın üstü ~%20, çene ~%50 yükseklikte. Diğer yarı boş; plain dark charcoal top; flat dark grey background; neutral white rim light; no text.
 - **Dostluk (el sıkışma) afişi:** Saklanan görsellerle olmaz, eller birleşemiyor. Maç başına üretim gerekir, ~0,04 $. Sonraya kaldı; slogan "İYİ OLAN KAZANSIN".
 - **Kurallar:** Uygulama metninde "yapay zekâ" geçmez. Fotoğraf izni gizlemesi olan sorumlu için çalışmaz. Sorumludan rıza alınması gerekir (KVKK).
+
+## 29. Maç fotoğraflarında kendini otomatik bulma (yüz eşleştirme) — FİKİR, SONRA (2026-11-04)
+- **İstek:** Futbolcunun profil fotoğrafına bakılarak maç albümlerinde kendisinin olduğu fotoğraflar otomatik bulunsun ("Bunlar sen olabilirsin").
+- **Şu an yapılan:** Futbolcu fotoğrafı elle yıldızlıyor ("Bu benim", `player_photo_stars`). Sezon afişinde bu fotoğraflar arasından seçim yapılıyor.
+- **Seçilen yol (yapılırsa):** Yalnız telefonda karşılaştırma. Yüz bilgisi sunucuya gitmez ve saklanmaz. Sunucu yolu (Amazon Rekognition, maç başı ~0,10–0,20 $) yurt dışı aktarım yüzünden tercih edilmedi.
+- **Kullanıcının notu:**
+  - Profil fotoğrafı zaten kişinin görünme onayından sonra görünüyor (`player_photo_hold`).
+  - Albümler telefona otomatik ve sessizce inmemeli. Tarama yalnız futbolcu "Fotoğraflarımı bul" deyince başlar ve önce kaç MB ineceği söylenir (maç başı ~10 MB).
+  - Bulunanlar yalnız öneridir: futbolcu onaylamadan hiçbir fotoğraf ona bağlanmaz.
+- **Hukuk:** Yüz tanıma KVKK'da biyometrik, yani özel nitelikli kişisel veridir. Ayrı açık rıza ekranı, aydınlatma metni, gizlilik sayfası ve mağaza beyanlarının güncellenmesi gerekir. Market sürümünden önce KVKK danışmanına sorulmalı.
+- **Doğruluk:** Orta. Uzak, yandan, bulanık kareler kaçar; benzer kişiler önerilebilir.
