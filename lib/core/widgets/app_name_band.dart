@@ -545,9 +545,13 @@ class BandBackPage extends StatefulWidget {
     required this.child,
     this.subtitle,
     this.theme,
+    this.trailing,
   });
 
   final Widget child;
+
+  /// Bantta sağda (ör. arama ekranında kapat).
+  final Widget? trailing;
 
   /// Verilirse bantta bu turnuvanın logosu ve adı (yoksa uygulama bandı).
   final TournamentTheme? theme;
@@ -573,6 +577,7 @@ class _BandBackPageState extends State<BandBackPage> {
       PageBand(
         theme: widget.theme,
         subtitle: widget.subtitle,
+        trailing: widget.trailing,
         onBack: () => Navigator.of(context).maybePop(),
       ),
     );
