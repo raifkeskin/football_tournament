@@ -319,3 +319,13 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Bulunanlar yalnız öneridir: futbolcu onaylamadan hiçbir fotoğraf ona bağlanmaz.
 - **Hukuk:** Yüz tanıma KVKK'da biyometrik, yani özel nitelikli kişisel veridir. Ayrı açık rıza ekranı, aydınlatma metni, gizlilik sayfası ve mağaza beyanlarının güncellenmesi gerekir. Market sürümünden önce KVKK danışmanına sorulmalı.
 - **Doğruluk:** Orta. Uzak, yandan, bulanık kareler kaçar; benzer kişiler önerilebilir.
+
+## 30. Bireysel sezon afişi beğenilmedi — HATIRLATMA, YENİDEN ELE ALINACAK (2026-11-04)
+- **Durum:** Afiş uygulamada (APK 173) yalnız admine açık kalacak. Kullanıcı mevcut hâlini beğenmedi; önizlemedeki A tasarımı (https://claude.ai/artifact/APYNZqsMquAfNRMrQAH1aM, "Bireysel sezon afişi") hedef.
+- **Önizlemeyle farklar:**
+  - Fotoğraf dekupe değil. Dikdörtgen fotoğraf zemine eriyor, oyuncu boydan ve arka planı silinmiş görünmüyor. Telefonda dekupe (Kapışma ile aynı iş) gelince düzelir.
+  - Ödülü olmayan oyuncuda orta-alt kısım boş kalıyor. Boşluğu dolduracak düzen lazım: sayılar büyüsün ya da ödül yoksa sayılar alta insin.
+  - Sayılar ve ad, önizlemeye göre küçük kalıyor.
+  - Forma numarası filigranı yalnız numara biliniyorsa çıkıyor.
+  - Zemin, takım rengi koyuysa (yeşil/lacivert) donuk görünüyor.
+- **Ne zaman:** Kapışma afişiyle birlikte, telefonda dekupe hazır olunca.
