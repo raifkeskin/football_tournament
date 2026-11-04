@@ -1047,7 +1047,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     setState(() => _saving = true);
     try {
       final b = _bulletin();
-      // Eski sürümler haberi düz gösterir: kapak olarak ilk kartın görseli.
+      // Eski sürümler haberi düz gösterir: kapak olarak ortak kapak görseli.
       String? image;
       try {
         // Önizleme henüz çizilmediyse sayfanın sonuna inip çizilmesini bekle.
@@ -1483,7 +1483,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     ),
   );
 
-  /// Kartların yayınlanacak hâli; ilki eski sürümler için kapak olur.
+  /// Kapak ve kartların yayınlanacak hâli; kapak eski sürümlerin görseli.
   Widget _preview() {
     final b = _bulletin();
     final ratings = weekAwardsShowRatings();
@@ -1507,18 +1507,26 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
         ),
     ];
     if (cards.isEmpty) return const _Empty('Bültende henüz kart yok.');
+    // Önde haberin ortak kapağı; eski sürümler bunu görsel olarak görür.
+    final cover = RepaintBoundary(
+      key: _shotKey,
+      child: AspectRatio(
+        aspectRatio: 5 / 4,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: WeekAwardsCover(data: b),
+        ),
+      ),
+    );
     return SizedBox(
       height: 300,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: cards.length,
+        itemCount: cards.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => SizedBox(
-          width: 240,
-          child: i == 0
-              ? RepaintBoundary(key: _shotKey, child: cards[i])
-              : cards[i],
-        ),
+        itemBuilder: (context, i) => i == 0
+            ? Center(child: SizedBox(width: 340, child: cover))
+            : SizedBox(width: 240, child: cards[i - 1]),
       ),
     );
   }

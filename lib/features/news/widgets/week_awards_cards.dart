@@ -2026,3 +2026,180 @@ Future<bool?> askInstagramTarget(
     ),
   ),
 );
+
+/// Haftanın Enleri haberinin ortak kapağı: başlık ve kazananların yuvarlak
+/// fotoğrafları; altta "kaydır" ibaresi. Alt kısım haber başlığına boş
+/// kalır. 6 ödüle kadar tek satırda küçülerek sığar.
+class WeekAwardsCover extends StatelessWidget {
+  const WeekAwardsCover({super.key, required this.data});
+
+  final WeekAwards data;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = data;
+    final items = <(String, String, String, String)>[
+      // (etiket, fotoğraf, yedek arma, ad)
+      if (w.hasEleven) ("11'İ", '', '', ''),
+      for (final a in w.awards)
+        (
+          a.kind.title.trUpper,
+          a.photo.isNotEmpty ? a.photo : (a.person?.photo ?? ''),
+          a.team.logo,
+          a.person?.name ?? a.team.short,
+        ),
+    ];
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Alt %40 haber başlığına kalır; dar/alçak kutuda küçülür.
+        final u = math.min(c.maxWidth / 100, c.maxHeight / 92);
+        final n = math.max(items.length, 1);
+        final size = math.min(17 * u, (c.maxWidth - 8 * u) / n - 3 * u);
+        Widget circle((String, String, String, String) it) {
+          final fallback = it.$1 == "11'İ"
+              ? Center(
+                  child: Text('11', style: _cond(size * 0.42, color: _gold)),
+                )
+              : Padding(
+                  padding: EdgeInsets.all(size * 0.16),
+                  child: _crest(it.$3, it.$4, size * 0.68),
+                );
+          return SizedBox(
+            width: size + 3 * u,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: size,
+                  height: size,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _card,
+                    border: Border.all(color: _gold, width: 0.6 * u),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _gold.withValues(alpha: 0.35),
+                        blurRadius: 4 * u,
+                      ),
+                    ],
+                  ),
+                  child: it.$2.isEmpty
+                      ? fallback
+                      : _net(
+                          it.$2,
+                          size: size,
+                          alignment: const Alignment(0, -0.6),
+                          fallback: fallback,
+                        ),
+                ),
+                SizedBox(height: 1.2 * u),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    it.$1,
+                    maxLines: 1,
+                    style: _cond(
+                      math.min(3.2 * u, size * 0.17),
+                    ).copyWith(letterSpacing: 0.3 * u),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF13233D), Color(0xFF060B14)],
+            ),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                left: -3 * u,
+                top: 0,
+                child: Text(
+                  'ENLER',
+                  style: _cond(
+                    26 * u,
+                    italic: true,
+                    color: Colors.white.withValues(alpha: 0.04),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 4 * u,
+                right: 4 * u,
+                top: 4 * u,
+                child: Column(
+                  children: [
+                    Text(
+                      [
+                        if (w.leagueName.isNotEmpty) w.leagueName.trUpper,
+                        if (w.week > 0) '${w.week}. HAFTA',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _cond(
+                        2.8 * u,
+                        color: _gold,
+                      ).copyWith(letterSpacing: 0.8 * u),
+                    ),
+                    Text(
+                      'HAFTANIN ENLERİ',
+                      style: _cond(8.4 * u, italic: true),
+                    ),
+                    SizedBox(height: 2 * u),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [for (final it in items) circle(it)],
+                    ),
+                    SizedBox(height: 2 * u),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 2.8 * u,
+                        vertical: 1.2 * u,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xBF060B14),
+                        borderRadius: BorderRadius.circular(4 * u),
+                        border: Border.all(
+                          color: _gold.withValues(alpha: 0.6),
+                          width: 0.3 * u,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${items.length} ÖDÜL · KAYDIR',
+                            style: _cond(
+                              3 * u,
+                              color: _gold,
+                            ).copyWith(letterSpacing: 0.3 * u),
+                          ),
+                          SizedBox(width: 1.2 * u),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 3.6 * u,
+                            color: _gold,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
