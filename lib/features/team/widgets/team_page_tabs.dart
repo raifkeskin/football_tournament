@@ -23,6 +23,7 @@ class TeamPageTabBar extends StatelessWidget {
     this.indicatorColor = _accent,
     this.filled = false,
     this.icons = const [],
+    this.scrollable = false,
   });
 
   final int index;
@@ -38,9 +39,14 @@ class TeamPageTabBar extends StatelessWidget {
   /// Sekme adının önündeki simgeler (sırayla; null = simge yok).
   final List<Widget?> icons;
 
+  /// true: sekmeler doğal genişliğinde, yana kayar ve aralarında ince ayraç
+  /// olur; yazı büyütülse de küçülmez, üst üste binmez (oyuncu kartı).
+  final bool scrollable;
+
   @override
   Widget build(BuildContext context) {
     if (filled) return _buildFilled();
+    if (scrollable) return _ScrollTabs(bar: this);
     return Container(
       decoration: BoxDecoration(
         border: Border(
@@ -81,6 +87,101 @@ class TeamPageTabBar extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScrollTabs extends StatefulWidget {
+  const _ScrollTabs({required this.bar});
+
+  final TeamPageTabBar bar;
+
+  @override
+  State<_ScrollTabs> createState() => _ScrollTabsState();
+}
+
+class _ScrollTabsState extends State<_ScrollTabs> {
+  final _keys = <int, GlobalKey>{};
+
+  @override
+  void didUpdateWidget(covariant _ScrollTabs old) {
+    super.didUpdateWidget(old);
+    if (old.bar.index != widget.bar.index) {
+      // Seçilen sekme kenarda kaldıysa görünür alana kaydır.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final c = _keys[widget.bar.index]?.currentContext;
+        if (c != null && c.mounted) {
+          Scrollable.ensureVisible(
+            c,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.bar;
+    final divider = Container(
+      width: 1,
+      height: 16,
+      color: Colors.white.withValues(alpha: 0.14),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      // Sığarsa satırı doldurur; sığmazsa yana kayar.
+      child: LayoutBuilder(
+        builder: (context, c) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: c.maxWidth),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (var i = 0; i < b.labels.length; i++) ...[
+                  if (i > 0) divider,
+                  InkWell(
+                    key: _keys.putIfAbsent(i, GlobalKey.new),
+                    onTap: () => b.onChanged(i),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: i == b.index
+                                ? b.indicatorColor
+                                : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        b.labels[i],
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: i == b.index ? Colors.white : _muted,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

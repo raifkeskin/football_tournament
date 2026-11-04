@@ -204,6 +204,10 @@ class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
 
   late final Future<List<_GoalClip>> _goals = _loadGoals();
+  late final Future<List<_GoalClip>> _assists = _loadGoals(assists: true);
+
+  /// İstatistik sekmesinde Goller (0) / Asistler (1).
+  int _statTab = 0;
   late final Future<_StarPhotos> _photos = _loadPhotos();
 
   /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
@@ -441,11 +445,14 @@ class _PlayerCardState extends State<PlayerCard> {
       'Özet',
       'Maçlar',
       'Kariyer',
-      goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
+      'İstatistik',
       if (_showPositionsTab) 'Mevki',
       if (_showPhotosTab) 'Fotoğraflar',
     ],
     indicatorColor: _tone,
+    // Çok sekmede ve büyük yazı boyutunda yazılar küçülüp üst üste
+    // binmesin: sekmeler yana kayar, aralarında ince ayraç.
+    scrollable: true,
     onChanged: (i) => setState(() => _tab = i),
   );
 
@@ -738,29 +745,32 @@ class _PlayerCardState extends State<PlayerCard> {
 
   /// Oyuncunun onaylı gol videoları, en yeni maç üstte. Kesit oyuncuya
   /// (player_id) ya da oyuncunun golüne (match_event_id) bağlıdır.
-  Future<List<_GoalClip>> _loadGoals() async {
+  /// Gol videoları; [assists] ise asist yaptığı gollerin videoları.
+  Future<List<_GoalClip>> _loadGoals({bool assists = false}) async {
     final pid = await _resolvePlayerId(widget.playerPhone.trim());
     if (pid == null || pid.isEmpty) return const [];
     const cols =
         'id, match_id, minute, added_minute, video_id, start_sec, end_sec, description, '
         'player_id, clip_url, story_url';
     final rows = <String, Map<String, dynamic>>{};
-    try {
-      final res = await _sb
-          .from('match_highlights')
-          .select(cols)
-          .eq('status', 'approved')
-          .eq('kind', 'goal')
-          .eq('player_id', pid);
-      for (final r in res) {
-        rows[r['id'].toString()] = r;
-      }
-    } catch (_) {}
+    if (!assists) {
+      try {
+        final res = await _sb
+            .from('match_highlights')
+            .select(cols)
+            .eq('status', 'approved')
+            .eq('kind', 'goal')
+            .eq('player_id', pid);
+        for (final r in res) {
+          rows[r['id'].toString()] = r;
+        }
+      } catch (_) {}
+    }
     try {
       final ev = await _sb
           .from('match_events')
           .select('id')
-          .eq('player_id', pid)
+          .eq(assists ? 'assist_player_id' : 'player_id', pid)
           .eq('event_type', 'goal')
           .not('is_own_goal', 'is', true);
       final ids = [for (final e in ev) e['id'].toString()];
@@ -774,7 +784,7 @@ class _PlayerCardState extends State<PlayerCard> {
         for (final r in res) {
           // Kesit başka bir oyuncuya atanmışsa onun golüdür.
           final owner = (r['player_id'] ?? '').toString();
-          if (owner.isNotEmpty && owner != pid) continue;
+          if (!assists && owner.isNotEmpty && owner != pid) continue;
           rows[r['id'].toString()] = r;
         }
       }
@@ -1160,7 +1170,7 @@ class _PlayerCardState extends State<PlayerCard> {
                     else if (_tab == 4 && _showPositionsTab)
                       PlayerPositionsTab(playerId: _cardPlayerId, accent: _tone)
                     else if (_tab == 3)
-                      _goalsTab()
+                      _statsTab()
                     else if (loading)
                       const Padding(
                         padding: EdgeInsets.all(24),
@@ -1184,9 +1194,30 @@ class _PlayerCardState extends State<PlayerCard> {
 
   /// Goller: dar satırlar (dakika, maç, tarih); dokununca ayrıntı açılır,
   /// videoya dokununca gol kesiti uygulama içi oynatıcıda açılır.
-  Widget _goalsTab() {
+  /// İstatistik: Goller / Asistler alt sekmesi ve altında videolar.
+  Widget _statsTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+          child: TeamPageTabBar(
+            filled: true,
+            index: _statTab,
+            labels: const ['Goller', 'Asistler'],
+            indicatorColor: _tone,
+            onChanged: (i) => setState(() => _statTab = i),
+          ),
+        ),
+        _goalsTab(assists: _statTab == 1),
+      ],
+    );
+  }
+
+  Widget _goalsTab({bool assists = false}) {
     return FutureBuilder<List<_GoalClip>>(
-      future: _goals,
+      key: ValueKey(assists),
+      future: assists ? _assists : _goals,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const Padding(
@@ -1199,10 +1230,10 @@ class _PlayerCardState extends State<PlayerCard> {
           return Container(
             padding: const EdgeInsets.all(18),
             decoration: _panel(),
-            child: const Text(
-              'Henüz gol videosu yok.',
+            child: Text(
+              assists ? 'Henüz asist videosu yok.' : 'Henüz gol videosu yok.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: _mid),
+              style: const TextStyle(color: _mid),
             ),
           );
         }
