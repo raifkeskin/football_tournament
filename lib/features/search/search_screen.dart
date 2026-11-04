@@ -10,17 +10,16 @@ import '../../core/services/app_settings.dart';
 import '../../core/services/follows.dart';
 import '../../core/services/league_access.dart';
 import '../../core/widgets/admin_page.dart';
+import '../../core/widgets/app_name_band.dart';
 import '../../core/widgets/web_safe_image.dart';
 import '../player/widgets/player_card.dart';
 import '../team/screens/team_squad_screen.dart';
 
-/// Takım ve futbolcu araması. Bantta büyüteç ana sayfada arama çubuğunu
-/// açıp kapatır; çubuğa dokununca [SearchScreen]. Yeni özellik: admin her
-/// zaman, diğerleri search_enabled açıksa.
+/// Takım ve futbolcu araması. Ana sayfa bandındaki büyüteç doğrudan
+/// [SearchScreen]'i açar; orada bantta sağdaki X ana sayfaya döndürür. Yeni
+/// özellik: admin her zaman, diğerleri search_enabled açıksa.
 class HomeSearch {
   HomeSearch._();
-
-  static final open = ValueNotifier<bool>(false);
 
   static bool visible(BuildContext context) {
     if (AppSettings.searchEnabled.value) return true;
@@ -29,65 +28,6 @@ class HomeSearch {
     } catch (_) {
       return false;
     }
-  }
-}
-
-/// Ana sayfada bandın altında açılıp kapanan arama çubuğu.
-class HomeSearchBar extends StatelessWidget {
-  const HomeSearchBar({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        HomeSearch.open,
-        AppSettings.searchEnabled,
-      ]),
-      builder: (context, _) {
-        final show = HomeSearch.open.value && HomeSearch.visible(context);
-        return AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          child: !show
-              ? const SizedBox(width: double.infinity)
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                  child: Material(
-                    color: const Color(0xFF131D33),
-                    shape: const StadiumBorder(
-                      side: BorderSide(color: Color(0xFF2B3954), width: 1.5),
-                    ),
-                    child: InkWell(
-                      customBorder: const StadiumBorder(),
-                      onTap: () => SearchScreen.open(context),
-                      child: const SizedBox(
-                        height: 48,
-                        child: Row(
-                          children: [
-                            SizedBox(width: 16),
-                            Icon(
-                              Icons.search_rounded,
-                              color: Color(0xFF34D399),
-                              size: 22,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              'Turnuva, takım ya da futbolcu ara',
-                              style: TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-        );
-      },
-    );
   }
 }
 
@@ -572,59 +512,74 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AdminPageScaffold(
-      title: 'Ara',
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
-              controller: _ctrl,
-              autofocus: true,
-              onChanged: _onChanged,
-              onSubmitted: (v) {
-                _remember(v);
-                _search();
-              },
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Turnuva, takım ya da futbolcu adı',
-                hintStyle: const TextStyle(color: _muted),
-                prefixIcon: const Icon(Icons.search_rounded, color: _green),
-                suffixIcon: _ctrl.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Temizle',
-                        icon: const Icon(Icons.close_rounded, color: _muted),
-                        onPressed: () {
-                          _ctrl.clear();
-                          _search();
-                        },
+    return BandBackPage(
+      subtitle: 'Ara',
+      trailing: BandIconButton(
+        icon: Icons.close_rounded,
+        size: 36,
+        tooltip: 'Aramayı kapat',
+        onTap: () => Navigator.of(context).maybePop(),
+      ),
+      child: Scaffold(
+        backgroundColor: kAdminBg,
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: TextField(
+                  controller: _ctrl,
+                  autofocus: true,
+                  onChanged: _onChanged,
+                  onSubmitted: (v) {
+                    _remember(v);
+                    _search();
+                  },
+                  textInputAction: TextInputAction.search,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Turnuva, takım ya da futbolcu adı',
+                    hintStyle: const TextStyle(color: _muted),
+                    prefixIcon: const Icon(Icons.search_rounded, color: _green),
+                    suffixIcon: _ctrl.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Temizle',
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: _muted,
+                            ),
+                            onPressed: () {
+                              _ctrl.clear();
+                              _search();
+                            },
+                          ),
+                    filled: true,
+                    fillColor: const Color(0xFF0B1220),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF2B3954),
+                        width: 1.5,
                       ),
-                filled: true,
-                fillColor: const Color(0xFF0B1220),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF2B3954),
-                    width: 1.5,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: const BorderSide(color: _green, width: 1.5),
+                    ),
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: const BorderSide(color: _green, width: 1.5),
-                ),
               ),
-            ),
+              Expanded(child: _results()),
+            ],
           ),
-          Expanded(child: _results()),
-        ],
+        ),
       ),
     );
   }

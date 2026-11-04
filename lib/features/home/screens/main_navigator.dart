@@ -218,7 +218,7 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
       // Yayın Rehberi: bantta sağda takvim (gün seçimi). Ana Sayfa:
-      // büyüteç arama çubuğunu açıp kapatır. Talimatname menüde.
+      // büyüteç arama ekranını açar. Talimatname menüde.
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
               icon: Icons.calendar_month_rounded,
@@ -226,14 +226,11 @@ class _MainNavigatorState extends State<MainNavigator> {
               onTap: BroadcastGuideScreen.pickDate,
             )
           : _aktifSekme == 0 && HomeSearch.visible(context)
-          ? ValueListenableBuilder<bool>(
-              valueListenable: HomeSearch.open,
-              builder: (context, open, _) => BandIconButton(
-                icon: open ? Icons.close_rounded : Icons.search_rounded,
-                size: 36,
-                tooltip: open ? 'Aramayı kapat' : 'Ara',
-                onTap: () => HomeSearch.open.value = !open,
-              ),
+          ? BandIconButton(
+              icon: Icons.search_rounded,
+              size: 36,
+              tooltip: 'Ara',
+              onTap: () => SearchScreen.open(context),
             )
           : null,
     );
