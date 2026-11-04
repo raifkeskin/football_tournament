@@ -289,3 +289,22 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Bir fotoğrafta birden çok futbolcu kendini işaretleyebilsin mi?
   - Galeride en fazla kaç fotoğraf olsun?
 - **Vazgeçildi:** Instagram hesabı bağlama ve ikonu (2026-10-27).
+
+## 28. Kapışma maç afişi (sorumlular karşılıklı bakışıyor) — 2026-11-06 SONRASI (2026-11-04)
+- **Hedef görünüm:** Gemini'nin tek seferde ürettiği kafa kafaya görsel (önizleme "Kafa kafaya" panosu). İki sorumlu tam yan profilde, öne eğik, gözler birbirine kilitli. Kafalar aynı boyda ve aynı göz hizasında, ama tokuşmuyor; arada VS için dar bir boşluk var. Kalıp görsel: `docs/tanitim/kapisma-kalip.jpg`.
+- **Önizleme:** https://claude.ai/artifact/APYNZqsMquAfNRMrQAH1aM (D panosu = kalıpla üretilen tekli görsellerin birleşimi).
+- **Akış (maliyetsiz yol):**
+  - Admin her sorumlu için Gemini uygulamasında iki görsel üretir: sağa bakan (afişte sol/ev sahibi) ve sola bakan (afişte sağ/deplasman). Gemini'ye önce sorumlunun fotoğrafı, sonra kalıp görsel verilir.
+  - Görseller sorumlu profilinden "Afiş fotoğrafı" olarak yüklenir. Yükleme ekranı prompt'u ve kalıp görseli kopyalanabilir şekilde sunar.
+  - Cihaz arka planı siler: iOS'ta Vision, Android'de ML Kit Subject Segmentation. Renk anahtarı (eflatun zemin) denendi ve ten gölgelerini sildi, kullanılmayacak. Webde arka plan silme yok, yükleme telefondan yapılır.
+  - Cihaz yüzü bulup standart ölçüye getirir. Yüz yüksekliği ve göz hizası sabit noktaya oturtulur, yüzün iç kenarı orta çizgiye göre konumlanır. Küçük olan büyütülür; küçültme kenarda boşluk bırakır.
+  - Yüz bulunamazsa ya da tam yan profil değilse "Görsel uygun değil, yeniden üret" uyarısı verilir.
+  - Yüklemede ince ayar: ölçek ve konum kaydırıcısı, ön izleme kalıbın üstünde gösterilir. Böylece hedef görünüm elle tam yakalanır.
+  - Ayrı tablo, herkes okuyabilir: sorumlu, yön (right/left), PNG adresi. İçinde kişisel veri yok.
+- **Afiş:**
+  - Afiş seçicide "Kapışma" seçeneği; önce yalnız admin görür. Gece stadyum zemini bir kez üretilir ve tüm afişlerde kullanılır; projektörler takım renginde boyanır.
+  - Gövdeler aşağıda karanlığa erir. Ortada VS, altta takım arması, adı ve sorumlu adı, saat bandı, Lig Masası.
+  - İki tarafta da afiş fotoğrafı yoksa seçenek görünmez. Yalnız birinde varsa diğer tarafa büyük arma gelir.
+- **Prompt (sağa bakan; sola bakan için LEFT↔RIGHT ve facing right↔left değişir):** Photo 1 = kişi, photo 2 = POSE REFERENCE. Yalnız kişi, referanstaki LEFT man'in yerinde ve pozunda: strict side profile facing right, leaning forward, chin down, intense stare. Kafa boyu referansla birebir: saçın üstü ~%20, çene ~%50 yükseklikte. Diğer yarı boş; plain dark charcoal top; flat dark grey background; neutral white rim light; no text.
+- **Dostluk (el sıkışma) afişi:** Saklanan görsellerle olmaz, eller birleşemiyor. Maç başına üretim gerekir, ~0,04 $. Sonraya kaldı; slogan "İYİ OLAN KAZANSIN".
+- **Kurallar:** Uygulama metninde "yapay zekâ" geçmez. Fotoğraf izni gizlemesi olan sorumlu için çalışmaz. Sorumludan rıza alınması gerekir (KVKK).
