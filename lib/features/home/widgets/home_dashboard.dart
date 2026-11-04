@@ -18,6 +18,7 @@ import '../../match/services/supabase/supabase_match_service.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../player/widgets/player_card.dart';
 import '../../team/models/team.dart';
+import '../../team/screens/team_squad_screen.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
@@ -830,6 +831,22 @@ class _HomeDashboardState extends State<HomeDashboard> {
     if (d.inDays >= 1) return '${d.inDays}g ${d.inHours % 24}s kaldı';
     if (d.inHours >= 1) return '${d.inHours}s ${d.inMinutes % 60}dk kaldı';
     return '${d.inMinutes}dk kaldı';
+  }
+
+  /// Takım logosuna / satırına dokununca takımın sayfası.
+  void _openTeam(String seasonId, String id, String name, String logo) {
+    if (id.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamSquadScreen'),
+        builder: (_) => TeamSquadScreen(
+          teamId: id,
+          tournamentId: seasonId,
+          teamName: name,
+          teamLogoUrl: logo,
+        ),
+      ),
+    );
   }
 
   void _openMatch(MatchModel m, {int tab = 0}) {
@@ -1747,23 +1764,29 @@ class _HomeDashboardState extends State<HomeDashboard> {
     }
 
     Widget side(_TeamInfo? t) => Expanded(
-      child: Column(
-        children: [
-          TeamBadge(
-            name: t?.name ?? '?',
-            logoUrl: t?.logoUrl ?? '',
-            color: t?.color,
-            size: 52,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            t?.name ?? '-',
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: _barlow(size: 13, weight: FontWeight.w800),
-          ),
-        ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: t == null
+            ? null
+            : () => _openTeam(m.seasonId, t.id, t.name, t.logoUrl),
+        child: Column(
+          children: [
+            TeamBadge(
+              name: t?.name ?? '?',
+              logoUrl: t?.logoUrl ?? '',
+              color: t?.color,
+              size: 52,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              t?.name ?? '-',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: _barlow(size: 13, weight: FontWeight.w800),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -2097,20 +2120,26 @@ class _HomeDashboardState extends State<HomeDashboard> {
       );
     }
 
+    // Logoya dokununca takım sayfası; satırın kalanı maç detayı.
+    Widget badge(_TeamInfo? t) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: t == null
+          ? null
+          : () => _openTeam(m.seasonId, t.id, t.name, t.logoUrl),
+      child: TeamBadge(
+        name: t?.name ?? '?',
+        logoUrl: t?.logoUrl ?? '',
+        color: t?.color,
+      ),
+    );
+
     Widget name(_TeamInfo? t, {required bool end}) => Expanded(
       child: Row(
         mainAxisAlignment: end
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         children: [
-          if (!end) ...[
-            TeamBadge(
-              name: t?.name ?? '?',
-              logoUrl: t?.logoUrl ?? '',
-              color: t?.color,
-            ),
-            const SizedBox(width: 8),
-          ],
+          if (!end) ...[badge(t), const SizedBox(width: 8)],
           // Maç Takvimi'ndeki kural: "Master(lar)" atılır, SK/FK kısaltılır;
           // uzun ad iki satıra iner.
           Flexible(
@@ -2125,14 +2154,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ).copyWith(height: 1.15),
             ),
           ),
-          if (end) ...[
-            const SizedBox(width: 8),
-            TeamBadge(
-              name: t?.name ?? '?',
-              logoUrl: t?.logoUrl ?? '',
-              color: t?.color,
-            ),
-          ],
+          if (end) ...[const SizedBox(width: 8), badge(t)],
         ],
       ),
     );
@@ -2224,61 +2246,73 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           const SizedBox(height: 4),
           for (var i = 0; i < rows.length && i < 4; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-                ),
+            InkWell(
+              onTap: () => _openTeam(
+                d.seasonId,
+                rows[i].teamId,
+                rows[i].name,
+                rows[i].logo,
               ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    child: Text(
-                      '${i + 1}',
-                      style: _condensed(
-                        size: 15,
-                        color: i == 0 ? DashColors.accent() : DashColors.muted,
-                      ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
                     ),
                   ),
-                  TeamBadge(
-                    name: rows[i].name,
-                    logoUrl: rows[i].logo,
-                    color: d.teams[rows[i].teamId]?.color,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      rows[i].name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _barlow(
-                        size: 13,
-                        weight: focus.contains(rows[i].teamId)
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                        color: focus.contains(rows[i].teamId)
-                            ? DashColors.accent()
-                            : DashColors.text,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      child: Text(
+                        '${i + 1}',
+                        style: _condensed(
+                          size: 15,
+                          color: i == 0
+                              ? DashColors.accent()
+                              : DashColors.muted,
+                        ),
                       ),
                     ),
-                  ),
-                  cell(
-                    '${rows[i].played}',
-                    _barlow(size: 13, color: DashColors.muted),
-                  ),
-                  cell(
-                    rows[i].goalDiff > 0
-                        ? '+${rows[i].goalDiff}'
-                        : '${rows[i].goalDiff}',
-                    _barlow(size: 13, color: DashColors.muted),
-                    w: 36,
-                  ),
-                  cell('${rows[i].points}', _condensed(size: 16)),
-                ],
+                    TeamBadge(
+                      name: rows[i].name,
+                      logoUrl: rows[i].logo,
+                      color: d.teams[rows[i].teamId]?.color,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        rows[i].name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _barlow(
+                          size: 13,
+                          weight: focus.contains(rows[i].teamId)
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                          color: focus.contains(rows[i].teamId)
+                              ? DashColors.accent()
+                              : DashColors.text,
+                        ),
+                      ),
+                    ),
+                    cell(
+                      '${rows[i].played}',
+                      _barlow(size: 13, color: DashColors.muted),
+                    ),
+                    cell(
+                      rows[i].goalDiff > 0
+                          ? '+${rows[i].goalDiff}'
+                          : '${rows[i].goalDiff}',
+                      _barlow(size: 13, color: DashColors.muted),
+                      w: 36,
+                    ),
+                    cell('${rows[i].points}', _condensed(size: 16)),
+                  ],
+                ),
               ),
             ),
         ],
