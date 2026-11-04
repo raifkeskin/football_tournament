@@ -67,6 +67,7 @@ Future<bool?> showPosterPreview({
   Widget? poster,
   Widget Function(ImageProvider? photo, PhotoFrame frame)? photoPoster,
   String? photoUrl,
+  List<String> photoChoices = const [],
   required String fileName,
   List<String> imageUrls = const [],
   String? shareText,
@@ -85,6 +86,7 @@ Future<bool?> showPosterPreview({
       poster: poster,
       photoPoster: photoPoster,
       photoUrl: photoUrl,
+      photoChoices: photoChoices,
       fileName: fileName,
       imageUrls: imageUrls,
       shareText: shareText,
@@ -122,6 +124,7 @@ class _PosterPreviewDialog extends StatefulWidget {
     required this.poster,
     required this.photoPoster,
     required this.photoUrl,
+    this.photoChoices = const [],
     required this.fileName,
     required this.imageUrls,
     required this.title,
@@ -140,6 +143,10 @@ class _PosterPreviewDialog extends StatefulWidget {
   final Widget? poster;
   final Widget Function(ImageProvider? photo, PhotoFrame frame)? photoPoster;
   final String? photoUrl;
+
+  /// Hazır fotoğraflar (ör. profil + yıldızlanan maç fotoğrafları): küçük
+  /// resim şeridi; dokununca afişe o gelir.
+  final List<String> photoChoices;
   final String fileName;
   final List<String> imageUrls;
   final String title;
@@ -200,6 +207,26 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
       : NetworkImage(widget.photoUrl!.trim());
   ImageProvider? _picked;
   ImageProvider? get _photo => _picked ?? _profile;
+
+  /// Şeritten seçilen hazır fotoğraf (boşsa profil ya da galeriden seçilen).
+  String _choice = '';
+
+  Future<void> _useChoice(String url) async {
+    final first = (widget.photoUrl ?? '').trim();
+    final image = url == first ? null : NetworkImage(url);
+    if (image != null) {
+      try {
+        await precacheImage(image, context);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _choice = url;
+      _picked = image;
+      _frame = const PhotoFrame();
+    });
+  }
+
   PhotoFrame _frame = const PhotoFrame();
   double _zoomStart = 1;
 
@@ -232,6 +259,7 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
       await precacheImage(image, context);
       if (mounted) {
         setState(() {
+          _choice = '';
           _picked = image;
           _frame = const PhotoFrame();
         });
@@ -641,6 +669,46 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                       ),
                     ),
                   ),
+                if (widget.photoPoster != null &&
+                    widget.photoChoices.length > 1) ...[
+                  SizedBox(
+                    height: 64,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: widget.photoChoices.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (_, i) {
+                        final url = widget.photoChoices[i];
+                        final on =
+                            url == _choice ||
+                            (_choice.isEmpty &&
+                                _picked == null &&
+                                url == (widget.photoUrl ?? '').trim());
+                        return GestureDetector(
+                          onTap: _busy ? null : () => _useChoice(url),
+                          child: Container(
+                            width: 56,
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: on ? kAdminAccent : Colors.white24,
+                                width: on ? 2.5 : 1,
+                              ),
+                            ),
+                            child: Image.network(
+                              url,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const ColoredBox(color: Colors.white10),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 if (widget.photoPoster != null) ...[
                   Row(
                     children: [
@@ -671,6 +739,7 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                             onPressed: _busy
                                 ? null
                                 : () => setState(() {
+                                    _choice = '';
                                     _picked = null;
                                     _frame = const PhotoFrame();
                                   }),

@@ -3892,6 +3892,69 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
   );
   late int _index = widget.initialIndex;
 
+  /// "Bu benim": giriş yapmış futbolcunun yıldızladığı fotoğraflar (sezon
+  /// afişinde seçilebilir). Yeni özellik: ayar kapalıyken yalnız admin.
+  final _starred = <String>{};
+  String? _me;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStars());
+  }
+
+  Future<void> _loadStars() async {
+    if (!mounted) return;
+    final s = AppSession.of(context).value;
+    final me = (s.playerId ?? '').trim();
+    if (me.isEmpty || !(s.isAdmin || AppSettings.playerPosterEnabled.value)) {
+      return;
+    }
+    setState(() => _me = me);
+    try {
+      final rows = await Supabase.instance.client
+          .from('player_photo_stars')
+          .select('media_id')
+          .eq('player_id', me)
+          .inFilter('media_id', [for (final p in widget.photos) p.id]);
+      if (!mounted) return;
+      setState(() {
+        _starred.addAll([for (final r in rows) r['media_id'].toString()]);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _toggleStar(String mediaId) async {
+    final me = _me;
+    if (me == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final on = !_starred.contains(mediaId);
+    setState(() => on ? _starred.add(mediaId) : _starred.remove(mediaId));
+    try {
+      final t = Supabase.instance.client.from('player_photo_stars');
+      if (on) {
+        await t.insert({'player_id': me, 'media_id': mediaId});
+      } else {
+        await t.delete().eq('player_id', me).eq('media_id', mediaId);
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            on
+                ? 'Fotoğrafların arasına eklendi; sezon afişinde seçebilirsin.'
+                : 'Fotoğraflarından çıkarıldı.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => on ? _starred.remove(mediaId) : _starred.add(mediaId));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Kaydedilemedi, tekrar dene.')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _page.dispose();
@@ -3915,6 +3978,21 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
           style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
         actions: [
+          if (_me != null)
+            IconButton(
+              tooltip: _starred.contains(current.id)
+                  ? 'Bu ben değilim'
+                  : 'Bu benim',
+              icon: Icon(
+                _starred.contains(current.id)
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                color: _starred.contains(current.id)
+                    ? const Color(0xFFFACC15)
+                    : Colors.white,
+              ),
+              onPressed: () => _toggleStar(current.id),
+            ),
           IconButton(
             tooltip: 'İndir',
             icon: _downloading

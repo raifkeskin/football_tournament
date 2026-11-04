@@ -24,6 +24,7 @@ import '../../identity/identity_service.dart';
 import '../../identity/verified_badge.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
+import '../../share/player_season_poster.dart';
 import 'player_positions_tab.dart';
 
 // Uygulamanın ortak renkleri
@@ -1301,6 +1302,25 @@ class _PlayerCardState extends State<PlayerCard> {
                 idleColor: Colors.white,
               ),
             ),
+          // Sezon afişi: futbolcu kendi profilinde, yöneticiler her profilde.
+          if (canShowPlayerPoster(context, _cardPlayerId))
+            Positioned(
+              top:
+                  topInset +
+                  (_cardPlayerId != AppSession.of(context).value.playerId
+                      ? 96
+                      : 52),
+              right: 8,
+              child: IconButton(
+                tooltip: 'Sezon afişini paylaş',
+                onPressed: _openSeasonPoster,
+                icon: const Icon(
+                  Icons.ios_share_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+            ),
           Positioned(
             top: topInset + 2,
             right: 8,
@@ -1311,6 +1331,39 @@ class _PlayerCardState extends State<PlayerCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Bu sezonun (en yeni turnuvanın) afişi; sayılar Özet'tekiyle aynı.
+  Future<void> _openSeasonPoster() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final data = await _future;
+    if (!mounted) return;
+    if (data.current.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Bu sezon oynadığı bir turnuva yok.')),
+      );
+      return;
+    }
+    final e = data.current.first;
+    await showPlayerSeasonPoster(
+      context,
+      playerId: _cardPlayerId,
+      name: widget.name,
+      number: widget.number,
+      photoUrl: widget.photoUrl,
+      seasonId: e.seasonId,
+      leagueName: e.leagueName,
+      leagueLogo: e.leagueLogo,
+      teamId: e.teamId,
+      teamName: e.teamName,
+      teamLogo: e.teamLogo,
+      stats: (
+        matches: e.totals.matches,
+        goals: e.totals.goals,
+        assists: e.totals.assists,
+        motm: e.totals.motm,
       ),
     );
   }
