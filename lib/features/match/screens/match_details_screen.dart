@@ -1447,7 +1447,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 onTap: () => _openRefereePicker(match),
               ),
             _SpeedDialAction(
-              label: 'Tarih Girişi',
+              label: 'Tarih Gir / Stad Seç',
               icon: Icons.edit_calendar_rounded,
               onTap: () => _openScheduleDialog(match),
             ),
@@ -1491,7 +1491,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               onTap: () => _openRefereePicker(match),
             ),
           _SpeedDialAction(
-            label: 'Tarih Girişi',
+            label: 'Tarih Gir / Stad Seç',
             icon: Icons.edit_calendar_rounded,
             onTap: () => _openScheduleDialog(match),
           ),
@@ -4820,13 +4820,34 @@ class _LineupTabState extends State<_LineupTab>
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
           _vsRow(m, head: false, only: 'xi'),
-          if (top) ...[
-            const SizedBox(height: 10),
-            _benchBand(),
-            const SizedBox(height: 2),
-          ] else
-            const SizedBox(height: 12),
-          _vsRow(m, head: false, only: 'bench', benchHeader: !top),
+          // İki takımın da kadrosu yoksa yalnız "Kadro girilmemiş." kalır;
+          // YEDEKLER bandı ve yedek satırı çizilmez.
+          StreamBuilder<List<MatchRosterModel>>(
+            stream: _rosterStream(m.homeTeamId),
+            initialData: _rosterLast[m.homeTeamId],
+            builder: (context, home) => StreamBuilder<List<MatchRosterModel>>(
+              stream: _rosterStream(m.awayTeamId),
+              initialData: _rosterLast[m.awayTeamId],
+              builder: (context, away) {
+                final none =
+                    (home.data?.isEmpty ?? false) &&
+                    (away.data?.isEmpty ?? false);
+                if (none) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (top) ...[
+                      const SizedBox(height: 10),
+                      _benchBand(),
+                      const SizedBox(height: 2),
+                    ] else
+                      const SizedBox(height: 12),
+                    _vsRow(m, head: false, only: 'bench', benchHeader: !top),
+                  ],
+                );
+              },
+            ),
+          ),
         ] else
           // Tek takım: kadro ve yedekler yan yana.
           _TeamLineupColumn(
@@ -5117,8 +5138,12 @@ class _LineupTabState extends State<_LineupTab>
         teamId,
         () => ServiceLocator.matchService
             .watchMatchRosters(widget.match.id, teamId)
+            .map((v) => _rosterLast[teamId] = v)
             .asBroadcastStream(),
       );
+
+  /// Akışların son değeri: sonradan dinleyen (ör. YEDEKLER bandı) beklemesin.
+  final _rosterLast = <String, List<MatchRosterModel>>{};
 
   /// VS'den paylaşım: hangi takımın kadro afişi.
   Future<void> _shareFromVs() async {
