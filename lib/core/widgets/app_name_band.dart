@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
+import '../services/follows.dart';
 import 'app_logo.dart';
 import 'notification_bell.dart';
 import 'web_safe_image.dart';
@@ -417,8 +418,10 @@ class LeagueSwitchScope {
   static VoidCallback? closeMenu;
 
   /// Menü açıksa kapatır, kapalıysa açar.
-  static void toggleMenu() =>
-      drawerOpen.value ? closeMenu?.call() : openMenu?.call();
+  static void toggleMenu() {
+    closeLeagueSwitcher();
+    drawerOpen.value ? closeMenu?.call() : openMenu?.call();
+  }
 
   /// Kayıtlı ana gezgin sayfaları ve durumları. Girişten sonra bir an iki
   /// ana gezgin birlikte bulunabilir; eskisi kapanırken yenisinin kaydını
@@ -672,6 +675,17 @@ final _bandKey = GlobalKey();
 /// Açılır liste açıkken ok yukarı döner.
 final _switcherOpen = ValueNotifier<bool>(false);
 
+/// Açık turnuva listesi (bant gezginin dışında: menü, arama, zil gibi bant
+/// düğmelerine basılınca liste kendiliğinden kapanmalı).
+_LeagueDropdownRoute? _switcherRoute;
+
+/// Turnuva listesi açıksa seçim yapmadan kapatır.
+void closeLeagueSwitcher() {
+  final route = _switcherRoute;
+  if (route == null || !route.isActive) return;
+  route.navigator?.removeRoute(route);
+}
+
 /// Bant seçicisi: kişinin birden fazla turnuvası varsa ▾ düğmesi; dokununca
 /// bandın altında turnuva listesi açılır. Tek turnuvada hiçbir şey çizmez.
 class LeagueSwitchButton extends StatelessWidget {
@@ -736,7 +750,10 @@ Future<void> showLeagueSwitcher() async {
       : box.localToGlobal(Offset.zero) - overlayBox.localToGlobal(Offset.zero);
   final band = topLeft & box.size;
   _switcherOpen.value = true;
-  final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
+  await Follows.load();
+  final route = _switcherRoute = _LeagueDropdownRoute(band: band);
+  final picked = await nav.push<String>(route);
+  if (_switcherRoute == route) _switcherRoute = null;
   _switcherOpen.value = false;
   if (picked == null || picked == ActiveTournament.currentLeagueId.value) {
     return;
@@ -767,7 +784,14 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    final leagues = ActiveTournament.myLeagues.value;
+    // Diğer turnuvalarda yıldızlananlar üstte (liste açılırken sıralanır).
+    final all = ActiveTournament.myLeagues.value;
+    final followed = Follows.leagues.value;
+    final leagues = [
+      ...all.where((l) => l.isOwn),
+      ...all.where((l) => !l.isOwn && followed.contains(l.id)),
+      ...all.where((l) => !l.isOwn && !followed.contains(l.id)),
+    ];
     final current = ActiveTournament.currentLeagueId.value;
     final accent =
         ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
@@ -920,6 +944,12 @@ class _LeagueRow extends StatelessWidget {
               ),
             ),
             if (selected) Icon(Icons.check_rounded, color: accent, size: 20),
+            FollowStar(
+              kind: FollowKind.league,
+              id: league.id,
+              dense: true,
+              idleColor: const Color(0xFF64748B),
+            ),
           ],
         ),
       ),
@@ -1221,7 +1251,10 @@ class BandIconButton extends StatelessWidget {
       type: MaterialType.transparency,
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: onTap,
+        onTap: () {
+          closeLeagueSwitcher();
+          onTap();
+        },
         child: Container(
           width: size,
           height: size,
@@ -1407,7 +1440,10 @@ class BandActions {
     type: MaterialType.transparency,
     child: IconButton(
       // Tooltip yok: bant Overlay'in dışında.
-      onPressed: onHome ?? onMenu,
+      onPressed: () {
+        closeLeagueSwitcher();
+        (onHome ?? onMenu)();
+      },
       icon: onHome != null
           ? Icon(Icons.home_rounded, color: color, semanticLabel: 'Ana Sayfa')
           : Icon(Icons.menu_rounded, color: color, semanticLabel: 'Menü'),

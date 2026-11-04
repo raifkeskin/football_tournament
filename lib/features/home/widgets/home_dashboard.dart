@@ -18,6 +18,7 @@ import '../../match/services/supabase/supabase_match_service.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../player/widgets/player_card.dart';
 import '../../team/models/team.dart';
+import '../../team/screens/team_squad_screen.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
@@ -31,13 +32,17 @@ import '../../tournament/models/league_extras.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
+import 'my_week_card.dart';
+import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
+import 'unscheduled_matches_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
+import '../../search/search_screen.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -418,6 +423,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   Future<void> _refresh() async {
     OverdueResultsBanner.refresh.value++;
     UnassignedRefereesBanner.refresh.value++;
+    UnscheduledMatchesBanner.refresh.value++;
     RefereeHomeCard.refresh.value++;
     AttendanceHomeCard.refresh.value++;
     final session = AppSession.of(context).value;
@@ -829,6 +835,22 @@ class _HomeDashboardState extends State<HomeDashboard> {
     return '${d.inMinutes}dk kaldı';
   }
 
+  /// Takım logosuna / satırına dokununca takımın sayfası.
+  void _openTeam(String seasonId, String id, String name, String logo) {
+    if (id.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamSquadScreen'),
+        builder: (_) => TeamSquadScreen(
+          teamId: id,
+          tournamentId: seasonId,
+          teamName: name,
+          teamLogoUrl: logo,
+        ),
+      ),
+    );
+  }
+
   void _openMatch(MatchModel m, {int tab = 0}) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     Navigator.of(context).push(
@@ -941,6 +963,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
           // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
           child: SponsorStrip(leagueId: widget.league.id),
         ),
+        // Bantta büyüteçle açılıp kapanan arama çubuğu.
+        const HomeSearchBar(),
         Expanded(
           child: RefreshIndicator(
             color: DashColors.accent(),
@@ -951,8 +975,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 _greeting(session, data),
                 OverdueResultsBanner(leagueId: widget.league.id),
                 UnassignedRefereesBanner(leagueId: widget.league.id),
+                UnscheduledMatchesBanner(leagueId: widget.league.id),
                 const RefereeHomeCard(),
                 AttendanceHomeCard(leagueId: widget.league.id),
+                if (session.playerId != null && MyWeekCard.enabledFor(session))
+                  MyWeekCard(leagueId: widget.league.id),
                 content,
               ],
             ),
@@ -1055,7 +1082,114 @@ class _HomeDashboardState extends State<HomeDashboard> {
             const SizedBox(width: 10),
             VerifyPromptChip(session: session),
           ],
+          // Katılım sorguları yanıtlandıysa kart yerine küçük ikon.
+          if (loggedIn)
+            ValueListenableBuilder<String?>(
+              valueListenable: AttendanceHomeCard.answered,
+              builder: (_, status, _) => status == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: _attendanceIcon(status),
+                    ),
+            ),
+          // Profile kısayol: sağda profil fotoğrafı (yoksa baş harfler).
+          if (loggedIn && MyWeekCard.enabledFor(session)) ...[
+            const SizedBox(width: 10),
+            _profileShortcut(session, fullName),
+          ],
         ],
+      ),
+    );
+  }
+
+  /// Yanıtlanmış katılım sorgusu: yeşil (geliyor) ya da kırmızı (gelemiyor)
+  /// tikli ikon; dokununca katılım kartı açılır/kapanır.
+  Widget _attendanceIcon(String status) {
+    final yes = status == 'yes';
+    final c = yes ? const Color(0xFF10B981) : const Color(0xFFF87171);
+    return Semantics(
+      button: true,
+      label: yes ? 'Katılım: geliyorsun' : 'Katılım: gelemiyorsun',
+      child: GestureDetector(
+        onTap: () => AttendanceHomeCard.expanded.value =
+            !AttendanceHomeCard.expanded.value,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: AttendanceHomeCard.expanded,
+          builder: (_, open, _) => SizedBox(
+            width: 44,
+            height: 40,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c.withValues(alpha: open ? 0.3 : 0.15),
+                    border: Border.all(color: c.withValues(alpha: 0.7)),
+                  ),
+                  child: Icon(Icons.how_to_reg_rounded, color: c, size: 21),
+                ),
+                Positioned(
+                  right: 0,
+                  top: -2,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: DashColors.ground, width: 1.5),
+                    ),
+                    child: Icon(
+                      yes ? Icons.check_rounded : Icons.close_rounded,
+                      size: 11,
+                      color: const Color(0xFF04211A),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _profileShortcut(AppSessionState session, String name) {
+    final photo = (session.photoUrl ?? '').trim();
+    final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final initials = words.isEmpty
+        ? '?'
+        : (words.length == 1
+                  ? words.first.characters.first
+                  : '${words.first.characters.first}${words.last.characters.first}')
+              .replaceAll('i', 'İ')
+              .toUpperCase();
+    return Semantics(
+      button: true,
+      label: 'Profilim',
+      child: GestureDetector(
+        onTap: () => MainNavigator.tabRequest.value = MainNavigator.profileTab,
+        child: Container(
+          width: 40,
+          height: 40,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: DashColors.raised,
+            border: Border.all(color: DashColors.accent(), width: 2),
+          ),
+          alignment: Alignment.center,
+          child: photo.isEmpty
+              ? Text(
+                  initials,
+                  style: _barlow(size: 14, weight: FontWeight.w800),
+                )
+              : WebSafeImage(url: photo, fit: BoxFit.cover),
+        ),
       ),
     );
   }
@@ -1201,12 +1335,13 @@ class _HomeDashboardState extends State<HomeDashboard> {
         : {?_followedTeamId}.where(d.teams.containsKey).toSet();
     final groupFilter = _groupId(d);
     // Bölüm bağlantıları: Turnuva Sayfası, kişinin grubu (yoksa ilk grup).
-    void openHub(TournamentHubTab tab) => TournamentHubScreen.open(
+    void openHub(TournamentHubTab tab, {int? week}) => TournamentHubScreen.open(
       context,
       leagueId: widget.league.id,
       seasonId: d.seasonId,
       groupId: groupFilter ?? d.groups.keys.firstOrNull,
       initialTab: tab,
+      initialWeek: week,
     );
 
     final sorted = [...d.matches]
@@ -1457,7 +1592,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'GEÇEN HAFTA · $lastWeek. HAFTA',
             'Sonuçlar',
-            () => openHub(TournamentHubTab.fixture),
+            () => openHub(TournamentHubTab.fixture, week: lastWeek),
           ),
           for (final m in lastWeekMatches.take(4)) _matchRow(d, m, focusTeams),
         ],
@@ -1698,23 +1833,29 @@ class _HomeDashboardState extends State<HomeDashboard> {
     }
 
     Widget side(_TeamInfo? t) => Expanded(
-      child: Column(
-        children: [
-          TeamBadge(
-            name: t?.name ?? '?',
-            logoUrl: t?.logoUrl ?? '',
-            color: t?.color,
-            size: 52,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            t?.name ?? '-',
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: _barlow(size: 13, weight: FontWeight.w800),
-          ),
-        ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: t == null
+            ? null
+            : () => _openTeam(m.seasonId, t.id, t.name, t.logoUrl),
+        child: Column(
+          children: [
+            TeamBadge(
+              name: t?.name ?? '?',
+              logoUrl: t?.logoUrl ?? '',
+              color: t?.color,
+              size: 52,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              t?.name ?? '-',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: _barlow(size: 13, weight: FontWeight.w800),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -2048,20 +2189,26 @@ class _HomeDashboardState extends State<HomeDashboard> {
       );
     }
 
+    // Logoya dokununca takım sayfası; satırın kalanı maç detayı.
+    Widget badge(_TeamInfo? t) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: t == null
+          ? null
+          : () => _openTeam(m.seasonId, t.id, t.name, t.logoUrl),
+      child: TeamBadge(
+        name: t?.name ?? '?',
+        logoUrl: t?.logoUrl ?? '',
+        color: t?.color,
+      ),
+    );
+
     Widget name(_TeamInfo? t, {required bool end}) => Expanded(
       child: Row(
         mainAxisAlignment: end
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         children: [
-          if (!end) ...[
-            TeamBadge(
-              name: t?.name ?? '?',
-              logoUrl: t?.logoUrl ?? '',
-              color: t?.color,
-            ),
-            const SizedBox(width: 8),
-          ],
+          if (!end) ...[badge(t), const SizedBox(width: 8)],
           // Maç Takvimi'ndeki kural: "Master(lar)" atılır, SK/FK kısaltılır;
           // uzun ad iki satıra iner.
           Flexible(
@@ -2076,14 +2223,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ).copyWith(height: 1.15),
             ),
           ),
-          if (end) ...[
-            const SizedBox(width: 8),
-            TeamBadge(
-              name: t?.name ?? '?',
-              logoUrl: t?.logoUrl ?? '',
-              color: t?.color,
-            ),
-          ],
+          if (end) ...[const SizedBox(width: 8), badge(t)],
         ],
       ),
     );
@@ -2175,61 +2315,73 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           const SizedBox(height: 4),
           for (var i = 0; i < rows.length && i < 4; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-                ),
+            InkWell(
+              onTap: () => _openTeam(
+                d.seasonId,
+                rows[i].teamId,
+                rows[i].name,
+                rows[i].logo,
               ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    child: Text(
-                      '${i + 1}',
-                      style: _condensed(
-                        size: 15,
-                        color: i == 0 ? DashColors.accent() : DashColors.muted,
-                      ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
                     ),
                   ),
-                  TeamBadge(
-                    name: rows[i].name,
-                    logoUrl: rows[i].logo,
-                    color: d.teams[rows[i].teamId]?.color,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      rows[i].name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _barlow(
-                        size: 13,
-                        weight: focus.contains(rows[i].teamId)
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                        color: focus.contains(rows[i].teamId)
-                            ? DashColors.accent()
-                            : DashColors.text,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      child: Text(
+                        '${i + 1}',
+                        style: _condensed(
+                          size: 15,
+                          color: i == 0
+                              ? DashColors.accent()
+                              : DashColors.muted,
+                        ),
                       ),
                     ),
-                  ),
-                  cell(
-                    '${rows[i].played}',
-                    _barlow(size: 13, color: DashColors.muted),
-                  ),
-                  cell(
-                    rows[i].goalDiff > 0
-                        ? '+${rows[i].goalDiff}'
-                        : '${rows[i].goalDiff}',
-                    _barlow(size: 13, color: DashColors.muted),
-                    w: 36,
-                  ),
-                  cell('${rows[i].points}', _condensed(size: 16)),
-                ],
+                    TeamBadge(
+                      name: rows[i].name,
+                      logoUrl: rows[i].logo,
+                      color: d.teams[rows[i].teamId]?.color,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        rows[i].name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _barlow(
+                          size: 13,
+                          weight: focus.contains(rows[i].teamId)
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                          color: focus.contains(rows[i].teamId)
+                              ? DashColors.accent()
+                              : DashColors.text,
+                        ),
+                      ),
+                    ),
+                    cell(
+                      '${rows[i].played}',
+                      _barlow(size: 13, color: DashColors.muted),
+                    ),
+                    cell(
+                      rows[i].goalDiff > 0
+                          ? '+${rows[i].goalDiff}'
+                          : '${rows[i].goalDiff}',
+                      _barlow(size: 13, color: DashColors.muted),
+                      w: 36,
+                    ),
+                    cell('${rows[i].points}', _condensed(size: 16)),
+                  ],
+                ),
               ),
             ),
         ],
@@ -2401,6 +2553,7 @@ class _HomePollButtonState extends State<_HomePollButton> {
       if (!mounted) return;
       setState(() => _active = true);
       AttendanceHomeCard.refresh.value++;
+      UnscheduledMatchesBanner.refresh.value++;
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Anket başlatıldı; kadrona bildirim gitti.'),

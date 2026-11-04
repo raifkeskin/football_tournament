@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/instagram_share.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
@@ -19,6 +20,7 @@ import '../../tournament/models/league_extras.dart';
 import '../news_article.dart';
 import '../widgets/news_talk_widgets.dart';
 import '../widgets/result_news_cards.dart';
+import '../week_awards.dart';
 import '../widgets/week_awards_cards.dart';
 import 'news_feed_screen.dart';
 
@@ -133,7 +135,19 @@ class NewsVisual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Enler bülteni: kazananların yuvarlak fotoğraflarıyla ortak kapak.
+    if (!compact && item.isWeekAwards) {
+      return WeekAwardsCover(data: WeekAwards.fromJson(item.autoData!));
+    }
     if (item.imageUrls.isNotEmpty) {
+      // Enler / seçim kartları 4:5: geniş kapakta kırpılmasın, ortada tam
+      // görünsün.
+      if (!compact && (item.isWeekAwards || item.isWeeklyPick)) {
+        return ColoredBox(
+          color: const Color(0xFF0C1424),
+          child: WebSafeImage(url: item.imageUrls.first, fit: BoxFit.contain),
+        );
+      }
       return WebSafeImage(url: item.imageUrls.first, fit: BoxFit.cover);
     }
     final a = NewsArticle.of(item);
@@ -1064,6 +1078,10 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     if (n.isWeekAwards) {
       return WeekAwardsNewsCard(
         item: n,
+        // Yeni: tam ekran şimdilik admine (Haftanın Enleri açılınca herkese).
+        expandOnTap:
+            AppSession.of(context).value.isAdmin ||
+            AppSettings.weekAwardsEnabled.value,
         meta: meta,
         loggedIn: loggedIn,
         liked: _liked,

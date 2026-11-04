@@ -36,6 +36,7 @@ class FixtureView extends StatefulWidget {
     required this.leagueId,
     required this.seasonId,
     required this.groupId,
+    this.initialWeek,
     this.shareAction,
     this.videoAction,
     this.accent = const Color(0xFF10B981),
@@ -44,6 +45,10 @@ class FixtureView extends StatefulWidget {
   final String leagueId;
   final String seasonId;
   final String groupId;
+
+  /// Kullanıcı hafta seçmeden önce açılacak hafta; yoksa oynanmamış ilk
+  /// maçın haftası.
+  final int? initialWeek;
 
   /// Seçili haftanın afişini paylaşma işlevi (yetki ve maç varsa dolu);
   /// paylaş düğmesi sayfanın kendisinde.
@@ -508,7 +513,9 @@ class _FixtureViewState extends State<FixtureView> {
                     ];
 
                     // Kullanıcı hafta seçmediyse: oynanmamış ilk maçın haftası.
-                    final defaultWeek = weeks.contains(info.nextWeek)
+                    final defaultWeek = weeks.contains(widget.initialWeek)
+                        ? widget.initialWeek
+                        : weeks.contains(info.nextWeek)
                         ? info.nextWeek
                         : weeks.first;
                     final userWeek = _weekKey == weekKey ? _week : null;

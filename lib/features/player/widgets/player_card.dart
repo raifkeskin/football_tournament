@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../../team/widgets/team_page_tabs.dart';
@@ -8,7 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
-import '../../../core/services/instagram_share.dart';
+import '../../../core/services/follows.dart';
+import '../../../core/widgets/app_name_band.dart' show BandBackPage;
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -24,6 +24,7 @@ import '../../identity/identity_service.dart';
 import '../../identity/verified_badge.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
+import '../../share/player_season_poster.dart';
 import 'player_positions_tab.dart';
 
 // Uygulamanın ortak renkleri
@@ -83,68 +84,72 @@ Future<void> showPlayerCard(
             .limit(1);
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (ctx) => Scaffold(
-        backgroundColor: _bgDark,
-        body: FutureBuilder<List<Map<String, dynamic>>>(
-          future: future,
-          builder: (ctx, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(
-                child: CircularProgressIndicator(color: _accent),
-              );
-            }
-            final rows = snap.data ?? const [];
-            if (rows.isEmpty) {
-              return SafeArea(
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        onPressed: () => Navigator.of(ctx).maybePop(),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white70,
-                        ),
-                        tooltip: 'Kapat',
-                      ),
-                    ),
-                    const Expanded(
-                      child: Center(
-                        child: Text(
-                          'Oyuncu bulunamadı.',
-                          style: TextStyle(color: Colors.white70),
+      // Üst bantta solda geri (ör. Kariyerim'den profile dönüş).
+      builder: (ctx) => BandBackPage(
+        theme: ActiveTournament.theme.value,
+        child: Scaffold(
+          backgroundColor: _bgDark,
+          body: FutureBuilder<List<Map<String, dynamic>>>(
+            future: future,
+            builder: (ctx, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Center(
+                  child: CircularProgressIndicator(color: _accent),
+                );
+              }
+              final rows = snap.data ?? const [];
+              if (rows.isEmpty) {
+                return SafeArea(
+                  child: Column(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          onPressed: () => Navigator.of(ctx).maybePop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white70,
+                          ),
+                          tooltip: 'Kapat',
                         ),
                       ),
-                    ),
-                  ],
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'Oyuncu bulunamadı.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final r = rows.first;
+              String str(String k) => (r[k] ?? '').toString().trim();
+              return PlayerCard(
+                playerPhone: key,
+                playerId: str('id'),
+                name: [
+                  str('name'),
+                  str('surname'),
+                ].where((e) => e.isNotEmpty).join(' '),
+                number: number,
+                photoUrl: str('photo_url'),
+                position: _positionLabel(
+                  str('main_position'),
+                  str('sub_position'),
                 ),
+                mainPosition: str('main_position'),
+                subPosition: _subPositionLabel(str('sub_position')),
+                birthDate: str('birth_date'),
+                height: (r['height'] as num?)?.toInt(),
+                weight: (r['weight'] as num?)?.toInt(),
+                seasons: const [],
+                initialSeasonId: '',
               );
-            }
-            final r = rows.first;
-            String str(String k) => (r[k] ?? '').toString().trim();
-            return PlayerCard(
-              playerPhone: key,
-              playerId: str('id'),
-              name: [
-                str('name'),
-                str('surname'),
-              ].where((e) => e.isNotEmpty).join(' '),
-              number: number,
-              photoUrl: str('photo_url'),
-              position: _positionLabel(
-                str('main_position'),
-                str('sub_position'),
-              ),
-              mainPosition: str('main_position'),
-              subPosition: _subPositionLabel(str('sub_position')),
-              birthDate: str('birth_date'),
-              height: (r['height'] as num?)?.toInt(),
-              weight: (r['weight'] as num?)?.toInt(),
-              seasons: const [],
-              initialSeasonId: '',
-            );
-          },
+            },
+          ),
         ),
       ),
     ),
@@ -199,9 +204,11 @@ class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
 
   late final Future<List<_GoalClip>> _goals = _loadGoals();
+  late final Future<List<_GoalClip>> _assists = _loadGoals(assists: true);
 
-  /// Açık gol satırı (dar listede dokununca ayrıntısı açılır).
-  String? _openGoal;
+  /// İstatistik sekmesinde Goller (0) / Asistler (1).
+  int _statTab = 0;
+  late final Future<_StarPhotos> _photos = _loadPhotos();
 
   /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
   int _tab = 0;
@@ -240,6 +247,197 @@ class _PlayerCardState extends State<PlayerCard> {
       ? _bgDark
       : Colors.white;
 
+  /// Fotoğraflar sekmesi: futbolcunun "Bu benim" ile yıldızladığı maç
+  /// fotoğrafları. Yeni özellik: admin ve deneme hesapları (ayar açılınca
+  /// herkes) görür; izin yoksa fotoğraflar yalnız sahibine açıktır (RLS).
+  bool get _showPhotosTab {
+    if (_cardPlayerId.isEmpty) return false;
+    try {
+      return playerPosterAllowed(AppSession.of(context).value);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  int get _photosTabIndex => _showPositionsTab ? 5 : 4;
+
+  bool get _isOwnCard {
+    try {
+      return AppSession.of(context).value.playerId == _cardPlayerId;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<_StarPhotos> _loadPhotos() async {
+    final pid = _cardPlayerId;
+    if (pid.isEmpty) return const _StarPhotos(urls: [], public: true);
+    var public = true;
+    var urls = <String>[];
+    try {
+      public =
+          await _sb.rpc('player_photos_public', params: {'p_player_id': pid})
+              as bool? ??
+          true;
+    } catch (_) {}
+    try {
+      urls = await loadStarredPhotos(pid);
+    } catch (_) {}
+    return _StarPhotos(urls: urls, public: public);
+  }
+
+  Widget _photosTab() {
+    return FutureBuilder<_StarPhotos>(
+      future: _photos,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final d = snap.data ?? const _StarPhotos(urls: [], public: true);
+        final own = _isOwnCard;
+        Widget note(IconData icon, String text, Color c) => Container(
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: c),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12.5,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (own && !d.public)
+              note(
+                Icons.lock_outline_rounded,
+                'Yalnızca sen görüyorsun. Fotoğraf iznin olmadığı için '
+                'başkalarına kapalı; izin verirsen profilinde herkese açılır.',
+                const Color(0xFF38BDF8),
+              )
+            else if (own)
+              note(
+                Icons.public_rounded,
+                'Profilinde herkese açık. Maç albümünde ⭐ ile eklenir, '
+                'tekrar basınca çıkar.',
+                const Color(0xFF34D399),
+              ),
+            if (d.urls.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  own
+                      ? 'Henüz fotoğrafın yok. Maç albümünde kendini bulduğun '
+                            'fotoğrafa ⭐ koy, buraya eklensin.'
+                      : 'Henüz fotoğraf yok.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white60),
+                ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${d.urls.length} FOTOĞRAF',
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    if (canShowPlayerPoster(context, _cardPlayerId))
+                      TextButton(
+                        onPressed: _openSeasonPoster,
+                        child: Text(
+                          'Afiş yap ›',
+                          style: TextStyle(
+                            color: _tone,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                ),
+                itemCount: d.urls.length,
+                itemBuilder: (context, i) => GestureDetector(
+                  onTap: () => _openPhotos(d.urls, i),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: WebSafeImage(url: d.urls[i], fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  void _openPhotos(List<String> urls, int start) {
+    final page = PageController(initialPage: start);
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(
+                backgroundColor: Colors.black,
+                iconTheme: const IconThemeData(color: Colors.white),
+              ),
+              body: PageView.builder(
+                controller: page,
+                itemCount: urls.length,
+                itemBuilder: (_, i) => InteractiveViewer(
+                  maxScale: 4,
+                  child: Center(
+                    child: WebSafeImage(
+                      url: urls[i],
+                      width: double.infinity,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+        .whenComplete(page.dispose);
+  }
+
   /// Alt çizgili sekme çubuğu (takım sayfası ve maç detayıyla aynı).
   Widget _tabBar(int goalCount) => TeamPageTabBar(
     index: _tab,
@@ -247,10 +445,14 @@ class _PlayerCardState extends State<PlayerCard> {
       'Özet',
       'Maçlar',
       'Kariyer',
-      goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
+      'İstatistik',
       if (_showPositionsTab) 'Mevki',
+      if (_showPhotosTab) 'Fotoğraflar',
     ],
     indicatorColor: _tone,
+    // Çok sekmede ve büyük yazı boyutunda yazılar küçülüp üst üste
+    // binmesin: sekmeler yana kayar, aralarında ince ayraç.
+    scrollable: true,
     onChanged: (i) => setState(() => _tab = i),
   );
 
@@ -543,29 +745,32 @@ class _PlayerCardState extends State<PlayerCard> {
 
   /// Oyuncunun onaylı gol videoları, en yeni maç üstte. Kesit oyuncuya
   /// (player_id) ya da oyuncunun golüne (match_event_id) bağlıdır.
-  Future<List<_GoalClip>> _loadGoals() async {
+  /// Gol videoları; [assists] ise asist yaptığı gollerin videoları.
+  Future<List<_GoalClip>> _loadGoals({bool assists = false}) async {
     final pid = await _resolvePlayerId(widget.playerPhone.trim());
     if (pid == null || pid.isEmpty) return const [];
     const cols =
         'id, match_id, minute, added_minute, video_id, start_sec, end_sec, description, '
         'player_id, clip_url, story_url';
     final rows = <String, Map<String, dynamic>>{};
-    try {
-      final res = await _sb
-          .from('match_highlights')
-          .select(cols)
-          .eq('status', 'approved')
-          .eq('kind', 'goal')
-          .eq('player_id', pid);
-      for (final r in res) {
-        rows[r['id'].toString()] = r;
-      }
-    } catch (_) {}
+    if (!assists) {
+      try {
+        final res = await _sb
+            .from('match_highlights')
+            .select(cols)
+            .eq('status', 'approved')
+            .eq('kind', 'goal')
+            .eq('player_id', pid);
+        for (final r in res) {
+          rows[r['id'].toString()] = r;
+        }
+      } catch (_) {}
+    }
     try {
       final ev = await _sb
           .from('match_events')
           .select('id')
-          .eq('player_id', pid)
+          .eq(assists ? 'assist_player_id' : 'player_id', pid)
           .eq('event_type', 'goal')
           .not('is_own_goal', 'is', true);
       final ids = [for (final e in ev) e['id'].toString()];
@@ -579,7 +784,7 @@ class _PlayerCardState extends State<PlayerCard> {
         for (final r in res) {
           // Kesit başka bir oyuncuya atanmışsa onun golüdür.
           final owner = (r['player_id'] ?? '').toString();
-          if (owner.isNotEmpty && owner != pid) continue;
+          if (!assists && owner.isNotEmpty && owner != pid) continue;
           rows[r['id'].toString()] = r;
         }
       }
@@ -960,10 +1165,12 @@ class _PlayerCardState extends State<PlayerCard> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    if (_tab == 4 && _showPositionsTab)
+                    if (_showPhotosTab && _tab == _photosTabIndex)
+                      _photosTab()
+                    else if (_tab == 4 && _showPositionsTab)
                       PlayerPositionsTab(playerId: _cardPlayerId, accent: _tone)
                     else if (_tab == 3)
-                      _goalsTab()
+                      _statsTab()
                     else if (loading)
                       const Padding(
                         padding: EdgeInsets.all(24),
@@ -987,9 +1194,30 @@ class _PlayerCardState extends State<PlayerCard> {
 
   /// Goller: dar satırlar (dakika, maç, tarih); dokununca ayrıntı açılır,
   /// videoya dokununca gol kesiti uygulama içi oynatıcıda açılır.
-  Widget _goalsTab() {
+  /// İstatistik: Goller / Asistler alt sekmesi ve altında videolar.
+  Widget _statsTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+          child: TeamPageTabBar(
+            filled: true,
+            index: _statTab,
+            labels: const ['Goller', 'Asistler'],
+            indicatorColor: _tone,
+            onChanged: (i) => setState(() => _statTab = i),
+          ),
+        ),
+        _goalsTab(assists: _statTab == 1),
+      ],
+    );
+  }
+
+  Widget _goalsTab({bool assists = false}) {
     return FutureBuilder<List<_GoalClip>>(
-      future: _goals,
+      key: ValueKey(assists),
+      future: assists ? _assists : _goals,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const Padding(
@@ -1002,10 +1230,10 @@ class _PlayerCardState extends State<PlayerCard> {
           return Container(
             padding: const EdgeInsets.all(18),
             decoration: _panel(),
-            child: const Text(
-              'Henüz gol videosu yok.',
+            child: Text(
+              assists ? 'Henüz asist videosu yok.' : 'Henüz gol videosu yok.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: _mid),
+              style: const TextStyle(color: _mid),
             ),
           );
         }
@@ -1017,8 +1245,9 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
+  /// Haber listesi gibi tek satır: dakika, maç ve tarih; sağda kesitin
+  /// küçük görseli. Dokununca gol açılır (paylaşım düğmeleri orada).
   Widget _goalRow(_GoalClip g) {
-    final open = _openGoal == g.id;
     final score = g.homeScore == null || g.awayScore == null
         ? '–'
         : '${g.homeScore}–${g.awayScore}';
@@ -1034,216 +1263,100 @@ class _PlayerCardState extends State<PlayerCard> {
         color: Colors.white.withValues(alpha: 0.04),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: open
-                ? _tone.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.07),
-          ),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: () => setState(() => _openGoal = open ? null : g.id),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _tone,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        g.minute != null
-                            ? minuteLabel(g.minute, g.addedMinute)
-                            : 'Gol',
-                        style: TextStyle(
-                          color: _on(_tone),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
+        child: InkWell(
+          onTap: () => openYoutubeClip(
+            context,
+            videoId: g.videoId,
+            startSec: g.startSec,
+            endSec: g.endSec,
+            clipUrl: g.clipUrl,
+            storyUrl: g.storyUrl,
+            title: title,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _tone,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    g.minute != null
+                        ? minuteLabel(g.minute, g.addedMinute)
+                        : 'Gol',
+                    style: TextStyle(
+                      color: _on(_tone),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${shortTeamName(g.home)} $score '
-                            '${shortTeamName(g.away)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          if (when.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              when,
-                              style: const TextStyle(
-                                color: _mid,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    AnimatedRotation(
-                      turns: open ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Icon(
-                        Icons.expand_more_rounded,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            if (open)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    GestureDetector(
-                      onTap: () => openYoutubeClip(
-                        context,
-                        videoId: g.videoId,
-                        startSec: g.startSec,
-                        endSec: g.endSec,
-                        clipUrl: g.clipUrl,
-                        storyUrl: g.storyUrl,
-                        title: title,
-                      ),
-                      child: BroadcastThumb(videoId: g.videoId, radius: 12),
-                    ),
-                    _goalShareButton(g),
-                    if (g.description.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        g.description,
+                        '${shortTeamName(g.home)} $score '
+                        '${shortTeamName(g.away)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12.5,
-                          height: 1.35,
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.25,
                         ),
                       ),
-                    ],
-                    if (g.league.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.emoji_events_outlined,
-                            size: 13,
+                      if (when.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          when,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _mid,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      if (g.league.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          g.league,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
                             color: _tone,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
                           ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              g.league,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: _mid,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-          ],
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 104,
+                  child: BroadcastThumb(videoId: g.videoId, radius: 10),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
-  }
-
-  /// Gol kesitinin hikâye MP4'ü varsa Instagram'da paylaş (uygulama
-  /// yüklüyse; MP4 kesitleri açık değilse yalnız admin).
-  Widget _goalShareButton(_GoalClip g) {
-    final url = (g.storyUrl ?? '').trim();
-    if (url.isEmpty) return const SizedBox.shrink();
-    if (!AppSettings.goalClipMp4Enabled.value &&
-        !AppSession.of(context).value.isAdmin) {
-      return const SizedBox.shrink();
-    }
-    return FutureBuilder<bool>(
-      future: _igAvailable,
-      builder: (context, snap) {
-        if (snap.data != true) return const SizedBox.shrink();
-        final busy = _sharingGoal == g.id;
-        return Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: FilledButton.icon(
-            onPressed: _sharingGoal != null ? null : () => _shareGoal(g, url),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD62976),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 42),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            icon: busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.ios_share_rounded, size: 20),
-            label: const Text(
-              'Instagram\'da paylaş',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  late final Future<bool> _igAvailable = InstagramShare.isAvailable();
-  String? _sharingGoal;
-
-  /// Hikâye MP4'ü indirilir, Instagram'ın hikâye ekranında açılır.
-  Future<void> _shareGoal(_GoalClip g, String url) async {
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sharingGoal = g.id);
-    try {
-      final r = await http.get(Uri.parse(url));
-      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      final ok = await InstagramShare.shareVideo(r.bodyBytes, story: true);
-      if (!ok) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Instagram açılamadı.')),
-        );
-      }
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
-      );
-    } finally {
-      if (mounted) setState(() => _sharingGoal = null);
-    }
   }
 
   BoxDecoration _panel() => BoxDecoration(
@@ -1281,7 +1394,33 @@ class _PlayerCardState extends State<PlayerCard> {
       ),
     );
 
+    // Fotoğrafın kenarları zemine erir (alt ve yanlar saydamlaşır).
+    Widget faded(Widget child) => ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, Colors.white, Colors.transparent],
+        stops: [0, 0.5, 0.94],
+      ).createShader(r),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => const LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.white,
+            Colors.white,
+            Colors.transparent,
+          ],
+          stops: [0.04, 0.28, 0.72, 0.96],
+        ).createShader(r),
+        child: child,
+      ),
+    );
+
+    const heroHeight = 260.0;
     return Container(
+      height: topInset + heroHeight,
       decoration: BoxDecoration(
         // Turnuva renginin koyulaştırılmış degradesi; beyaz yazı okunur kalır.
         gradient: LinearGradient(
@@ -1293,93 +1432,124 @@ class _PlayerCardState extends State<PlayerCard> {
           ],
         ),
       ),
-      // Tam ekran: üst bölüm durum çubuğunun altına uzanır; kapat düğmesi
-      // fotoğraf satırının üstüne biner, bölüm dar kalır.
-      padding: EdgeInsets.fromLTRB(16, topInset + 12, 16, 14),
+      // Büyük vitrin: fotoğraf üst bölüme yayılır, kenarları zemine erir; ad
+      // fotoğrafın altına biner. Fotoğraf yoksa baş harfler.
       child: Stack(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (var i = 0; i < crests.length && i < 3; i++) ...[
-                            if (i > 0) const SizedBox(height: 6),
-                            crest(crests[i]),
-                          ],
-                        ],
+          Positioned(
+            top: topInset,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: photo.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 40),
+                      child: Text(
+                        _initials(name),
+                        style: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 72,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    )
+                  : faded(
+                      // Bölümden biraz küçük (ad ve armalar ferah kalsın).
+                      SizedBox(
+                        height: heroHeight * 0.88,
+                        width: heroHeight * 0.88 * 0.82,
+                        child: WebSafeImage(
+                          url: photo,
+                          fit: BoxFit.cover,
+                          fallbackIconSize: 32,
+                        ),
                       ),
                     ),
-                  ),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 84,
-                        height: 108,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: _bgDark,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _tone, width: 2),
-                        ),
-                        child: photo.isEmpty
-                            ? Center(
-                                child: Text(
-                                  _initials(name),
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              )
-                            : WebSafeImage(
-                                url: photo,
-                                fit: BoxFit.cover,
-                                fallbackIconSize: 32,
-                              ),
-                      ),
-                      if (widget.playerId.isNotEmpty)
-                        Positioned(
-                          top: -12,
-                          right: -12,
-                          child: _IdentityMenu(
-                            playerId: widget.playerId,
-                            playerName: widget.name,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const Expanded(child: SizedBox()),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  height: 1.1,
-                ),
-              ),
-            ],
+            ),
           ),
           Positioned(
-            top: -10,
-            right: -8,
+            left: 16,
+            top: topInset + 12,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < crests.length && i < 3; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  crest(crests[i]),
+                ],
+              ],
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 14,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                      shadows: [Shadow(color: Colors.black87, blurRadius: 12)],
+                    ),
+                  ),
+                ),
+                if (widget.playerId.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _IdentityMenu(
+                    playerId: widget.playerId,
+                    playerName: widget.name,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Başkası takip edebilir (kendi profilinde yıldız yok).
+          if (_cardPlayerId.isNotEmpty &&
+              _cardPlayerId != AppSession.of(context).value.playerId)
+            Positioned(
+              top: topInset + 52,
+              right: 12,
+              // Yalnız yıldız; eklendi/çıkarıldı bilgisi balonda.
+              child: FollowStar(
+                kind: FollowKind.player,
+                id: _cardPlayerId,
+                size: 28,
+                idleColor: Colors.white,
+              ),
+            ),
+          // Sezon afişi: futbolcu kendi profilinde, yöneticiler her profilde.
+          if (canShowPlayerPoster(context, _cardPlayerId))
+            Positioned(
+              top:
+                  topInset +
+                  (_cardPlayerId != AppSession.of(context).value.playerId
+                      ? 96
+                      : 52),
+              right: 8,
+              child: IconButton(
+                tooltip: 'Sezon afişini paylaş',
+                onPressed: _openSeasonPoster,
+                icon: const Icon(
+                  Icons.ios_share_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+            ),
+          Positioned(
+            top: topInset + 2,
+            right: 8,
             child: IconButton(
               onPressed: () => Navigator.of(context).maybePop(),
               icon: const Icon(Icons.close_rounded, color: Colors.white70),
@@ -1387,6 +1557,39 @@ class _PlayerCardState extends State<PlayerCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Bu sezonun (en yeni turnuvanın) afişi; sayılar Özet'tekiyle aynı.
+  Future<void> _openSeasonPoster() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final data = await _future;
+    if (!mounted) return;
+    if (data.current.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Bu sezon oynadığı bir turnuva yok.')),
+      );
+      return;
+    }
+    final e = data.current.first;
+    await showPlayerSeasonPoster(
+      context,
+      playerId: _cardPlayerId,
+      name: widget.name,
+      number: widget.number,
+      photoUrl: widget.photoUrl,
+      seasonId: e.seasonId,
+      leagueName: e.leagueName,
+      leagueLogo: e.leagueLogo,
+      teamId: e.teamId,
+      teamName: e.teamName,
+      teamLogo: e.teamLogo,
+      stats: (
+        matches: e.totals.matches,
+        goals: e.totals.goals,
+        assists: e.totals.assists,
+        motm: e.totals.motm,
       ),
     );
   }
@@ -1694,16 +1897,16 @@ class _PlayerCardState extends State<PlayerCard> {
                     stat('${t.matches}', 'Maç', Colors.white),
                     stat('${t.starts}', 'İlk 11', Colors.white),
                     stat("${t.minutes}'", 'Dakika', Colors.white),
-                    stat('${t.goals}', 'Gol', _tone),
+                    stat('${t.motm}', 'Maçın adamı', _yellow),
                   ],
                 ),
                 const SizedBox(height: 14),
                 Row(
                   children: [
+                    stat('${t.goals}', 'Gol', _tone),
                     stat('${t.assists}', 'Asist', _purple),
                     stat('${t.yellow}', 'Sarı kart', _yellow),
                     stat('${t.red}', 'Kırmızı kart', _red),
-                    stat('${t.motm}', 'Maçın adamı', _yellow),
                   ],
                 ),
               ],
@@ -2507,6 +2710,15 @@ class _SeasonNode {
   final String sortKey;
   final _StatTotals totals;
   final List<String> teams;
+}
+
+class _StarPhotos {
+  const _StarPhotos({required this.urls, required this.public});
+
+  final List<String> urls;
+
+  /// Fotoğraf izni var mı (yoksa yalnız sahibi görür).
+  final bool public;
 }
 
 class _StatTotals {

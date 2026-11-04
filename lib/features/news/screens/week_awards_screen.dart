@@ -540,25 +540,11 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     }
   }
 
-  /// 11'i puandan doldurur: her yere o hattın en yüksek puanlısı; hat
-  /// boşsa (mevkisi girilmemiş) kalanların en iyisi.
+  /// 11'i boş başlatır: sorumlu her yere dokunup seçer (liste o mevkinin
+  /// en yüksek puanlısından başlar).
   void _autoEleven() {
     final total = formationCounts(_formation).fold<int>(0, (a, b) => a + b) + 1;
-    final used = <String>{};
-    final out = <String?>[];
-    for (var i = 0; i < total; i++) {
-      final line = formationLineOf(_formation, i);
-      _P? best = _pool
-          .where((p) => p.line == line && !used.contains(p.id))
-          .firstOrNull;
-      // Kaleye yalnız kaleci; saha içine kaleci konmaz.
-      best ??= line == 0
-          ? null
-          : _pool.where((p) => p.line != 0 && !used.contains(p.id)).firstOrNull;
-      if (best != null) used.add(best.id);
-      out.add(best?.id);
-    }
-    _eleven = out;
+    _eleven = List<String?>.filled(total, null);
   }
 
   void _setFormation(String f) {
@@ -581,20 +567,13 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
       for (var i = 0; i < total; i++) {
         if (out[i] != null) continue;
         final line = formationLineOf(f, i);
-        final pick =
-            rest
-                .where(
-                  (id) =>
-                      !used.contains(id) &&
-                      (line == 0) == (_byId[id]?.line == 0),
-                )
-                .firstOrNull ??
-            _pool
-                .where(
-                  (p) => !used.contains(p.id) && (p.line == 0) == (line == 0),
-                )
-                .firstOrNull
-                ?.id;
+        // Açılan yer boş kalır; yalnız önceden seçilmiş oyuncular yer değiştirir.
+        final pick = rest
+            .where(
+              (id) =>
+                  !used.contains(id) && (line == 0) == (_byId[id]?.line == 0),
+            )
+            .firstOrNull;
         if (pick != null) {
           out[i] = pick;
           used.add(pick);
@@ -1068,7 +1047,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     setState(() => _saving = true);
     try {
       final b = _bulletin();
-      // Eski sürümler haberi düz gösterir: kapak olarak ilk kartın görseli.
+      // Eski sürümler haberi düz gösterir: kapak olarak ortak kapak görseli.
       String? image;
       try {
         // Önizleme henüz çizilmediyse sayfanın sonuna inip çizilmesini bekle.
@@ -1292,7 +1271,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Oyuncuya dokunup değiştir. Mevkisi girilmemiş oyuncular orta sahada önerilir.',
+                'Boş yere dokun: liste o mevkinin en yüksek puanlısından başlar, sonra diğer mevkiler gelir.',
                 style: TextStyle(color: kAdminMuted, fontSize: 12),
               ),
             ],
@@ -1504,7 +1483,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     ),
   );
 
-  /// Kartların yayınlanacak hâli; ilki eski sürümler için kapak olur.
+  /// Kapak ve kartların yayınlanacak hâli; kapak eski sürümlerin görseli.
   Widget _preview() {
     final b = _bulletin();
     final ratings = weekAwardsShowRatings();
@@ -1528,18 +1507,26 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
         ),
     ];
     if (cards.isEmpty) return const _Empty('Bültende henüz kart yok.');
+    // Önde haberin ortak kapağı; eski sürümler bunu görsel olarak görür.
+    final cover = RepaintBoundary(
+      key: _shotKey,
+      child: AspectRatio(
+        aspectRatio: 5 / 4,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: WeekAwardsCover(data: b),
+        ),
+      ),
+    );
     return SizedBox(
       height: 300,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: cards.length,
+        itemCount: cards.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => SizedBox(
-          width: 240,
-          child: i == 0
-              ? RepaintBoundary(key: _shotKey, child: cards[i])
-              : cards[i],
-        ),
+        itemBuilder: (context, i) => i == 0
+            ? Center(child: SizedBox(width: 340, child: cover))
+            : SizedBox(width: 240, child: cards[i - 1]),
       ),
     );
   }

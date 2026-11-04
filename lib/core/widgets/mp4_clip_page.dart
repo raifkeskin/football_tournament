@@ -1,8 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
 import '../services/instagram_share.dart';
+import '../services/whatsapp_share.dart';
+import 'app_name_band.dart';
+import 'youtube_player_page.dart' show resetPlayerOrientation;
 
 /// Kendi depomuzdaki (yayıncının teslim ettiği) MP4 kesiti tam ekran
 /// oynatır. [endSec] başlangıçtan büyükse o saniyede durur; değilse dosya
@@ -35,21 +40,71 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
   bool _ready = false;
   bool _ended = false;
   String? _error;
-  bool _sharing = false;
+
+  /// Tam ekran düğmesiyle yatay tam ekran (telefon yan çevrilince de).
+  bool _full = false;
+  bool? _immersive;
+  Route<dynamic>? _route;
+  bool? _bandHidden;
+
+  void _setFull(bool full) {
+    setState(() => _full = full);
+    if (kIsWeb) return;
+    SystemChrome.setPreferredOrientations(
+      full
+          ? const [
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          // Yalnız serbest bırakmak ekranı yatayda bırakır: önce dikeye.
+          : const [DeviceOrientation.portraitUp],
+    );
+  }
+
+  /// Tam ekranda sistem çubukları ve uygulamanın turnuva bandı gizlenir.
+  void _syncFill(bool fill) {
+    if (!kIsWeb && _immersive != fill) {
+      _immersive = fill;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        SystemChrome.setEnabledSystemUIMode(
+          fill ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+        );
+      });
+    }
+    final route = ModalRoute.of(context);
+    if (route == null || (_bandHidden == fill && _route == route)) return;
+    _route = route;
+    _bandHidden = fill;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      LeagueSwitchScope.setBandHidden(route, fill);
+    });
+  }
+
+  /// Paylaşım sürerken hangi düğme ('ig' / 'wa').
+  String? _sharing;
   late final Future<bool> _igAvailable = (widget.storyUrl ?? '').isEmpty
       ? Future.value(false)
       : InstagramShare.isAvailable();
 
-  /// Hikâye MP4'ü indirilir, Instagram'ın hikâye ekranında açılır.
-  Future<void> _shareStory() async {
+  /// Hikâye MP4'ü (bir kez indirilir; iki düğme de aynı dosyayı paylaşır).
+  Uint8List? _story;
+
+  /// Hikâye MP4'ünü indirip Instagram hikâyesinde ya da WhatsApp'ta açar.
+  Future<void> _share(String target) async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sharing = true);
+    final origin = WhatsAppShare.originOf(context);
+    setState(() => _sharing = target);
     if (_c.value.isPlaying) await _c.pause();
     try {
-      final r = await http.get(Uri.parse(widget.storyUrl!));
-      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
-      final ok = await InstagramShare.shareVideo(r.bodyBytes, story: true);
-      if (!ok) {
+      var bytes = _story;
+      if (bytes == null) {
+        final r = await http.get(Uri.parse(widget.storyUrl!));
+        if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+        bytes = _story = r.bodyBytes;
+      }
+      if (target == 'wa') {
+        await WhatsAppShare.shareVideo(bytes, origin: origin);
+      } else if (!await InstagramShare.shareVideo(bytes, story: true)) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Instagram açılamadı.')),
         );
@@ -59,7 +114,7 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
         const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
       );
     } finally {
-      if (mounted) setState(() => _sharing = false);
+      if (mounted) setState(() => _sharing = null);
     }
   }
 
@@ -110,11 +165,88 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
   void dispose() {
     _c.removeListener(_tick);
     _c.dispose();
+    resetPlayerOrientation();
+    LeagueSwitchScope.setBandHidden(_route, false);
     super.dispose();
   }
 
+  /// Yatay tam ekran: yalnız video, sağ üstte küçült.
+  Widget _fullScreen() => Scaffold(
+    backgroundColor: Colors.black,
+    body: Stack(
+      children: [
+        Center(
+          child: AspectRatio(
+            aspectRatio: _c.value.aspectRatio,
+            child: GestureDetector(
+              onTap: () => _c.value.isPlaying
+                  ? _c.pause()
+                  : _ended
+                  ? _replay()
+                  : _c.play(),
+              child: VideoPlayer(_c),
+            ),
+          ),
+        ),
+        if (!_c.value.isPlaying)
+          IgnorePointer(
+            child: Center(
+              child: Icon(
+                _ended ? Icons.replay_rounded : Icons.play_circle_fill_rounded,
+                size: 64,
+                color: Colors.white70,
+              ),
+            ),
+          ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: VideoProgressIndicator(
+            _c,
+            allowScrubbing: true,
+            padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+            colors: const VideoProgressColors(
+              playedColor: Color(0xFF10B981),
+              bufferedColor: Colors.white24,
+              backgroundColor: Colors.white12,
+            ),
+          ),
+        ),
+        Positioned(
+          top: 12,
+          right: 12,
+          child: IconButton.filledTonal(
+            tooltip: 'Küçült',
+            onPressed: () => _setFull(false),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black54,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.fullscreen_exit_rounded),
+          ),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final fill = _ready && (_full || landscape);
+    _syncFill(fill);
+    // Tam ekrandayken geri tuşu önce tam ekrandan çıkarır.
+    return PopScope(
+      canPop: !_full,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _full) _setFull(false);
+      },
+      child: fill ? _fullScreen() : _page(),
+    );
+  }
+
+  Widget _page() {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -157,6 +289,23 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
                                 Icons.play_circle_fill_rounded,
                                 size: 64,
                                 color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                        if (!_ended)
+                          Positioned(
+                            right: 6,
+                            bottom: 6,
+                            child: IconButton(
+                              tooltip: 'Tam ekran',
+                              onPressed: () => _setFull(true),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.black45,
+                              ),
+                              icon: const Icon(
+                                Icons.fullscreen_rounded,
+                                color: Colors.white,
+                                size: 28,
                               ),
                             ),
                           ),
@@ -203,43 +352,85 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
                       backgroundColor: Colors.white12,
                     ),
                   ),
-                  FutureBuilder<bool>(
-                    future: _igAvailable,
-                    builder: (context, snap) {
-                      if (snap.data != true) return const SizedBox.shrink();
-                      return Padding(
+                  if ((widget.storyUrl ?? '').isNotEmpty)
+                    FutureBuilder<bool>(
+                      future: _igAvailable,
+                      builder: (context, snap) => Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: FilledButton.icon(
-                          onPressed: _sharing ? null : _shareStory,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFD62976),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(0, 46),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        child: Row(
+                          children: [
+                            if (snap.data == true) ...[
+                              Expanded(
+                                child: _ShareButton(
+                                  label: 'Instagram',
+                                  icon: Icons.camera_alt_outlined,
+                                  color: const Color(0xFFD62976),
+                                  busy: _sharing == 'ig',
+                                  onPressed: _sharing == null
+                                      ? () => _share('ig')
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            Expanded(
+                              child: _ShareButton(
+                                label: 'WhatsApp',
+                                icon: Icons.chat_rounded,
+                                color: const Color(0xFF1DA851),
+                                busy: _sharing == 'wa',
+                                onPressed: _sharing == null
+                                    ? () => _share('wa')
+                                    : null,
+                              ),
                             ),
-                          ),
-                          icon: _sharing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.ios_share_rounded),
-                          label: const Text(
-                            'Instagram hikâyesinde paylaş',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
+                          ],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
                 ],
               ),
       ),
     );
   }
+}
+
+class _ShareButton extends StatelessWidget {
+  const _ShareButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => FilledButton.icon(
+    onPressed: onPressed,
+    style: FilledButton.styleFrom(
+      backgroundColor: color,
+      foregroundColor: Colors.white,
+      disabledBackgroundColor: color.withValues(alpha: 0.5),
+      disabledForegroundColor: Colors.white70,
+      minimumSize: const Size(0, 46),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    icon: busy
+        ? const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          )
+        : Icon(icon),
+    label: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+  );
 }

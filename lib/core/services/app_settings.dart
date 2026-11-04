@@ -20,6 +20,9 @@ class AppSettings {
   static const _kSuspendedTab = 'suspended_tab_enabled';
   static const _kWeeklyPicks = 'weekly_picks_enabled';
   static const _kWeekAwards = 'week_awards_enabled';
+  static const _kPlayerPoster = 'player_poster_enabled';
+  static const _kPlayerPosterUsers = 'player_poster_users';
+  static const _kMyWeek = 'my_week_enabled';
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
@@ -32,6 +35,8 @@ class AppSettings {
   static const _kPhotoStandard = 'photo_standard_enabled';
   static const _kRosterIdScan = 'roster_id_scan_enabled';
   static const _kGoalClipMp4 = 'goal_clip_mp4_enabled';
+  static const _kFollowList = 'follow_list_enabled';
+  static const _kSearch = 'search_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -90,6 +95,17 @@ class AppSettings {
   /// hazırlar. Veritabanı da aynı kuralı uygular.
   static final weekAwardsEnabled = ValueNotifier<bool>(false);
 
+  /// Bireysel sezon afişi ve maç fotoğrafında "Bu benim" yıldızı herkese
+  /// açık mı; kapalıyken yalnız admin görür.
+  static final playerPosterEnabled = ValueNotifier<bool>(false);
+
+  /// Kapalıyken de açık olan deneme hesapları (auth kullanıcı id'leri).
+  static final playerPosterUsers = ValueNotifier<Set<String>>({});
+
+  /// Ana sayfada "Bu hafta sen" kartı ve selamlamadaki profil kısayolu
+  /// herkese açık mı; kapalıyken yalnız admin görür.
+  static final myWeekEnabled = ValueNotifier<bool>(false);
+
   /// Hakemler (hakem listesi, maça hakem atama, hakem girişi) herkese açık
   /// mı; kapalıyken yalnız admin. Veritabanı da aynı kuralı uygular.
   static final refereesEnabled = ValueNotifier<bool>(false);
@@ -131,6 +147,14 @@ class AppSettings {
   /// Gol kesitlerinin MP4 hâli (YouTube yerine dosya oynar) ve "Instagram
   /// hikâyesinde paylaş" herkese açık mı (admin her zaman görür).
   static final goalClipMp4Enabled = ValueNotifier<bool>(false);
+
+  /// Takip Listem: turnuva / takım / futbolcu yıldızla takip herkese açık
+  /// mı (admin her zaman görür).
+  static final followListEnabled = ValueNotifier<bool>(false);
+
+  /// Ana sayfada takım / futbolcu araması (bantta büyüteç) herkese açık mı
+  /// (admin her zaman görür).
+  static final searchEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -179,6 +203,16 @@ class AppSettings {
           weeklyPicksEnabled.value = r['value'] == true;
         } else if (r['key'] == _kWeekAwards) {
           weekAwardsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPlayerPoster) {
+          playerPosterEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPlayerPosterUsers) {
+          final v = r['value'];
+          playerPosterUsers.value = {
+            if (v is List)
+              for (final x in v) x.toString(),
+          };
+        } else if (r['key'] == _kMyWeek) {
+          myWeekEnabled.value = r['value'] == true;
         } else if (r['key'] == _kReferees) {
           refereesEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAdd) {
@@ -205,6 +239,10 @@ class AppSettings {
           rosterIdScanEnabled.value = r['value'] == true;
         } else if (r['key'] == _kGoalClipMp4) {
           goalClipMp4Enabled.value = r['value'] == true;
+        } else if (r['key'] == _kFollowList) {
+          followListEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kSearch) {
+          searchEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

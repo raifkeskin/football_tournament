@@ -4,9 +4,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/app_settings.dart';
+import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/instagram_share.dart';
+import '../../../core/services/photo_cutouts.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/app_logo.dart';
@@ -144,12 +147,13 @@ class _Head extends StatelessWidget {
 
 /// Kartın altındaki imza.
 class _Brand extends StatelessWidget {
-  const _Brand(this.u);
+  const _Brand(this.u, {this.align = MainAxisAlignment.center});
   final double u;
+  final MainAxisAlignment align;
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
+    mainAxisAlignment: align,
     children: [
       AppLogo(size: 5 * u),
       SizedBox(width: 1.6 * u),
@@ -193,12 +197,12 @@ class WeekElevenCard extends StatelessWidget {
   /// Her sıranın sahadaki yeri (0..1; y yukarıdan).
   static List<Offset> layout(String formation) {
     final counts = formationCounts(formation);
-    final out = <Offset>[const Offset(0.5, 0.89)];
+    final out = <Offset>[const Offset(0.5, 0.88)];
     final lines = counts.length;
     for (var li = 0; li < lines; li++) {
-      final y = lines == 1 ? 0.45 : 0.68 - li * (0.56 / (lines - 1));
+      final y = lines == 1 ? 0.45 : 0.68 - li * (0.61 / (lines - 1));
       final n = counts[li];
-      final step = math.min(0.25, 0.8 / n);
+      final step = math.min(0.25, 0.92 / n);
       for (var j = 0; j < n; j++) {
         out.add(Offset(0.5 + (j - (n - 1) / 2) * step, y));
       }
@@ -208,12 +212,27 @@ class WeekElevenCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PhotoCutouts.ensureLoaded();
+    final showCutouts = PhotoCutouts.visible(context);
+    return ValueListenableBuilder<Map<String, String>>(
+      valueListenable: PhotoCutouts.map,
+      builder: (context, cutouts, _) =>
+          _build(context, showCutouts ? cutouts : const {}),
+    );
+  }
+
+  Widget _build(BuildContext context, Map<String, String> cutouts) {
     return AspectRatio(
       aspectRatio: 4 / 5,
       child: LayoutBuilder(
         builder: (context, c) {
           final u = c.maxWidth / 100;
           final pos = layout(formation);
+          // Hatta kaç kişi varsa o kadar dar: adlar yan yana binmesin.
+          final perLine = <double, int>{};
+          for (final o in pos) {
+            perLine[o.dy] = (perLine[o.dy] ?? 0) + 1;
+          }
           final best = showRatings
               ? slots.map((s) => s?.rating ?? 0).fold<double>(0, math.max)
               : 0.0;
@@ -259,8 +278,8 @@ class WeekElevenCard extends StatelessWidget {
                   Positioned(
                     left: 4 * u,
                     right: 4 * u,
-                    top: 25 * u,
-                    bottom: 11 * u,
+                    top: 24 * u,
+                    bottom: 9.5 * u,
                     child: LayoutBuilder(
                       builder: (context, p) => Stack(
                         clipBehavior: Clip.none,
@@ -274,9 +293,11 @@ class WeekElevenCard extends StatelessWidget {
                             i++
                           )
                             Positioned(
-                              left: pos[i].dx * p.maxWidth - 11 * u,
-                              top: pos[i].dy * p.maxHeight - 6 * u,
-                              width: 22 * u,
+                              left:
+                                  pos[i].dx * p.maxWidth -
+                                  _w(u, p, perLine[pos[i].dy]!) / 2,
+                              top: pos[i].dy * p.maxHeight - 7 * u,
+                              width: _w(u, p, perLine[pos[i].dy]!),
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onTap: onTapSlot == null
@@ -285,6 +306,9 @@ class WeekElevenCard extends StatelessWidget {
                                 child: _PitchPlayer(
                                   u: u,
                                   slot: slots[i],
+                                  cutout:
+                                      cutouts[(slots[i]?.person.photo ?? '')
+                                          .trim()],
                                   showRating: showRatings,
                                   top: best > 0 && slots[i]?.rating == best,
                                 ),
@@ -297,7 +321,7 @@ class WeekElevenCard extends StatelessWidget {
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: 3.4 * u,
+                    bottom: 2.6 * u,
                     child: _Brand(u),
                   ),
                 ],
@@ -308,6 +332,17 @@ class WeekElevenCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Oyuncu kutusunun genişliği: hattaki komşusuna değmeyecek kadar.
+  static double _w(double u, BoxConstraints p, int n) =>
+      math.min(22 * u, p.maxWidth * math.min(0.25, 0.92 / n) - 0.8 * u);
+}
+
+/// Uzun adlar sahada kısalır: "Ersel Kahraman" → "E. KAHRAMAN".
+String _pitchName(String name) {
+  final w = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty);
+  if (name.trim().length <= 12 || w.length < 2) return name.trUpper;
+  return '${w.first.characters.first}. ${w.last}'.trUpper;
 }
 
 class _PitchPlayer extends StatelessWidget {
@@ -316,6 +351,7 @@ class _PitchPlayer extends StatelessWidget {
     required this.slot,
     required this.showRating,
     required this.top,
+    this.cutout,
   });
 
   final double u;
@@ -323,10 +359,13 @@ class _PitchPlayer extends StatelessWidget {
   final bool showRating;
   final bool top;
 
+  /// Dekupe varsa daire yerine o (maç detayındaki dizilişte olduğu gibi).
+  final String? cutout;
+
   @override
   Widget build(BuildContext context) {
     final s = slot;
-    final d = 12 * u;
+    final d = 9.5 * u;
     if (s == null) {
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -355,34 +394,63 @@ class _PitchPlayer extends StatelessWidget {
       children: [
         SizedBox(
           width: d + 5 * u,
-          height: d,
+          height: d * 1.2,
           child: Stack(
             clipBehavior: Clip.none,
-            alignment: Alignment.center,
+            alignment: Alignment.bottomCenter,
             children: [
-              Container(
-                width: d,
-                height: d,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  border: Border.all(color: Colors.white, width: 0.6 * u),
-                  boxShadow: [
-                    BoxShadow(
+              if ((cutout ?? '').isNotEmpty) ...[
+                Positioned(
+                  bottom: 0,
+                  child: Container(
+                    width: d,
+                    height: 2.6 * u,
+                    decoration: BoxDecoration(
                       color: Colors.black45,
-                      blurRadius: 2 * u,
-                      offset: Offset(0, u),
+                      borderRadius: BorderRadius.all(
+                        Radius.elliptical(d / 2, 1.3 * u),
+                      ),
+                      border: Border.all(color: color, width: 0.5 * u),
                     ),
-                  ],
+                  ),
                 ),
-                child: _net(
-                  s.person.photo,
-                  size: d,
-                  alignment: Alignment.topCenter,
-                  fallback: initials,
+                Positioned(
+                  bottom: u,
+                  child: Image.network(
+                    cutout!,
+                    height: d * 1.2 - u,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomCenter,
+                    filterQuality: FilterQuality.high,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
-              ),
+              ] else
+                Container(
+                  width: d,
+                  height: d * 1.2,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(1.6 * u),
+                    border: Border(
+                      bottom: BorderSide(color: color, width: 0.8 * u),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black45,
+                        blurRadius: 2 * u,
+                        offset: Offset(0, u),
+                      ),
+                    ],
+                  ),
+                  child: _net(
+                    s.person.photo,
+                    size: d * 1.2,
+                    alignment: Alignment.topCenter,
+                    fallback: initials,
+                  ),
+                ),
               if (showRating && s.rating != null)
                 Positioned(
                   right: -0.4 * u,
@@ -409,9 +477,9 @@ class _PitchPlayer extends StatelessWidget {
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            s.person.name.trUpper,
+            _pitchName(s.person.name),
             maxLines: 1,
-            style: _cond(3.3 * u).copyWith(
+            style: _cond(3 * u).copyWith(
               shadows: [Shadow(color: Colors.black87, blurRadius: u)],
             ),
           ),
@@ -433,7 +501,7 @@ class _PitchPlayer extends StatelessWidget {
               maxLines: 1,
               style: TextStyle(
                 color: const Color(0xFFD5F5E6),
-                fontSize: 2.3 * u,
+                fontSize: 2.1 * u,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.15 * u,
               ),
@@ -498,7 +566,9 @@ class _PitchPainter extends CustomPainter {
 
 // ------------------------------------------------------------- ödül kartı
 
-/// Tek en kartı: başlık, ödül renginde halkalı fotoğraf, ad, kısa bilgi.
+/// Tek en kartı. Takımı: fotoğraf tam kadraj; kişiye verilen enler (oyuncu,
+/// kaleci, centilmen, gol): solda eğik kesik fotoğraf, sağda başlık ve ad;
+/// maçı: iki arma ve skor.
 class WeekAwardCard extends StatelessWidget {
   const WeekAwardCard({
     super.key,
@@ -518,6 +588,8 @@ class WeekAwardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = award;
+    if (a.kind == AwardKind.team) return _fullBleed();
+    if (a.kind != AwardKind.match) return _split();
     final accent = a.kind.color;
     return AspectRatio(
       aspectRatio: 4 / 5,
@@ -681,6 +753,449 @@ class WeekAwardCard extends StatelessWidget {
     );
   }
 
+  /// Kartın satırları: "2 GOL" → GOL 2, "4-0" → SKOR 4-0. Kalecide ve
+  /// centilmende satır yok (centilmende FAIR PLAY rozeti).
+  List<(String, String)> _rows() {
+    final a = award;
+    if (a.kind == AwardKind.keeper || a.kind == AwardKind.fair) return const [];
+    final rows = <(String, String)>[];
+    for (final s in a.stats) {
+      final m = RegExp(r'^(\d+)\s+(.+)$').firstMatch(s.trim());
+      if (m != null) {
+        rows.add((m.group(2)!.trUpper, m.group(1)!));
+      }
+    }
+    if (showRatings && a.rating != null && a.kind == AwardKind.player) {
+      rows.add(('PUAN', a.rating!.toStringAsFixed(1)));
+    }
+    return rows;
+  }
+
+  Widget _photoFallback(double u, {bool team = false}) {
+    final a = award;
+    final bg = TeamPalette.of(a.team.color, null).background;
+    return ColoredBox(
+      color: bg,
+      child: Center(
+        child: team
+            ? _net(
+                a.team.logo,
+                size: 40 * u,
+                fit: BoxFit.contain,
+                fallback: Text(
+                  AwardPerson(id: '', name: a.team.short).initials,
+                  style: _cond(16 * u),
+                ),
+              )
+            : Text(a.person?.initials ?? '?', style: _cond(18 * u)),
+      ),
+    );
+  }
+
+  Widget _photo(
+    double u, {
+    Alignment alignment = Alignment.topCenter,
+    bool team = false,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    final url = award.photo.trim();
+    if (url.isEmpty) return _photoFallback(u, team: team);
+    Widget net(String src, Widget Function() onError) => Image.network(
+      src,
+      fit: fit,
+      alignment: alignment,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => onError(),
+    );
+    // Kart 1080 px basılır: varsa fotoğrafın büyük kopyası.
+    final hd = SupabaseImageUploadService.hdUrl(url);
+    Widget small() => net(url, () => _photoFallback(u, team: team));
+    return hd == url ? small() : net(hd, small);
+  }
+
+  /// Haftanın takımı: takım fotoğrafı bütün kartı kaplar.
+  Widget _fullBleed() {
+    final a = award;
+    final accent = a.kind.color;
+    final rival = a.home == null
+        ? null
+        : (a.home!.id == a.team.id ? a.away! : a.home!);
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final u = c.maxWidth / 100;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2 * u),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Takım fotoğrafı genelde yatay: kırpılmasın diye bütünü
+                // ortada, arkasında aynı fotoğrafın bulanık hâli.
+                if (a.photo.trim().isNotEmpty)
+                  ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: 6 * u,
+                      sigmaY: 6 * u,
+                    ),
+                    child: _photo(u, alignment: Alignment.center, team: true),
+                  ),
+                _photo(
+                  u,
+                  alignment: Alignment.center,
+                  team: true,
+                  fit: BoxFit.contain,
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xD9050C14),
+                        Color(0x00050C14),
+                        Color(0x00050C14),
+                        Color(0xBF050C14),
+                        Color(0xF2050C14),
+                      ],
+                      stops: [0, 0.27, 0.5, 0.75, 1],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 4.4 * u,
+                  right: 34 * u,
+                  top: 4 * u,
+                  child: _Head(
+                    u: u,
+                    league: league,
+                    logo: leagueLogo,
+                    week: week,
+                  ),
+                ),
+                Positioned(
+                  right: 4 * u,
+                  top: 3.4 * u,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'HAFTANIN',
+                        style: _cond(
+                          2.8 * u,
+                          color: accent,
+                        ).copyWith(letterSpacing: 0.8 * u),
+                      ),
+                      Text(
+                        a.kind.title.trUpper,
+                        style: _cond(9.4 * u, italic: true),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 4.4 * u,
+                  right: 4.4 * u,
+                  bottom: 4 * u,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _crest(a.team.logo, a.team.short, 11 * u),
+                          SizedBox(width: 2.6 * u),
+                          Expanded(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                a.team.short.trUpper,
+                                maxLines: 1,
+                                style: _cond(8.4 * u),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 1.6 * u),
+                      Wrap(
+                        spacing: 1.6 * u,
+                        runSpacing: 1.2 * u,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (rival != null)
+                            Text(
+                              '${a.score} · ${rival.short}'.trUpper,
+                              style: _cond(
+                                3.8 * u,
+                                color: const Color(0xFFCBD5E1),
+                              ).copyWith(letterSpacing: 0.3 * u),
+                            ),
+                          for (final st in a.stats) _chip(u, st, accent),
+                        ],
+                      ),
+                      SizedBox(height: 2.4 * u),
+                      Container(height: 0.3 * u, color: Colors.white24),
+                      SizedBox(height: 2 * u),
+                      _Brand(u, align: MainAxisAlignment.start),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _chip(double u, String text, Color accent) => Container(
+    padding: EdgeInsets.symmetric(horizontal: 2 * u, vertical: 0.6 * u),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(5 * u),
+      border: Border.all(color: accent.withValues(alpha: 0.8), width: 0.35 * u),
+    ),
+    child: Text(text.trUpper, style: _cond(3.2 * u, color: accent)),
+  );
+
+  /// Kişiye verilen enler: solda eğik kesik fotoğraf, sağda bilgiler.
+  Widget _split() {
+    final a = award;
+    final accent = a.kind.color;
+    final words = (a.person?.name ?? '').trim().split(RegExp(r'\s+'));
+    final first = words.length > 1
+        ? words.sublist(0, words.length - 1).join(' ')
+        : '';
+    final last = words.isEmpty ? '' : words.last;
+    final rows = _rows();
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final u = c.maxWidth / 100;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(2 * u),
+            child: ColoredBox(
+              color: const Color(0xFF0B1A1F),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 53 * u,
+                    child: ClipPath(
+                      clipper: const _SlantClipper(),
+                      child: _photo(u),
+                    ),
+                  ),
+                  Positioned(
+                    left: 47 * u,
+                    right: 4.4 * u,
+                    top: 4.4 * u,
+                    bottom: 3.8 * u,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    league.trUpper,
+                                    maxLines: 2,
+                                    textAlign: TextAlign.right,
+                                    style: _cond(3 * u, color: _gold),
+                                  ),
+                                  Text(
+                                    '$week. HAFTA',
+                                    style: _cond(
+                                      2.8 * u,
+                                      color: const Color(0xFFC8D3E6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: 1.8 * u),
+                            _crest(leagueLogo, league, 7 * u),
+                          ],
+                        ),
+                        const Spacer(),
+                        Text(
+                          'HAFTANIN',
+                          style: _cond(
+                            2.8 * u,
+                            color: accent,
+                          ).copyWith(letterSpacing: 0.8 * u),
+                        ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            a.kind.title.trUpper,
+                            maxLines: 1,
+                            style: _cond(
+                              9 * u,
+                              italic: true,
+                              color: a.kind == AwardKind.goal
+                                  ? accent
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 5 * u),
+                        if (first.isNotEmpty)
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              first.trUpper,
+                              maxLines: 1,
+                              style: _cond(
+                                5.4 * u,
+                                color: const Color(0xFFCBD5E1),
+                              ).copyWith(height: 1, letterSpacing: 0.3 * u),
+                            ),
+                          ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            last.trUpper,
+                            maxLines: 1,
+                            style: _cond(
+                              9.6 * u,
+                              color: accent,
+                              italic: true,
+                            ).copyWith(height: 1),
+                          ),
+                        ),
+                        SizedBox(height: 1.6 * u),
+                        Container(
+                          width: 14 * u,
+                          height: 0.6 * u,
+                          color: accent,
+                        ),
+                        SizedBox(height: 2 * u),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                a.team.short.trUpper,
+                                maxLines: 2,
+                                textAlign: TextAlign.right,
+                                style: _cond(
+                                  3.4 * u,
+                                  color: const Color(0xFFE2E8F0),
+                                ).copyWith(letterSpacing: 0.3 * u),
+                              ),
+                            ),
+                            SizedBox(width: 1.8 * u),
+                            _crest(a.team.logo, a.team.short, 7.5 * u),
+                          ],
+                        ),
+                        if (a.kind == AwardKind.fair) ...[
+                          SizedBox(height: 4 * u),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 2.8 * u,
+                              vertical: 1.4 * u,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2.6 * u),
+                              border: Border.all(
+                                color: accent.withValues(alpha: 0.7),
+                                width: 0.3 * u,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(a.kind.icon, size: 5 * u, color: accent),
+                                SizedBox(width: 1.6 * u),
+                                Text(
+                                  'FAIR PLAY',
+                                  style: _cond(
+                                    4.4 * u,
+                                    color: accent,
+                                  ).copyWith(letterSpacing: 0.4 * u),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (rows.isNotEmpty) ...[
+                          SizedBox(height: 4 * u),
+                          SizedBox(
+                            width: 32 * u,
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < rows.length; i++)
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 0.6 * u,
+                                    ),
+                                    decoration: i == rows.length - 1
+                                        ? null
+                                        : BoxDecoration(
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.14,
+                                                ),
+                                                width: 0.3 * u,
+                                              ),
+                                            ),
+                                          ),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          rows[i].$1,
+                                          style: TextStyle(
+                                            color: _muted,
+                                            fontSize: 2.8 * u,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.3 * u,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          rows[i].$2,
+                                          style: _cond(
+                                            6 * u,
+                                            color: i == 0
+                                                ? accent
+                                                : Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        SizedBox(height: 4 * u),
+                        _Brand(u, align: MainAxisAlignment.end),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _portrait(double u, Color accent) {
     final a = award;
     if (a.kind == AwardKind.match && a.home != null) {
@@ -791,6 +1306,22 @@ class WeekAwardCard extends StatelessWidget {
   }
 }
 
+/// Fotoğrafın sağ kenarı eğik: üstte tam genişlik, altta %82.
+class _SlantClipper extends CustomClipper<Path> {
+  const _SlantClipper();
+
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(0, 0)
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width * 0.82, size.height)
+    ..lineTo(0, size.height)
+    ..close();
+
+  @override
+  bool shouldReclip(_SlantClipper oldClipper) => false;
+}
+
 // ------------------------------------------------------------- haber kartı
 
 /// Akışta ve haber detayında bülten: kaydırılan kartlar, her kart
@@ -806,6 +1337,7 @@ class WeekAwardsNewsCard extends StatefulWidget {
     required this.likeCount,
     required this.onToggleLike,
     required this.onShare,
+    this.expandOnTap = false,
   });
 
   final NewsItem item;
@@ -815,6 +1347,9 @@ class WeekAwardsNewsCard extends StatefulWidget {
   final int likeCount;
   final VoidCallback onToggleLike;
   final VoidCallback onShare;
+
+  /// Haber detayında: karta dokununca kartlar tam ekranda açılır.
+  final bool expandOnTap;
 
   @override
   State<WeekAwardsNewsCard> createState() => _WeekAwardsNewsCardState();
@@ -840,7 +1375,10 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      final png = await captureCard(_keys[_page]!);
+      final card = await captureCard(_keys[_page]!);
+      // Gönderi 4:5 (1080×1350) olduğu gibi; hikâye 9:16 tuvale ortalanır,
+      // Instagram'da büyütüp küçültmeden tam oturur.
+      final png = story ? await storyCanvas(card) : card;
       final ok = await InstagramShare.share(png, story: story);
       if (!ok) {
         messenger.showSnackBar(
@@ -885,7 +1423,7 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
     return ValueListenableBuilder<bool>(
       valueListenable: AppSettings.matchInsightsEnabled,
       builder: (context, ratings, _) {
-        final pages = <Widget>[
+        final cards = <Widget>[
           if (w.hasEleven)
             WeekElevenCard(
               league: league,
@@ -896,17 +1434,50 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
               showRatings: ratings,
             ),
           for (final a in w.awards)
-            GestureDetector(
-              onTap: a.kind == AwardKind.goal ? () => _play(a) : null,
-              child: WeekAwardCard(
-                award: a,
-                league: league,
-                leagueLogo: logo,
-                week: week,
-                showRatings: ratings,
-              ),
+            WeekAwardCard(
+              award: a,
+              league: league,
+              leagueLogo: logo,
+              week: week,
+              showRatings: ratings,
             ),
         ];
+        // Kartın ödülü (11 kartında yok).
+        WeekAward? awardAt(int i) {
+          final k = i - (w.hasEleven ? 1 : 0);
+          return k >= 0 && k < w.awards.length ? w.awards[k] : null;
+        }
+
+        void openFull(int i) => Navigator.of(context).push(
+          PageRouteBuilder<void>(
+            opaque: false,
+            barrierColor: Colors.black,
+            transitionDuration: const Duration(milliseconds: 180),
+            pageBuilder: (_, _, _) => _AwardsFullScreen(
+              cards: cards,
+              initial: i,
+              week: week,
+              awardAt: awardAt,
+              onPlay: _play,
+            ),
+            transitionsBuilder: (_, anim, _, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        );
+
+        final pages = <Widget>[
+          for (final (i, c) in cards.indexed)
+            GestureDetector(
+              onTap: widget.expandOnTap
+                  ? () => openFull(i)
+                  : awardAt(i)?.kind == AwardKind.goal
+                  ? () => _play(awardAt(i)!)
+                  : null,
+              child: c,
+            ),
+        ];
+        // Görünen kart haftanın golüyse altında "Golü izle".
+        final goal = _goalWithClip(awardAt(_page));
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -961,17 +1532,21 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   ],
                 ),
               ),
+              // Uygulamada daha alçak: kart 4:5 kalır (paylaşım görseli), kare
+              // alanda ortalanır.
               AspectRatio(
-                aspectRatio: 4 / 5,
+                aspectRatio: 1.08,
                 child: PageView.builder(
                   controller: _pager,
                   itemCount: pages.length,
                   onPageChanged: (i) => setState(() => _page = i),
-                  itemBuilder: (context, i) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: RepaintBoundary(
-                      key: _keys.putIfAbsent(i, GlobalKey.new),
-                      child: pages[i],
+                  itemBuilder: (context, i) => Center(
+                    child: AspectRatio(
+                      aspectRatio: 4 / 5,
+                      child: RepaintBoundary(
+                        key: _keys.putIfAbsent(i, GlobalKey.new),
+                        child: pages[i],
+                      ),
                     ),
                   ),
                 ),
@@ -996,6 +1571,26 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                     ],
                   ),
                 ),
+              if (goal != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                  child: FilledButton.icon(
+                    onPressed: () => _play(goal),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AwardKind.goal.color,
+                      foregroundColor: _night,
+                      minimumSize: const Size.fromHeight(42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text(
+                      'Golü izle',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 8),
               FutureBuilder<bool>(
                 future: _instagram,
@@ -1018,12 +1613,364 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
   }
 }
 
+/// Videosu olan haftanın golü; değilse null.
+WeekAward? _goalWithClip(WeekAward? a) =>
+    a != null &&
+        a.kind == AwardKind.goal &&
+        (a.clip?['video_id'] ?? '').toString().isNotEmpty
+    ? a
+    : null;
+
+/// Bülten kartları tam ekranda: kaydırılır, iki parmakla yakınlaşır, aşağı
+/// çekince kapanır; görünen kart tek başına paylaşılır.
+class _AwardsFullScreen extends StatefulWidget {
+  const _AwardsFullScreen({
+    required this.cards,
+    required this.initial,
+    required this.week,
+    required this.awardAt,
+    required this.onPlay,
+  });
+
+  final List<Widget> cards;
+  final int initial;
+  final int week;
+  final WeekAward? Function(int) awardAt;
+  final void Function(WeekAward) onPlay;
+
+  @override
+  State<_AwardsFullScreen> createState() => _AwardsFullScreenState();
+}
+
+class _AwardsFullScreenState extends State<_AwardsFullScreen> {
+  late final _pager = PageController(initialPage: widget.initial);
+  late int _page = widget.initial;
+  late final Future<bool> _instagram = InstagramShare.isAvailable();
+  final _keys = <int, GlobalKey>{};
+  final _zoom = <int, TransformationController>{};
+  bool _zoomed = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _pager.dispose();
+    for (final c in _zoom.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  TransformationController _zoomOf(int i) => _zoom.putIfAbsent(i, () {
+    final c = TransformationController();
+    c.addListener(() {
+      final z = c.value.getMaxScaleOnAxis() > 1.01;
+      if (i == _page && z != _zoomed) setState(() => _zoomed = z);
+    });
+    return c;
+  });
+
+  String get _fileName => 'haftanin_enleri_${widget.week}_${_page + 1}';
+
+  Future<void> _run(Future<void> Function(Uint8List card) job) async {
+    final key = _keys[_page];
+    if (_busy || key == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await job(await captureCard(key));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Paylaşılamadı: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _shareInstagram() async {
+    final story = await askInstagramTarget(context);
+    if (story == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await _run((card) async {
+      final png = story ? await storyCanvas(card) : card;
+      if (!await InstagramShare.share(png, story: story)) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    });
+  }
+
+  Future<void> _shareOther() => _run(
+    (card) => SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(card, mimeType: 'image/png', name: '$_fileName.png'),
+        ],
+        fileNameOverrides: ['$_fileName.png'],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final goal = _goalWithClip(widget.awardAt(_page));
+    final n = widget.cards.length;
+    return Scaffold(
+      backgroundColor: const Color(0xFF05080F),
+      body: SafeArea(
+        child: GestureDetector(
+          // Yakınlaşmışken parmak fotoğrafı gezdirir; kapatmaz.
+          onVerticalDragEnd: _zoomed
+              ? null
+              : (d) {
+                  if ((d.primaryVelocity ?? 0) > 500) {
+                    Navigator.of(context).maybePop();
+                  }
+                },
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        [
+                          'HAFTANIN ENLERİ',
+                          if (widget.week > 0) '${widget.week}. HAFTA',
+                        ].join(' · '),
+                        style: _cond(15, color: _gold),
+                      ),
+                    ),
+                    if (n > 1)
+                      Text(
+                        '${_page + 1}/$n',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    IconButton(
+                      tooltip: 'Kapat',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.close_rounded),
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: PageView.builder(
+                  controller: _pager,
+                  physics: _zoomed
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
+                  itemCount: n,
+                  onPageChanged: (i) => setState(() {
+                    _zoom[_page]?.value = Matrix4.identity();
+                    _page = i;
+                    _zoomed = false;
+                  }),
+                  itemBuilder: (context, i) => InteractiveViewer(
+                    transformationController: _zoomOf(i),
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: 4 / 5,
+                        child: RepaintBoundary(
+                          key: _keys.putIfAbsent(i, GlobalKey.new),
+                          child: widget.cards[i],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (n > 1)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < n; i++)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: i == _page ? 16 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: i == _page ? _gold : Colors.white24,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(
+                  children: [
+                    if (goal != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: () => widget.onPlay(goal),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AwardKind.goal.color,
+                            foregroundColor: _night,
+                            minimumSize: const Size.fromHeight(46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text(
+                            'Golü izle',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FutureBuilder<bool>(
+                            future: _instagram,
+                            builder: (context, snap) => _GradientButton(
+                              label: 'Bu kartı paylaş',
+                              onPressed: snap.data == true && !_busy
+                                  ? _shareInstagram
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: OutlinedButton(
+                            onPressed: _busy ? null : _shareOther,
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white24),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: _busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.send_rounded,
+                                    semanticLabel: 'Diğer uygulamalar',
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Instagram renklerinde geniş düğme.
+class _GradientButton extends StatelessWidget {
+  const _GradientButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: onPressed == null ? 0.5 : 1,
+    child: Material(
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        height: 50,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+          ),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.camera_alt_outlined, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(label, style: _cond(17)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// Kartı 1080 piksel genişliğinde PNG'ye çizer.
 Future<Uint8List> captureCard(GlobalKey key) async {
   final boundary =
       key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
   final image = await boundary.toImage(pixelRatio: 1080 / boundary.size.width);
   final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  if (data == null) throw Exception('Görsel oluşturulamadı.');
+  return data.buffer.asUint8List();
+}
+
+/// Kartı 1080×1920 hikâye tuvaline ortalar: koyu zemin, kart yuvarlak
+/// köşeli ve gölgeli.
+Future<Uint8List> storyCanvas(Uint8List cardPng) async {
+  const w = 1080.0, h = 1920.0;
+  final codec = await ui.instantiateImageCodec(cardPng);
+  final card = (await codec.getNextFrame()).image;
+  codec.dispose();
+  final rec = ui.PictureRecorder();
+  final c = Canvas(rec, const Rect.fromLTWH(0, 0, w, h));
+  c.drawRect(
+    const Rect.fromLTWH(0, 0, w, h),
+    Paint()
+      ..shader = ui.Gradient.radial(
+        const Offset(w / 2, h * 0.3),
+        h * 0.8,
+        const [Color(0xFF17324A), _night, Color(0xFF060A12)],
+        const [0, 0.55, 1],
+      ),
+  );
+  const cw = 960.0;
+  final ch = cw * card.height / card.width;
+  final dst = Rect.fromLTWH((w - cw) / 2, (h - ch) / 2, cw, ch);
+  final r = RRect.fromRectAndRadius(dst, const Radius.circular(28));
+  c.drawRRect(
+    r.shift(const Offset(0, 16)),
+    Paint()
+      ..color = Colors.black54
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
+  );
+  c.save();
+  c.clipRRect(r);
+  c.drawImageRect(
+    card,
+    Rect.fromLTWH(0, 0, card.width.toDouble(), card.height.toDouble()),
+    dst,
+    Paint()..filterQuality = FilterQuality.high,
+  );
+  c.restore();
+  final img = await rec.endRecording().toImage(w.toInt(), h.toInt());
+  final data = await img.toByteData(format: ui.ImageByteFormat.png);
   if (data == null) throw Exception('Görsel oluşturulamadı.');
   return data.buffer.asUint8List();
 }
@@ -1079,3 +2026,180 @@ Future<bool?> askInstagramTarget(
     ),
   ),
 );
+
+/// Haftanın Enleri haberinin ortak kapağı: başlık ve kazananların yuvarlak
+/// fotoğrafları; altta "kaydır" ibaresi. Alt kısım haber başlığına boş
+/// kalır. 6 ödüle kadar tek satırda küçülerek sığar.
+class WeekAwardsCover extends StatelessWidget {
+  const WeekAwardsCover({super.key, required this.data});
+
+  final WeekAwards data;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = data;
+    final items = <(String, String, String, String)>[
+      // (etiket, fotoğraf, yedek arma, ad)
+      if (w.hasEleven) ("11'İ", '', '', ''),
+      for (final a in w.awards)
+        (
+          a.kind.title.trUpper,
+          a.photo.isNotEmpty ? a.photo : (a.person?.photo ?? ''),
+          a.team.logo,
+          a.person?.name ?? a.team.short,
+        ),
+    ];
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Alt %40 haber başlığına kalır; dar/alçak kutuda küçülür.
+        final u = math.min(c.maxWidth / 100, c.maxHeight / 92);
+        final n = math.max(items.length, 1);
+        final size = math.min(17 * u, (c.maxWidth - 8 * u) / n - 3 * u);
+        Widget circle((String, String, String, String) it) {
+          final fallback = it.$1 == "11'İ"
+              ? Center(
+                  child: Text('11', style: _cond(size * 0.42, color: _gold)),
+                )
+              : Padding(
+                  padding: EdgeInsets.all(size * 0.16),
+                  child: _crest(it.$3, it.$4, size * 0.68),
+                );
+          return SizedBox(
+            width: size + 3 * u,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: size,
+                  height: size,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _card,
+                    border: Border.all(color: _gold, width: 0.6 * u),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _gold.withValues(alpha: 0.35),
+                        blurRadius: 4 * u,
+                      ),
+                    ],
+                  ),
+                  child: it.$2.isEmpty
+                      ? fallback
+                      : _net(
+                          it.$2,
+                          size: size,
+                          alignment: const Alignment(0, -0.6),
+                          fallback: fallback,
+                        ),
+                ),
+                SizedBox(height: 1.2 * u),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    it.$1,
+                    maxLines: 1,
+                    style: _cond(
+                      math.min(3.2 * u, size * 0.17),
+                    ).copyWith(letterSpacing: 0.3 * u),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF13233D), Color(0xFF060B14)],
+            ),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                left: -3 * u,
+                top: 0,
+                child: Text(
+                  'ENLER',
+                  style: _cond(
+                    26 * u,
+                    italic: true,
+                    color: Colors.white.withValues(alpha: 0.04),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 4 * u,
+                right: 4 * u,
+                top: 4 * u,
+                child: Column(
+                  children: [
+                    Text(
+                      [
+                        if (w.leagueName.isNotEmpty) w.leagueName.trUpper,
+                        if (w.week > 0) '${w.week}. HAFTA',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _cond(
+                        2.8 * u,
+                        color: _gold,
+                      ).copyWith(letterSpacing: 0.8 * u),
+                    ),
+                    Text(
+                      'HAFTANIN ENLERİ',
+                      style: _cond(8.4 * u, italic: true),
+                    ),
+                    SizedBox(height: 2 * u),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [for (final it in items) circle(it)],
+                    ),
+                    SizedBox(height: 2 * u),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 2.8 * u,
+                        vertical: 1.2 * u,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xBF060B14),
+                        borderRadius: BorderRadius.circular(4 * u),
+                        border: Border.all(
+                          color: _gold.withValues(alpha: 0.6),
+                          width: 0.3 * u,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${items.length} ÖDÜL · KAYDIR',
+                            style: _cond(
+                              3 * u,
+                              color: _gold,
+                            ).copyWith(letterSpacing: 0.3 * u),
+                          ),
+                          SizedBox(width: 1.2 * u),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 3.6 * u,
+                            color: _gold,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

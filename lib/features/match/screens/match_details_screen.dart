@@ -44,6 +44,7 @@ import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../../share/poster_background.dart';
+import '../../share/player_season_poster.dart';
 import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
 import '../../share/match_poster_designs.dart';
@@ -981,6 +982,29 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       }
       if (!mounted) return;
     }
+    // Sorumlular afişi (yeni; şimdilik yalnız admin): iki takımın sorumlusu.
+    final managersOn = session.isAdmin;
+    final managers = <String, PosterManager>{};
+    if (managersOn) {
+      try {
+        final rows = await Supabase.instance.client.rpc(
+          'match_poster_managers',
+          params: {
+            'p_season_id': m.seasonId,
+            'p_team_ids': [m.homeTeamId, m.awayTeamId],
+          },
+        );
+        for (final r in rows as List) {
+          managers[r['team_id'].toString()] = PosterManager(
+            name: (r['name'] ?? '').toString(),
+            photo: (r['photo_url'] ?? '').toString(),
+          );
+        }
+      } catch (_) {
+        // Okunamazsa afiş armalarla çizilir.
+      }
+      if (!mounted) return;
+    }
     PosterSide side(String id, String name, String logo) => PosterSide.of(
       id: id,
       name: name,
@@ -995,6 +1019,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       leagueId: m.leagueId,
       imageUrls: const [],
       designsEnabled: designs,
+      managersEnabled: managersOn,
       info: MatchPosterInfo(
         leagueName: leagueName,
         leagueLogo: leagueLogo,
@@ -1005,6 +1030,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         dayName: dayName,
         dateText: dateText,
         timeText: timeText,
+        homeManager: managers[m.homeTeamId],
+        awayManager: managers[m.awayTeamId],
       ),
       classic: MatchPoster(
         leagueName: leagueName,
@@ -1420,7 +1447,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 onTap: () => _openRefereePicker(match),
               ),
             _SpeedDialAction(
-              label: 'Tarih Girişi',
+              label: 'Tarih Gir / Stad Seç',
               icon: Icons.edit_calendar_rounded,
               onTap: () => _openScheduleDialog(match),
             ),
@@ -1464,7 +1491,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               onTap: () => _openRefereePicker(match),
             ),
           _SpeedDialAction(
-            label: 'Tarih Girişi',
+            label: 'Tarih Gir / Stad Seç',
             icon: Icons.edit_calendar_rounded,
             onTap: () => _openScheduleDialog(match),
           ),
@@ -3866,6 +3893,69 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
   );
   late int _index = widget.initialIndex;
 
+  /// "Bu benim": giriş yapmış futbolcunun yıldızladığı fotoğraflar (sezon
+  /// afişinde seçilebilir). Yeni özellik: ayar kapalıyken yalnız admin.
+  final _starred = <String>{};
+  String? _me;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStars());
+  }
+
+  Future<void> _loadStars() async {
+    if (!mounted) return;
+    final s = AppSession.of(context).value;
+    final me = (s.playerId ?? '').trim();
+    if (me.isEmpty || !playerPosterAllowed(s)) {
+      return;
+    }
+    setState(() => _me = me);
+    try {
+      final rows = await Supabase.instance.client
+          .from('player_photo_stars')
+          .select('media_id')
+          .eq('player_id', me)
+          .inFilter('media_id', [for (final p in widget.photos) p.id]);
+      if (!mounted) return;
+      setState(() {
+        _starred.addAll([for (final r in rows) r['media_id'].toString()]);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _toggleStar(String mediaId) async {
+    final me = _me;
+    if (me == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final on = !_starred.contains(mediaId);
+    setState(() => on ? _starred.add(mediaId) : _starred.remove(mediaId));
+    try {
+      final t = Supabase.instance.client.from('player_photo_stars');
+      if (on) {
+        await t.insert({'player_id': me, 'media_id': mediaId});
+      } else {
+        await t.delete().eq('player_id', me).eq('media_id', mediaId);
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            on
+                ? 'Fotoğrafların arasına eklendi; sezon afişinde seçebilirsin.'
+                : 'Fotoğraflarından çıkarıldı.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => on ? _starred.remove(mediaId) : _starred.add(mediaId));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Kaydedilemedi, tekrar dene.')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _page.dispose();
@@ -3889,6 +3979,21 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
           style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
         actions: [
+          if (_me != null)
+            IconButton(
+              tooltip: _starred.contains(current.id)
+                  ? 'Bu ben değilim'
+                  : 'Bu benim',
+              icon: Icon(
+                _starred.contains(current.id)
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                color: _starred.contains(current.id)
+                    ? const Color(0xFFFACC15)
+                    : Colors.white,
+              ),
+              onPressed: () => _toggleStar(current.id),
+            ),
           IconButton(
             tooltip: 'İndir',
             icon: _downloading
@@ -4715,13 +4820,34 @@ class _LineupTabState extends State<_LineupTab>
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
           _vsRow(m, head: false, only: 'xi'),
-          if (top) ...[
-            const SizedBox(height: 10),
-            _benchBand(),
-            const SizedBox(height: 2),
-          ] else
-            const SizedBox(height: 12),
-          _vsRow(m, head: false, only: 'bench', benchHeader: !top),
+          // İki takımın da kadrosu yoksa yalnız "Kadro girilmemiş." kalır;
+          // YEDEKLER bandı ve yedek satırı çizilmez.
+          StreamBuilder<List<MatchRosterModel>>(
+            stream: _rosterStream(m.homeTeamId),
+            initialData: _rosterLast[m.homeTeamId],
+            builder: (context, home) => StreamBuilder<List<MatchRosterModel>>(
+              stream: _rosterStream(m.awayTeamId),
+              initialData: _rosterLast[m.awayTeamId],
+              builder: (context, away) {
+                final none =
+                    (home.data?.isEmpty ?? false) &&
+                    (away.data?.isEmpty ?? false);
+                if (none) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (top) ...[
+                      const SizedBox(height: 10),
+                      _benchBand(),
+                      const SizedBox(height: 2),
+                    ] else
+                      const SizedBox(height: 12),
+                    _vsRow(m, head: false, only: 'bench', benchHeader: !top),
+                  ],
+                );
+              },
+            ),
+          ),
         ] else
           // Tek takım: kadro ve yedekler yan yana.
           _TeamLineupColumn(
@@ -5012,8 +5138,12 @@ class _LineupTabState extends State<_LineupTab>
         teamId,
         () => ServiceLocator.matchService
             .watchMatchRosters(widget.match.id, teamId)
+            .map((v) => _rosterLast[teamId] = v)
             .asBroadcastStream(),
       );
+
+  /// Akışların son değeri: sonradan dinleyen (ör. YEDEKLER bandı) beklemesin.
+  final _rosterLast = <String, List<MatchRosterModel>>{};
 
   /// VS'den paylaşım: hangi takımın kadro afişi.
   Future<void> _shareFromVs() async {

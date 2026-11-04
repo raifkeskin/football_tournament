@@ -588,9 +588,16 @@ class SupabaseMatchService implements IMatchService {
 
   @override
   Future<void> updateMatchEvent(MatchEvent event) async {
+    final before = await _client
+        .from('match_events')
+        .select('team_id, is_own_goal, event_type')
+        .eq('id', event.id)
+        .limit(1);
     final updated = await _client
         .from('match_events')
         .update({
+          'team_id': event.teamId,
+          'is_own_goal': event.isOwnGoal,
           'minute': event.minute,
           'added_minute': event.addedMinute,
           'player_id': event.playerId,
@@ -601,7 +608,51 @@ class SupabaseMatchService implements IMatchService {
         .eq('id', event.id)
         .select('match_id');
     if (updated.isEmpty) throw Exception('Olay güncellenemedi (yetki yok).');
-    notifyLocalChange('${updated.first['match_id']}');
+    final matchId = '${updated.first['match_id']}';
+    notifyLocalChange(matchId);
+    if (before.isEmpty) return;
+    final old = (before.first as Map).cast<String, dynamic>();
+    if (old['event_type'] != 'goal' ||
+        ((old['team_id'] ?? '').toString() == event.teamId &&
+            (old['is_own_goal'] == true) == event.isOwnGoal)) {
+      return;
+    }
+    // Golün takımı / kendi kalesine değişti: skor eski taraftan yeni tarafa.
+    final rows = await _client
+        .from('matches')
+        .select(
+          'home_team_id, away_team_id, home_score, away_score, status, '
+          'details_pending',
+        )
+        .eq('id', matchId)
+        .limit(1);
+    if (rows.isEmpty) return;
+    final row = (rows.first as Map).cast<String, dynamic>();
+    if ((row['status'] ?? '').toString().trim() == MatchStatus.finished.name) {
+      await _syncFinishedScore(matchId, row);
+      return;
+    }
+    final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
+    final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
+    String scorer(String tid, bool own) =>
+        own ? (tid == homeTeamId ? awayTeamId : homeTeamId) : tid;
+    final from = scorer(
+      (old['team_id'] ?? '').toString(),
+      old['is_own_goal'] == true,
+    );
+    final to = scorer(event.teamId, event.isOwnGoal);
+    if (from == to) return;
+    var home = _readInt(row['home_score'], fallback: 0);
+    var away = _readInt(row['away_score'], fallback: 0);
+    if (from == homeTeamId && home > 0) home--;
+    if (from == awayTeamId && away > 0) away--;
+    if (to == homeTeamId) home++;
+    if (to == awayTeamId) away++;
+    await _client
+        .from('matches')
+        .update({'home_score': home, 'away_score': away})
+        .eq('id', matchId);
+    notifyLocalChange(matchId);
   }
 
   @override

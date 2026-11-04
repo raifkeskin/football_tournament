@@ -514,6 +514,7 @@ class _FramePainter extends CustomPainter {
   final w = (r[2] * im.width).round().clamp(1, im.width - x);
   final h = (r[3] * im.height).round().clamp(1, im.height - y);
   var out = img.copyCrop(im, x: x, y: y, width: w, height: h);
-  if (out.height > 1000) out = img.copyResize(out, height: 1000);
+  // Büyük kopya (afiş/kart) 1400 px; kesim de en çok bu kadar.
+  if (out.height > 1400) out = img.copyResize(out, height: 1400);
   return (img.encodeJpg(out, quality: 88), out.width, out.height);
 }

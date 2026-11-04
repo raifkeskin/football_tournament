@@ -17,7 +17,6 @@ import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'week_awards_screen.dart';
-import 'weekly_pick_screen.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
   const AdminManageNewsScreen({super.key});
@@ -29,6 +28,10 @@ class AdminManageNewsScreen extends StatefulWidget {
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final Set<String> _busyIds = {};
+
+  /// Silinen haberler: canlı akış silmeyi her zaman bildirmez, listeden
+  /// hemen düşsün.
+  final Set<String> _deletedIds = {};
   late final Stream<List<League>> _leaguesStream = _leagueService
       .watchLeagues();
 
@@ -698,6 +701,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     setState(() => _busyIds.add(newsId));
     try {
       await _leagueService.deleteNews(newsId: newsId);
+      if (mounted) setState(() => _deletedIds.add(newsId));
       for (final url in imageUrls) {
         await SupabaseImageUploadService().deleteImageByUrl(url);
       }
@@ -900,18 +904,6 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               ),
             ),
           ),
-        // Haftanın Seçimi: açılana dek yalnız admin.
-        if (session.isAdmin || AppSettings.weeklyPicksEnabled.value)
-          AdminBarAction(
-            icon: Icons.emoji_events_rounded,
-            tooltip: 'Haftanın Seçimi',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                settings: const RouteSettings(name: 'WeeklyPickScreen'),
-                builder: (_) => WeeklyPickScreen(tournaments: _tournaments),
-              ),
-            ),
-          ),
         AdminBarAction(
           icon: Icons.post_add_rounded,
           tooltip: 'Haber Ekle',
@@ -973,6 +965,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                     }
                     // Sunucu created_at'e göre azalan sırada döner (en yeni üstte).
                     final docs = (snapshot.data ?? const <NewsItem>[])
+                        .where((n) => !_deletedIds.contains(n.id))
                         .where(
                           (n) => switch (_status) {
                             _NewsStatus.all => true,

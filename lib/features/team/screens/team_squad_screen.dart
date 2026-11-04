@@ -13,6 +13,8 @@ import 'package:excel/excel.dart' hide Border, TextSpan;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/follows.dart';
+
 import '../../tournament/models/age_rules.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../player/consent/consent_service.dart';
@@ -553,6 +555,13 @@ Future<void> showSquadBulkUploadDialog({
 }
 
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
+  /// Kişinin kendi takımı (oyuncusu ya da sorumlusu): takip otomatik.
+  bool _ownTeam(BuildContext context) {
+    final s = AppSession.of(context).value;
+    return s.teamId == widget.teamId ||
+        s.managedTeams.any((m) => m.teamId == widget.teamId);
+  }
+
   final _consentCache = ConsentStatusCache();
   final ITeamService _teamService = ServiceLocator.teamService;
 
@@ -2260,6 +2269,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                                 ? _pickTournamentOfYear
                                                 : null,
                                             players: allPlayers,
+                                            followTeamId: _ownTeam(context)
+                                                ? null
+                                                : widget.teamId,
                                             ageOf: (p) =>
                                                 _ageFromBirthDate(p.birthDate),
                                             // Paylaş şimdilik yalnızca admin ve
@@ -5030,7 +5042,11 @@ class _SquadSummaryCard extends StatelessWidget {
     this.firstColor,
     this.secondColor,
     this.onShare,
+    this.followTeamId,
   });
+
+  /// Takip yıldızı (Takip Listem); kendi takımında null.
+  final String? followTeamId;
 
   final String teamName;
 
@@ -5228,9 +5244,19 @@ class _SquadSummaryCard extends StatelessWidget {
                     width: 76,
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: onShare == null
-                          ? null
-                          : _pill(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (followTeamId != null)
+                            FollowStar(
+                              kind: FollowKind.team,
+                              id: followTeamId!,
+                              dense: true,
+                              size: 24,
+                              idleColor: Colors.white,
+                            ),
+                          if (onShare != null)
+                            _pill(
                               onTap: onShare,
                               tooltip: 'Kadro afişini paylaş',
                               child: const Icon(
@@ -5239,6 +5265,8 @@ class _SquadSummaryCard extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
