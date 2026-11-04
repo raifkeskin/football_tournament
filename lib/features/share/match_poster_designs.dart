@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/image_upload_service.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/utils/team_colors.dart';
 import '../../core/utils/team_name.dart';
@@ -69,6 +70,15 @@ class PosterSide {
   String get fullLabel => posterTeamName(name).trUpper;
 }
 
+/// Sorumlular afişinde takım sorumlusu: ad ve (varsa) fotoğraf.
+@immutable
+class PosterManager {
+  const PosterManager({required this.name, required this.photo});
+
+  final String name;
+  final String photo;
+}
+
 /// Takım odaklı afişlerin ortak bilgisi.
 @immutable
 class MatchPosterInfo {
@@ -82,7 +92,12 @@ class MatchPosterInfo {
     required this.dayName,
     required this.dateText,
     required this.timeText,
+    this.homeManager,
+    this.awayManager,
   });
+
+  final PosterManager? homeManager;
+  final PosterManager? awayManager;
 
   final String leagueName;
   final String leagueLogo;
@@ -102,7 +117,8 @@ enum MatchPosterDesign {
   classic('Klasik', 'Turnuva zemini'),
   jerseys('Formalar', 'İki takımın forması'),
   split('Çapraz', 'Takım renkleri'),
-  team('Takım', 'Tek takım + slogan');
+  team('Takım', 'Tek takım + slogan'),
+  managers('Sorumlular', 'İki takım sorumlusu');
 
   const MatchPosterDesign(this.label, this.subtitle);
 
@@ -973,6 +989,226 @@ class _SplitDecorPainter extends CustomPainter {
   bool shouldRepaint(_SplitDecorPainter old) => false;
 }
 
+// ------------------------------------------------------------------ D
+
+/// Sorumlular: ev sahibi sorumlusu üstte, deplasman altta; ortada saat
+/// bandı. Fotoğraf yoksa o tarafta büyük arma.
+class ManagersPoster extends StatelessWidget {
+  const ManagersPoster({super.key, required this.info});
+
+  final MatchPosterInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    final st = PosterOptions.of(context);
+    final time = info.timeText.trim().isEmpty ? '--:--' : info.timeText.trim();
+    final when = [
+      info.dateText,
+      info.dayName.trUpper,
+      info.pitchName.trim().isEmpty ? '' : info.pitchName.trim().trUpper,
+    ].where((e) => e.trim().isNotEmpty).join(' · ');
+    return ColoredBox(
+      color: const Color(0xFF070B14),
+      child: Column(
+        children: [
+          Expanded(
+            child: _ManagerHalf(
+              info: info,
+              side: info.home,
+              manager: info.homeManager,
+              top: true,
+            ),
+          ),
+          Container(
+            height: st.pick(96, 72),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFF070B14),
+              border: Border.symmetric(
+                horizontal: BorderSide(color: _gold, width: 2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        [
+                          info.weekText,
+                          'MAÇ GÜNÜ',
+                        ].where((e) => e.isNotEmpty).join(' · '),
+                        style: _cond(st.pick(11, 10), color: _gold, spacing: 2),
+                      ),
+                      SizedBox(height: st.pick(4, 2)),
+                      Text(time, style: _cond(st.pick(34, 26))),
+                      if (when.isNotEmpty) ...[
+                        SizedBox(height: st.pick(4, 2)),
+                        Text(
+                          when,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _cond(st.pick(12, 10.5), color: _muted),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Text(
+                  'VS',
+                  style: _cond(st.pick(46, 36), italic: true, color: _gold),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _ManagerHalf(
+              info: info,
+              side: info.away,
+              manager: info.awayManager,
+              top: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManagerHalf extends StatelessWidget {
+  const _ManagerHalf({
+    required this.info,
+    required this.side,
+    required this.manager,
+    required this.top,
+  });
+
+  final MatchPosterInfo info;
+  final PosterSide side;
+  final PosterManager? manager;
+
+  /// Üstte (ev sahibi): fotoğraf solda, turnuva başlığı üstte.
+  final bool top;
+
+  Widget _photo(double crest) {
+    final small = (manager?.photo ?? '').trim();
+    final fallback = Center(
+      child: PosterLogo(
+        url: side.logo,
+        name: side.name,
+        size: crest,
+        shadow: true,
+      ),
+    );
+    if (small.isEmpty) return fallback;
+    Widget net(String url, Widget Function() onError) => Image.network(
+      url,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => onError(),
+    );
+    // Afiş 1080 px basılır: varsa fotoğrafın büyük kopyası.
+    final hd = SupabaseImageUploadService.hdUrl(small);
+    Widget smallImg() => net(small, () => fallback);
+    return hd == small ? smallImg() : net(hd, smallImg);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final st = PosterOptions.of(context);
+    final head = st.pick(52.0, 40.0);
+    final photo = SizedBox(
+      width: st.pick(168, 140),
+      child: Padding(
+        padding: EdgeInsets.only(top: top ? head : st.pick(14, 10)),
+        child: _photo(st.pick(118, 88)),
+      ),
+    );
+    final text = Expanded(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          top ? 4 : 16,
+          0,
+          top ? 16 : 4,
+          top ? st.pick(16, 10) : st.pick(46, 36),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: top
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            PosterLogo(
+              url: side.logo,
+              name: side.name,
+              size: st.pick(44, 34),
+              shadow: true,
+            ),
+            SizedBox(height: st.pick(6, 4)),
+            Text(
+              side.fullLabel,
+              maxLines: 2,
+              textAlign: top ? TextAlign.right : TextAlign.left,
+              style: _cond(st.pick(24, 19), shadows: _shadow),
+            ),
+            if ((manager?.name ?? '').trim().isNotEmpty) ...[
+              SizedBox(height: st.pick(5, 3)),
+              Text(
+                manager!.name.trim().trUpper,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _cond(st.pick(13, 11.5)),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'TAKIM SORUMLUSU',
+                style: _cond(st.pick(10, 9), color: _muted, spacing: 1.5),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: top ? Alignment.topCenter : Alignment.bottomCenter,
+              end: top ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: [const Color(0xFF0B1220), _dark(side.first, 0.85)],
+            ),
+          ),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: top ? [photo, text] : [text, photo],
+        ),
+        if (top)
+          Positioned(
+            left: 16,
+            right: 16,
+            top: st.pick(14, 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _LeagueHead(info: info),
+            ),
+          )
+        else
+          Positioned(
+            left: 16,
+            bottom: st.pick(12, 8),
+            child: const PosterAppMark(),
+          ),
+      ],
+    );
+  }
+}
+
 // ------------------------------------------------------------------ C
 
 /// Takım: seçilen takımın kendi renklerinde "maç günü" afişi ve sloganı.
@@ -1168,13 +1404,23 @@ Future<void> showMatchPosterShare({
   required String leagueId,
   required List<String> imageUrls,
   required bool designsEnabled,
+  bool managersEnabled = false,
 }) async {
   Future<bool?> preview(MatchPosterDesign d) async {
     final common = (
       fileName: d == MatchPosterDesign.classic
           ? 'mac_$fileSlug'
           : 'mac_${d.name}_$fileSlug',
-      urls: [info.leagueLogo, info.home.logo, info.away.logo, ...imageUrls],
+      urls: [
+        info.leagueLogo,
+        info.home.logo,
+        info.away.logo,
+        ...imageUrls,
+        if (d == MatchPosterDesign.managers)
+          for (final m in [info.homeManager, info.awayManager])
+            if ((m?.photo ?? '').trim().isNotEmpty)
+              SupabaseImageUploadService.hdUrl(m!.photo),
+      ],
     );
     if (d != MatchPosterDesign.team) {
       return showPosterPreview(
@@ -1189,6 +1435,7 @@ Future<void> showMatchPosterShare({
         poster: switch (d) {
           MatchPosterDesign.jerseys => JerseysPoster(info: info),
           MatchPosterDesign.split => SplitPoster(info: info),
+          MatchPosterDesign.managers => ManagersPoster(info: info),
           _ => classic,
         },
       );
@@ -1234,6 +1481,7 @@ Future<void> showMatchPosterShare({
         classic: classic,
         leagueId: leagueId,
         selected: selected,
+        managersEnabled: managersEnabled,
       ),
     );
     if (d == null || !context.mounted) return;
@@ -1276,12 +1524,16 @@ class _DesignPickerDialog extends StatefulWidget {
     required this.classic,
     required this.leagueId,
     required this.selected,
+    this.managersEnabled = false,
   });
 
   final MatchPosterInfo info;
   final Widget classic;
   final String leagueId;
   final MatchPosterDesign selected;
+
+  /// Sorumlular tasarımı (yeni; şimdilik yalnız admin).
+  final bool managersEnabled;
 
   @override
   State<_DesignPickerDialog> createState() => _DesignPickerDialogState();
@@ -1302,6 +1554,7 @@ class _DesignPickerDialogState extends State<_DesignPickerDialog> {
       homeSide: true,
       slogan: '',
     ),
+    MatchPosterDesign.managers => ManagersPoster(info: widget.info),
   };
 
   @override
@@ -1391,17 +1644,27 @@ class _DesignPickerDialogState extends State<_DesignPickerDialog> {
                       );
                     }
 
-                    final all = MatchPosterDesign.values;
+                    final all = MatchPosterDesign.values
+                        .where(
+                          (d) =>
+                              d != MatchPosterDesign.managers ||
+                              widget.managersEnabled,
+                        )
+                        .toList();
                     return Column(
                       children: [
-                        for (var r = 0; r < 2; r++) ...[
+                        for (var r = 0; r * 2 < all.length; r++) ...[
                           if (r > 0) const SizedBox(height: 14),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(child: tile(all[r * 2])),
                               const SizedBox(width: 12),
-                              Expanded(child: tile(all[r * 2 + 1])),
+                              Expanded(
+                                child: r * 2 + 1 < all.length
+                                    ? tile(all[r * 2 + 1])
+                                    : const SizedBox(),
+                              ),
                             ],
                           ),
                         ],

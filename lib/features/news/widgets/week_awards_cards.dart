@@ -4,8 +4,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/app_settings.dart';
+import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/instagram_share.dart';
 import '../../../core/services/photo_cutouts.dart';
 import '../../../core/utils/string_utils.dart';
@@ -797,13 +799,17 @@ class WeekAwardCard extends StatelessWidget {
   }) {
     final url = award.photo.trim();
     if (url.isEmpty) return _photoFallback(u, team: team);
-    return Image.network(
-      url,
+    Widget net(String src, Widget Function() onError) => Image.network(
+      src,
       fit: BoxFit.cover,
       alignment: alignment,
       filterQuality: FilterQuality.high,
-      errorBuilder: (_, _, _) => _photoFallback(u, team: team),
+      errorBuilder: (_, _, _) => onError(),
     );
+    // Kart 1080 px basılır: varsa fotoğrafın büyük kopyası.
+    final hd = SupabaseImageUploadService.hdUrl(url);
+    Widget small() => net(url, () => _photoFallback(u, team: team));
+    return hd == url ? small() : net(hd, small);
   }
 
   /// Haftanın takımı: takım fotoğrafı bütün kartı kaplar.
@@ -1315,6 +1321,7 @@ class WeekAwardsNewsCard extends StatefulWidget {
     required this.likeCount,
     required this.onToggleLike,
     required this.onShare,
+    this.expandOnTap = false,
   });
 
   final NewsItem item;
@@ -1324,6 +1331,9 @@ class WeekAwardsNewsCard extends StatefulWidget {
   final int likeCount;
   final VoidCallback onToggleLike;
   final VoidCallback onShare;
+
+  /// Haber detayında: karta dokununca kartlar tam ekranda açılır.
+  final bool expandOnTap;
 
   @override
   State<WeekAwardsNewsCard> createState() => _WeekAwardsNewsCardState();
@@ -1397,7 +1407,7 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
     return ValueListenableBuilder<bool>(
       valueListenable: AppSettings.matchInsightsEnabled,
       builder: (context, ratings, _) {
-        final pages = <Widget>[
+        final cards = <Widget>[
           if (w.hasEleven)
             WeekElevenCard(
               league: league,
@@ -1408,26 +1418,50 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
               showRatings: ratings,
             ),
           for (final a in w.awards)
+            WeekAwardCard(
+              award: a,
+              league: league,
+              leagueLogo: logo,
+              week: week,
+              showRatings: ratings,
+            ),
+        ];
+        // Kartın ödülü (11 kartında yok).
+        WeekAward? awardAt(int i) {
+          final k = i - (w.hasEleven ? 1 : 0);
+          return k >= 0 && k < w.awards.length ? w.awards[k] : null;
+        }
+
+        void openFull(int i) => Navigator.of(context).push(
+          PageRouteBuilder<void>(
+            opaque: false,
+            barrierColor: Colors.black,
+            transitionDuration: const Duration(milliseconds: 180),
+            pageBuilder: (_, _, _) => _AwardsFullScreen(
+              cards: cards,
+              initial: i,
+              week: week,
+              awardAt: awardAt,
+              onPlay: _play,
+            ),
+            transitionsBuilder: (_, anim, _, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        );
+
+        final pages = <Widget>[
+          for (final (i, c) in cards.indexed)
             GestureDetector(
-              onTap: a.kind == AwardKind.goal ? () => _play(a) : null,
-              child: WeekAwardCard(
-                award: a,
-                league: league,
-                leagueLogo: logo,
-                week: week,
-                showRatings: ratings,
-              ),
+              onTap: widget.expandOnTap
+                  ? () => openFull(i)
+                  : awardAt(i)?.kind == AwardKind.goal
+                  ? () => _play(awardAt(i)!)
+                  : null,
+              child: c,
             ),
         ];
         // Görünen kart haftanın golüyse altında "Golü izle".
-        final i = _page - (w.hasEleven ? 1 : 0);
-        final shown = i >= 0 && i < w.awards.length ? w.awards[i] : null;
-        final goal =
-            shown != null &&
-                shown.kind == AwardKind.goal &&
-                (shown.clip?['video_id'] ?? '').toString().isNotEmpty
-            ? shown
-            : null;
+        final goal = _goalWithClip(awardAt(_page));
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -1561,6 +1595,314 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
       },
     );
   }
+}
+
+/// Videosu olan haftanın golü; değilse null.
+WeekAward? _goalWithClip(WeekAward? a) =>
+    a != null &&
+        a.kind == AwardKind.goal &&
+        (a.clip?['video_id'] ?? '').toString().isNotEmpty
+    ? a
+    : null;
+
+/// Bülten kartları tam ekranda: kaydırılır, iki parmakla yakınlaşır, aşağı
+/// çekince kapanır; görünen kart tek başına paylaşılır.
+class _AwardsFullScreen extends StatefulWidget {
+  const _AwardsFullScreen({
+    required this.cards,
+    required this.initial,
+    required this.week,
+    required this.awardAt,
+    required this.onPlay,
+  });
+
+  final List<Widget> cards;
+  final int initial;
+  final int week;
+  final WeekAward? Function(int) awardAt;
+  final void Function(WeekAward) onPlay;
+
+  @override
+  State<_AwardsFullScreen> createState() => _AwardsFullScreenState();
+}
+
+class _AwardsFullScreenState extends State<_AwardsFullScreen> {
+  late final _pager = PageController(initialPage: widget.initial);
+  late int _page = widget.initial;
+  late final Future<bool> _instagram = InstagramShare.isAvailable();
+  final _keys = <int, GlobalKey>{};
+  final _zoom = <int, TransformationController>{};
+  bool _zoomed = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _pager.dispose();
+    for (final c in _zoom.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  TransformationController _zoomOf(int i) => _zoom.putIfAbsent(i, () {
+    final c = TransformationController();
+    c.addListener(() {
+      final z = c.value.getMaxScaleOnAxis() > 1.01;
+      if (i == _page && z != _zoomed) setState(() => _zoomed = z);
+    });
+    return c;
+  });
+
+  String get _fileName => 'haftanin_enleri_${widget.week}_${_page + 1}';
+
+  Future<void> _run(Future<void> Function(Uint8List card) job) async {
+    final key = _keys[_page];
+    if (_busy || key == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await job(await captureCard(key));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Paylaşılamadı: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _shareInstagram() async {
+    final story = await askInstagramTarget(context);
+    if (story == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await _run((card) async {
+      final png = story ? await storyCanvas(card) : card;
+      if (!await InstagramShare.share(png, story: story)) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Instagram açılamadı.')),
+        );
+      }
+    });
+  }
+
+  Future<void> _shareOther() => _run(
+    (card) => SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(card, mimeType: 'image/png', name: '$_fileName.png'),
+        ],
+        fileNameOverrides: ['$_fileName.png'],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final goal = _goalWithClip(widget.awardAt(_page));
+    final n = widget.cards.length;
+    return Scaffold(
+      backgroundColor: const Color(0xFF05080F),
+      body: SafeArea(
+        child: GestureDetector(
+          // Yakınlaşmışken parmak fotoğrafı gezdirir; kapatmaz.
+          onVerticalDragEnd: _zoomed
+              ? null
+              : (d) {
+                  if ((d.primaryVelocity ?? 0) > 500) {
+                    Navigator.of(context).maybePop();
+                  }
+                },
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        [
+                          'HAFTANIN ENLERİ',
+                          if (widget.week > 0) '${widget.week}. HAFTA',
+                        ].join(' · '),
+                        style: _cond(15, color: _gold),
+                      ),
+                    ),
+                    if (n > 1)
+                      Text(
+                        '${_page + 1}/$n',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    IconButton(
+                      tooltip: 'Kapat',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.close_rounded),
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: PageView.builder(
+                  controller: _pager,
+                  physics: _zoomed
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
+                  itemCount: n,
+                  onPageChanged: (i) => setState(() {
+                    _zoom[_page]?.value = Matrix4.identity();
+                    _page = i;
+                    _zoomed = false;
+                  }),
+                  itemBuilder: (context, i) => InteractiveViewer(
+                    transformationController: _zoomOf(i),
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: 4 / 5,
+                        child: RepaintBoundary(
+                          key: _keys.putIfAbsent(i, GlobalKey.new),
+                          child: widget.cards[i],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (n > 1)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < n; i++)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: i == _page ? 16 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: i == _page ? _gold : Colors.white24,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(
+                  children: [
+                    if (goal != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: () => widget.onPlay(goal),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AwardKind.goal.color,
+                            foregroundColor: _night,
+                            minimumSize: const Size.fromHeight(46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text(
+                            'Golü izle',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FutureBuilder<bool>(
+                            future: _instagram,
+                            builder: (context, snap) => _GradientButton(
+                              label: 'Bu kartı paylaş',
+                              onPressed: snap.data == true && !_busy
+                                  ? _shareInstagram
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: OutlinedButton(
+                            onPressed: _busy ? null : _shareOther,
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white24),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: _busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.send_rounded,
+                                    semanticLabel: 'Diğer uygulamalar',
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Instagram renklerinde geniş düğme.
+class _GradientButton extends StatelessWidget {
+  const _GradientButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: onPressed == null ? 0.5 : 1,
+    child: Material(
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        height: 50,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+          ),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.camera_alt_outlined, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(label, style: _cond(17)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Kartı 1080 piksel genişliğinde PNG'ye çizer.

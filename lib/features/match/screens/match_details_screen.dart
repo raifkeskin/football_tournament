@@ -981,6 +981,29 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       }
       if (!mounted) return;
     }
+    // Sorumlular afişi (yeni; şimdilik yalnız admin): iki takımın sorumlusu.
+    final managersOn = session.isAdmin;
+    final managers = <String, PosterManager>{};
+    if (managersOn) {
+      try {
+        final rows = await Supabase.instance.client.rpc(
+          'match_poster_managers',
+          params: {
+            'p_season_id': m.seasonId,
+            'p_team_ids': [m.homeTeamId, m.awayTeamId],
+          },
+        );
+        for (final r in rows as List) {
+          managers[r['team_id'].toString()] = PosterManager(
+            name: (r['name'] ?? '').toString(),
+            photo: (r['photo_url'] ?? '').toString(),
+          );
+        }
+      } catch (_) {
+        // Okunamazsa afiş armalarla çizilir.
+      }
+      if (!mounted) return;
+    }
     PosterSide side(String id, String name, String logo) => PosterSide.of(
       id: id,
       name: name,
@@ -995,6 +1018,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       leagueId: m.leagueId,
       imageUrls: const [],
       designsEnabled: designs,
+      managersEnabled: managersOn,
       info: MatchPosterInfo(
         leagueName: leagueName,
         leagueLogo: leagueLogo,
@@ -1005,6 +1029,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         dayName: dayName,
         dateText: dateText,
         timeText: timeText,
+        homeManager: managers[m.homeTeamId],
+        awayManager: managers[m.awayTeamId],
       ),
       classic: MatchPoster(
         leagueName: leagueName,

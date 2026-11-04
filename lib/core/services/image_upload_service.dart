@@ -81,6 +81,27 @@ class SupabaseImageUploadService implements ImageUploadService {
   /// görünür: 512 piksel yeterli (~30-60 KB).
   static const _maxSidePortrait = 512;
 
+  /// Afişte ve Haftanın Enleri kartında portre büyük basılır: yanına bu
+  /// boyutta ikinci bir kopya da yüklenir (`.hd.jpg`, ~150 KB). Listeler
+  /// küçük kopyayı okur; büyük kopya yalnız afiş/kartta indirilir.
+  static const _maxSidePortraitHd = 1400;
+
+  static bool _isPortrait(MediaFolder f) =>
+      f == MediaFolder.players ||
+      f == MediaFolder.profileRequests ||
+      f == MediaFolder.staff;
+
+  /// Büyük kopyası olan fotoğrafın (adı `.sd.` içerir) büyük kopyasının
+  /// linki; yoksa aynı link. Eski fotoğrafların büyük kopyası yoktur.
+  static String hdUrl(String url) {
+    final u = url.trim();
+    final q = u.indexOf('?');
+    final path = q < 0 ? u : u.substring(0, q);
+    final i = path.lastIndexOf('.sd.');
+    if (i < 0) return u;
+    return '${path.substring(0, i)}.hd.jpg${q < 0 ? '' : u.substring(q)}';
+  }
+
   /// Takım/turnuva logoları en büyük açılış ekranında ~170 px görünür;
   /// 384 piksel keskin kalır, dosya 512'ye göre ~%45 küçük olur.
   static const _maxSideLogo = 384;
@@ -216,7 +237,33 @@ class SupabaseImageUploadService implements ImageUploadService {
     // Web'de (JS) `1 << 32` sıfır olur ve nextInt hata verir; 31 bit yeterli.
     final rand = Random().nextInt(0x7fffffff).toRadixString(16);
     final dir = subfolder == null ? folder.path : '${folder.path}/$subfolder';
-    final path = '$dir/${DateTime.now().millisecondsSinceEpoch}_$rand.$ext';
+    final base = '$dir/${DateTime.now().millisecondsSinceEpoch}_$rand';
+    var path = '$base.$ext';
+    if (logoPng == null && _isPortrait(folder)) {
+      // Önce büyük kopya; yüklenemezse fotoğraf yalnız küçük hâliyle kalır
+      // (adı `.sd.` almaz, büyük kopya aranmaz).
+      try {
+        final (hd, _) = await _shrink(
+          original,
+          _extOf(image.name),
+          maxSide: _maxSidePortraitHd,
+          forceJpeg: true,
+        );
+        await _client.storage
+            .from(bucket)
+            .uploadBinary(
+              '$base.hd.jpg',
+              hd,
+              fileOptions: const FileOptions(
+                contentType: 'image/jpeg',
+                cacheControl: '31536000',
+              ),
+            );
+        path = '$base.sd.$ext';
+      } catch (e) {
+        debugPrint('Büyük kopya yüklenemedi: $e');
+      }
+    }
     try {
       await _client.storage
           .from(bucket)
@@ -253,7 +300,11 @@ class SupabaseImageUploadService implements ImageUploadService {
     final path = pathFromUrl(url);
     if (path == null) return;
     try {
-      await _client.storage.from(bucket).remove([path]);
+      final hd = pathFromUrl(hdUrl(url!));
+      await _client.storage.from(bucket).remove([
+        path,
+        if (hd != null && hd != path) hd,
+      ]);
     } catch (e) {
       // Silinemeyen eski dosya kaydı bozmaz; sadece logla.
       debugPrint('Storage silme hatası: $e');

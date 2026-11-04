@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/instagram_share.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
@@ -1072,6 +1073,10 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     if (n.isWeekAwards) {
       return WeekAwardsNewsCard(
         item: n,
+        // Yeni: tam ekran şimdilik admine (Haftanın Enleri açılınca herkese).
+        expandOnTap:
+            AppSession.of(context).value.isAdmin ||
+            AppSettings.weekAwardsEnabled.value,
         meta: meta,
         loggedIn: loggedIn,
         liked: _liked,
