@@ -44,6 +44,7 @@ import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../../share/poster_background.dart';
+import '../../share/player_season_poster.dart';
 import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
 import '../../share/match_poster_designs.dart';
@@ -3907,7 +3908,7 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
     if (!mounted) return;
     final s = AppSession.of(context).value;
     final me = (s.playerId ?? '').trim();
-    if (me.isEmpty || !(s.isAdmin || AppSettings.playerPosterEnabled.value)) {
+    if (me.isEmpty || !playerPosterAllowed(s)) {
       return;
     }
     setState(() => _me = me);

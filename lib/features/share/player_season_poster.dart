@@ -24,8 +24,17 @@ bool canShowPlayerPoster(BuildContext context, String playerId) {
   if (playerId.isEmpty) return false;
   final s = AppSession.of(context).value;
   if (s.isAdmin) return true;
-  if (!AppSettings.playerPosterEnabled.value) return false;
+  if (!playerPosterAllowed(s)) return false;
   return s.playerId == playerId || s.isLeagueOwner || s.isRegionOwner;
+}
+
+/// Afiş ve "Bu benim" yıldızı bu hesaba açık mı: admin, ayar açıksa
+/// herkes, kapalıyken deneme hesapları (player_poster_users).
+bool playerPosterAllowed(AppSessionState s) {
+  final u = s.user;
+  if (u == null || u.isAnonymous) return false;
+  if (s.isAdmin || AppSettings.playerPosterEnabled.value) return true;
+  return AppSettings.playerPosterUsers.value.contains(u.id);
 }
 
 /// Afişteki bir ödül satırı: "HAFTANIN OYUNCUSU" · "2. HAFTA".

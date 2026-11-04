@@ -21,6 +21,7 @@ class AppSettings {
   static const _kWeeklyPicks = 'weekly_picks_enabled';
   static const _kWeekAwards = 'week_awards_enabled';
   static const _kPlayerPoster = 'player_poster_enabled';
+  static const _kPlayerPosterUsers = 'player_poster_users';
   static const _kMyWeek = 'my_week_enabled';
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
@@ -97,6 +98,9 @@ class AppSettings {
   /// Bireysel sezon afişi ve maç fotoğrafında "Bu benim" yıldızı herkese
   /// açık mı; kapalıyken yalnız admin görür.
   static final playerPosterEnabled = ValueNotifier<bool>(false);
+
+  /// Kapalıyken de açık olan deneme hesapları (auth kullanıcı id'leri).
+  static final playerPosterUsers = ValueNotifier<Set<String>>({});
 
   /// Ana sayfada "Bu hafta sen" kartı ve selamlamadaki profil kısayolu
   /// herkese açık mı; kapalıyken yalnız admin görür.
@@ -201,6 +205,12 @@ class AppSettings {
           weekAwardsEnabled.value = r['value'] == true;
         } else if (r['key'] == _kPlayerPoster) {
           playerPosterEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPlayerPosterUsers) {
+          final v = r['value'];
+          playerPosterUsers.value = {
+            if (v is List)
+              for (final x in v) x.toString(),
+          };
         } else if (r['key'] == _kMyWeek) {
           myWeekEnabled.value = r['value'] == true;
         } else if (r['key'] == _kReferees) {
