@@ -796,12 +796,13 @@ class WeekAwardCard extends StatelessWidget {
     double u, {
     Alignment alignment = Alignment.topCenter,
     bool team = false,
+    BoxFit fit = BoxFit.cover,
   }) {
     final url = award.photo.trim();
     if (url.isEmpty) return _photoFallback(u, team: team);
     Widget net(String src, Widget Function() onError) => Image.network(
       src,
-      fit: BoxFit.cover,
+      fit: fit,
       alignment: alignment,
       filterQuality: FilterQuality.high,
       errorBuilder: (_, _, _) => onError(),
@@ -829,7 +830,22 @@ class WeekAwardCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _photo(u, alignment: Alignment.center, team: true),
+                // Takım fotoğrafı genelde yatay: kırpılmasın diye bütünü
+                // ortada, arkasında aynı fotoğrafın bulanık hâli.
+                if (a.photo.trim().isNotEmpty)
+                  ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: 6 * u,
+                      sigmaY: 6 * u,
+                    ),
+                    child: _photo(u, alignment: Alignment.center, team: true),
+                  ),
+                _photo(
+                  u,
+                  alignment: Alignment.center,
+                  team: true,
+                  fit: BoxFit.contain,
+                ),
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
