@@ -204,6 +204,7 @@ class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
 
   late final Future<List<_GoalClip>> _goals = _loadGoals();
+  late final Future<_StarPhotos> _photos = _loadPhotos();
 
   /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
   int _tab = 0;
@@ -242,6 +243,197 @@ class _PlayerCardState extends State<PlayerCard> {
       ? _bgDark
       : Colors.white;
 
+  /// Fotoğraflar sekmesi: futbolcunun "Bu benim" ile yıldızladığı maç
+  /// fotoğrafları. Yeni özellik: admin ve deneme hesapları (ayar açılınca
+  /// herkes) görür; izin yoksa fotoğraflar yalnız sahibine açıktır (RLS).
+  bool get _showPhotosTab {
+    if (_cardPlayerId.isEmpty) return false;
+    try {
+      return playerPosterAllowed(AppSession.of(context).value);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  int get _photosTabIndex => _showPositionsTab ? 5 : 4;
+
+  bool get _isOwnCard {
+    try {
+      return AppSession.of(context).value.playerId == _cardPlayerId;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<_StarPhotos> _loadPhotos() async {
+    final pid = _cardPlayerId;
+    if (pid.isEmpty) return const _StarPhotos(urls: [], public: true);
+    var public = true;
+    var urls = <String>[];
+    try {
+      public =
+          await _sb.rpc('player_photos_public', params: {'p_player_id': pid})
+              as bool? ??
+          true;
+    } catch (_) {}
+    try {
+      urls = await loadStarredPhotos(pid);
+    } catch (_) {}
+    return _StarPhotos(urls: urls, public: public);
+  }
+
+  Widget _photosTab() {
+    return FutureBuilder<_StarPhotos>(
+      future: _photos,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final d = snap.data ?? const _StarPhotos(urls: [], public: true);
+        final own = _isOwnCard;
+        Widget note(IconData icon, String text, Color c) => Container(
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: c),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12.5,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (own && !d.public)
+              note(
+                Icons.lock_outline_rounded,
+                'Yalnızca sen görüyorsun. Fotoğraf iznin olmadığı için '
+                'başkalarına kapalı; izin verirsen profilinde herkese açılır.',
+                const Color(0xFF38BDF8),
+              )
+            else if (own)
+              note(
+                Icons.public_rounded,
+                'Profilinde herkese açık. Maç albümünde ⭐ ile eklenir, '
+                'tekrar basınca çıkar.',
+                const Color(0xFF34D399),
+              ),
+            if (d.urls.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  own
+                      ? 'Henüz fotoğrafın yok. Maç albümünde kendini bulduğun '
+                            'fotoğrafa ⭐ koy, buraya eklensin.'
+                      : 'Henüz fotoğraf yok.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white60),
+                ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${d.urls.length} FOTOĞRAF',
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    if (canShowPlayerPoster(context, _cardPlayerId))
+                      TextButton(
+                        onPressed: _openSeasonPoster,
+                        child: Text(
+                          'Afiş yap ›',
+                          style: TextStyle(
+                            color: _tone,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                ),
+                itemCount: d.urls.length,
+                itemBuilder: (context, i) => GestureDetector(
+                  onTap: () => _openPhotos(d.urls, i),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: WebSafeImage(url: d.urls[i], fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  void _openPhotos(List<String> urls, int start) {
+    final page = PageController(initialPage: start);
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(
+                backgroundColor: Colors.black,
+                iconTheme: const IconThemeData(color: Colors.white),
+              ),
+              body: PageView.builder(
+                controller: page,
+                itemCount: urls.length,
+                itemBuilder: (_, i) => InteractiveViewer(
+                  maxScale: 4,
+                  child: Center(
+                    child: WebSafeImage(
+                      url: urls[i],
+                      width: double.infinity,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+        .whenComplete(page.dispose);
+  }
+
   /// Alt çizgili sekme çubuğu (takım sayfası ve maç detayıyla aynı).
   Widget _tabBar(int goalCount) => TeamPageTabBar(
     index: _tab,
@@ -251,6 +443,7 @@ class _PlayerCardState extends State<PlayerCard> {
       'Kariyer',
       goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
       if (_showPositionsTab) 'Mevki',
+      if (_showPhotosTab) 'Fotoğraflar',
     ],
     indicatorColor: _tone,
     onChanged: (i) => setState(() => _tab = i),
@@ -962,7 +1155,9 @@ class _PlayerCardState extends State<PlayerCard> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    if (_tab == 4 && _showPositionsTab)
+                    if (_showPhotosTab && _tab == _photosTabIndex)
+                      _photosTab()
+                    else if (_tab == 4 && _showPositionsTab)
                       PlayerPositionsTab(playerId: _cardPlayerId, accent: _tone)
                     else if (_tab == 3)
                       _goalsTab()
@@ -2484,6 +2679,15 @@ class _SeasonNode {
   final String sortKey;
   final _StatTotals totals;
   final List<String> teams;
+}
+
+class _StarPhotos {
+  const _StarPhotos({required this.urls, required this.public});
+
+  final List<String> urls;
+
+  /// Fotoğraf izni var mı (yoksa yalnız sahibi görür).
+  final bool public;
 }
 
 class _StatTotals {
