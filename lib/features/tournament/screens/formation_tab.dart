@@ -1686,7 +1686,13 @@ class _PlayerToken extends StatelessWidget {
         SizedBox(
           width: 16,
           height: 16,
-          child: Center(child: CardIcon(red: m.reds.isNotEmpty, size: 12)),
+          child: Center(
+            child: CardIcon(
+              red: m.reds.isNotEmpty,
+              secondYellow: m.reds.isEmpty && m.yellows.length >= 2,
+              size: 12,
+            ),
+          ),
         ),
       if (goals > 0) _corner(const BallIcon(size: 15), count: goals),
       if (m.assists.isNotEmpty && !assistLeft) assist,

@@ -303,6 +303,11 @@ button.tile:hover { border-color: #33476e; }
 .ev.cancelled b { text-decoration: line-through; opacity: .6; }
 .ev .acts .btn { padding: 4px 8px; font-size: 12px; }
 .card-ic { width: 12px; height: 16px; border-radius: 2px; display: inline-block; }
+/* Çift sarıdan ihraç: sarı kartın üstüne kayık kırmızı. */
+.card2 { position: relative; display: inline-block; width: 16px; height: 17px; vertical-align: middle; }
+.card2::before, .card2::after { content: ''; position: absolute; width: 10px; height: 14px; border-radius: 2px; }
+.card2::before { left: 0; top: 0; background: #facc15; transform: rotate(-12deg); }
+.card2::after { right: 0; bottom: 0; background: #ef4444; transform: rotate(9deg); box-shadow: -1px 0 0 rgba(0,0,0,.35); }
 .shoot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .shoot .grp { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; }
 .shoot .grp b { font-size: 13px; margin-right: 4px; }
@@ -1175,6 +1180,7 @@ button.tile:hover { border-color: #33476e; }
       if (id !== state.liveId) return;
       state.offset = Date.parse(d.now) - Date.now();
       var sig = JSON.stringify(d, function (k, v) { return k === 'now' ? undefined : v; });
+      annotate(d);
       state.live = d;
       if (sig !== state.liveSig) {
         state.liveSig = sig;
@@ -1259,13 +1265,30 @@ button.tile:hover { border-color: #33476e; }
     }
   }
 
+  // Aynı oyuncunun ikinci sarısı: ihraç (veritabanındaki match_on_pitch_at
+  // ile aynı kural). Olaylar dakika sırasıyla gelir.
+  function annotate(d) {
+    var y = {};
+    d.events.forEach(function (e) {
+      if (e.type !== 'yellow_card') return;
+      y[e.player_id] = (y[e.player_id] || 0) + 1;
+      e.second = y[e.player_id] >= 2;
+    });
+  }
+  // Oyundan atılanlar: kırmızı kart ya da ikinci sarı.
+  function sentOffMap(d) {
+    var m = {};
+    d.events.forEach(function (e) { if (e.type === 'red_card' || (e.type === 'yellow_card' && e.second)) m[e.player_id] = true; });
+    return m;
+  }
+
   // Oyuncu yanındaki işaretler: gol, kart, değişiklik.
   function marks(d) {
     var mk = {};
     function add(id, s) { if (id) mk[id] = (mk[id] || '') + s; }
     d.events.forEach(function (e) {
       if (e.type === 'goal') add(e.player_id, e.own ? '🔄' : '⚽');
-      else if (e.type === 'yellow_card') add(e.player_id, '🟨');
+      else if (e.type === 'yellow_card') add(e.player_id, e.second ? '<i class="card2" title="Çift sarıdan ihraç"></i>' : '🟨');
       else if (e.type === 'red_card') add(e.player_id, '🟥');
       else if (e.type === 'substitution') { add(e.player_id, '🔻'); add(e.sub_in_id, '🔺'); }
       else if (e.type === 'man_of_the_match') add(e.player_id, '⭐');
@@ -1283,7 +1306,7 @@ button.tile:hover { border-color: #33476e; }
       if (e.type === 'substitution') {
         delete on[e.player_id];
         if (e.sub_in_id) on[e.sub_in_id] = true;
-      } else if (e.type === 'red_card') delete on[e.player_id];
+      } else if (e.type === 'red_card' || (e.type === 'yellow_card' && e.second)) delete on[e.player_id];
     });
     return on;
   }
@@ -1293,8 +1316,7 @@ button.tile:hover { border-color: #33476e; }
     if (!list.length) {
       return '<div class="empty" style="border:0">Esame girilmemiş.<br>Olay girmek için önce uygulamadan esameyi girin.</div>';
     }
-    var sentOff = {};
-    d.events.forEach(function (e) { if (e.type === 'red_card') sentOff[e.player_id] = true; });
+    var sentOff = sentOffMap(d);
     var on = onPitch(d, teamId);
     var pk = state.pick;
     var sub = state.mode === 'sub';
@@ -1465,8 +1487,7 @@ button.tile:hover { border-color: #33476e; }
   }
 
   function pitchHtml(d, mk) {
-    var sentOff = {};
-    d.events.forEach(function (e) { if (e.type === 'red_card') sentOff[e.player_id] = true; });
+    var sentOff = sentOffMap(d);
     var locked = isLocked(), pk = state.pick, sub = state.mode === 'sub';
     var html = '';
     var fs = [];
@@ -1505,9 +1526,8 @@ button.tile:hover { border-color: #33476e; }
     var lay = liveLayout(d, teamId);
     var on = {};
     lay.lines.forEach(function (l) { l.forEach(function (id) { on[id] = true; }); });
-    var sentOff = {}, out = {};
+    var sentOff = sentOffMap(d), out = {};
     d.events.forEach(function (e) {
-      if (e.type === 'red_card') sentOff[e.player_id] = true;
       if (e.type === 'substitution' && e.team_id === teamId) out[e.player_id] = true;
     });
     var locked = isLocked(), pk = state.pick, sub = state.mode === 'sub';
@@ -1653,7 +1673,7 @@ button.tile:hover { border-color: #33476e; }
     if (e.type === 'goal') return e.own ? '🔄' : e.pen ? '🎯' : '⚽';
     if (e.type === 'goal_cancelled') return '📺';
     if (e.type === 'penalty_missed') return '✖️';
-    if (e.type === 'yellow_card') return '<i class="card-ic" style="background:#facc15"></i>';
+    if (e.type === 'yellow_card') return e.second ? '<i class="card2"></i>' : '<i class="card-ic" style="background:#facc15"></i>';
     if (e.type === 'red_card') return '<i class="card-ic" style="background:#ef4444"></i>';
     if (e.type === 'red_card_cancelled') return '<i class="card-ic" style="background:#ef4444;opacity:.4"></i>';
     if (e.type === 'substitution') return '↔️';
@@ -1666,7 +1686,7 @@ button.tile:hover { border-color: #33476e; }
       goal: e.own ? 'Kendi kalesine' : e.pen ? 'Penaltı golü' : 'Gol',
       goal_cancelled: 'Gol (VAR ile iptal)',
       penalty_missed: 'Kaçan penaltı',
-      yellow_card: 'Sarı kart',
+      yellow_card: e.second ? 'Çift sarıdan ihraç' : 'Sarı kart',
       red_card: 'Kırmızı kart',
       red_card_cancelled: 'Kırmızı kart (VAR ile iptal)',
       substitution: 'Değişiklik',
