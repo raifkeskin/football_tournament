@@ -90,38 +90,38 @@ class _MatchInterviewsViewState extends State<MatchInterviewsView> {
             for (final (kind, items) in shown) ...[
               _groupHead(kind, items.length),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 168,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    for (var i = 0; i < items.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: SizedBox(
-                          width: 134,
-                          child: VideoTile(
-                            item: items[i],
-                            onTap: () => openVideoPlayer(context, items, i),
-                            onLongPress: widget.canManage
-                                ? () => showVideoActions(context, items[i])
-                                : null,
-                          ),
+              LayoutBuilder(
+                builder: (context, c) {
+                  // Kaydırma yok: ekran genişliğine göre satırda 2-4 video.
+                  final cols = (c.maxWidth / 118).floor().clamp(2, 4);
+                  final canAdd = widget.canManage && items.length < 4;
+                  return GridView.count(
+                    crossAxisCount: cols,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 6,
+                    crossAxisSpacing: 6,
+                    childAspectRatio: 9 / 13,
+                    children: [
+                      for (var i = 0; i < items.length; i++)
+                        VideoTile(
+                          item: items[i],
+                          onTap: () => openVideoPlayer(context, items, i),
+                          onLongPress: widget.canManage
+                              ? () => showVideoActions(context, items[i])
+                              : null,
                         ),
-                      ),
-                    if (widget.canManage && items.length < 4)
-                      SizedBox(
-                        width: 134,
-                        child: _AddSlot(
+                      if (canAdd)
+                        _AddSlot(
                           onTap: () => showAddVideoDialog(
                             context,
                             match: widget.match,
                             initialKind: kind,
                           ),
                         ),
-                      ),
-                  ],
-                ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 18),
             ],
