@@ -65,6 +65,8 @@ import '../utils/minute_label.dart';
 import '../widgets/minute_input_dialog.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
+import '../../videos/video_sections.dart';
+import '../../videos/videos.dart';
 import '../../media_credits/media_credit.dart';
 import '../../media_credits/media_credit_card.dart';
 import '../widgets/youtube_find_sheet.dart';
@@ -3271,7 +3273,8 @@ class _HighlightsTabView extends StatefulWidget {
 /// kurulunca (ör. fotoğraf eklendi) Gol Videoları'na dönmez.
 final Map<String, int> _mediaSectionByMatch = {};
 
-/// Medya sekmesinde o an görünen alt sekme (0 Gol Videoları, 1 Fotoğraflar);
+/// Medya sekmesinde o an görünen alt sekme (0 Gol Videoları, 1 Fotoğraflar,
+/// 2 Röportajlar);
 /// fotoğraf silme düğmesi yalnız Fotoğraflar'da görünür.
 final _mediaShownSection = ValueNotifier<int>(0);
 
@@ -3362,12 +3365,13 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         ),
         child: Row(
           children: [
-            item(0, Icons.movie_outlined, 'Gol Videoları'),
+            item(0, Icons.movie_outlined, 'Goller'),
             item(
               1,
               Icons.photo_outlined,
-              photoCount == 0 ? 'Fotoğraflar' : 'Fotoğraflar ($photoCount)',
+              photoCount == 0 ? 'Fotoğraflar' : 'Fotoğraf ($photoCount)',
             ),
+            item(2, Icons.mic_none_rounded, 'Röportaj'),
           ],
         ),
       ),
@@ -3414,6 +3418,26 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
           );
         }
         final switcher = _sectionSwitch(section, photos.length);
+        if (section == 2) {
+          final m = widget.match;
+          return Column(
+            children: [
+              switcher,
+              Expanded(
+                child: MatchInterviewsView(
+                  match: VideoMatchRef(
+                    id: m.id,
+                    homeId: m.homeTeamId,
+                    homeName: widget.homeName,
+                    awayId: m.awayTeamId,
+                    awayName: widget.awayName,
+                  ),
+                  canManage: canManageVideos(session, m.leagueId, m.seasonId),
+                ),
+              ),
+            ],
+          );
+        }
         if (section == 0) {
           return Column(
             children: [
