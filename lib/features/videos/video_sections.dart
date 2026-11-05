@@ -5,6 +5,7 @@ import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/app_name_band.dart';
 import '../news/screens/admin_manage_news_screen.dart';
 import '../news/widgets/result_news_cards.dart';
+import '../player/widgets/player_card.dart' show showPlayerCard;
 import '../tournament/models/league_extras.dart';
 import 'instagram_embed.dart';
 import 'videos.dart';
@@ -240,6 +241,14 @@ class _NewsVideosCardState extends State<NewsVideosCard> {
       for (final v in (d['videos'] as List? ?? const []))
         if (v is Map) VideoItem.fromNews(v, kind, logo: logo),
     ];
+    // Oynayan videonun etiketleri; kapak görünümünde hepsinin.
+    final p = _playing;
+    final tags = <VideoTag>[];
+    for (final v in (p != null && p < videos.length) ? [videos[p]] : videos) {
+      for (final t in v.players) {
+        if (!tags.any((x) => x.id == t.id)) tags.add(t);
+      }
+    }
     final title = (item.headline ?? '').trim().isNotEmpty
         ? item.headline!
         : item.autoKind == 'video'
@@ -370,6 +379,14 @@ class _NewsVideosCardState extends State<NewsVideosCard> {
                       ),
                     ),
                 ],
+              ),
+            ),
+          if (tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+              child: VideoTagsRow(
+                tags: tags,
+                onTap: (t) => showPlayerCard(context, playerKey: t.id),
               ),
             ),
           NewsCardActions(

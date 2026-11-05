@@ -34,6 +34,28 @@ enum VideoKind {
   static const interviews = [pre, live, post];
 }
 
+/// Videoda etiketlenen futbolcu (röportaj yapılan).
+class VideoTag {
+  const VideoTag({required this.id, required this.name, this.photo = ''});
+  final String id;
+  final String name;
+  final String photo;
+
+  factory VideoTag.fromMap(Map m) => VideoTag(
+    id: (m['id'] ?? m['player_id'] ?? '').toString(),
+    name: (m['name'] ?? '').toString().trim(),
+    photo: (m['photo'] ?? m['photo_url'] ?? '').toString().trim(),
+  );
+}
+
+/// Etiketlenebilecek futbolcu: maçın iki takımının kadrosu.
+class VideoTagCandidate {
+  const VideoTagCandidate(this.tag, this.teamId, this.teamName);
+  final VideoTag tag;
+  final String teamId;
+  final String teamName;
+}
+
 class VideoItem {
   const VideoItem({
     required this.id,
@@ -49,7 +71,14 @@ class VideoItem {
     this.week,
     this.coverUrl = '',
     this.logoUrl = '',
+    this.teamId,
+    this.players = const [],
   });
+
+  final String? teamId;
+
+  /// Etiketlenen futbolcular (haber verisinden; listelerde boş).
+  final List<VideoTag> players;
 
   final String id;
   final String url;
@@ -106,6 +135,7 @@ class VideoItem {
       week: (m['week'] as num?)?.toInt(),
       coverUrl: (r['cover_url'] ?? '').toString().trim(),
       logoUrl: (league['logo_url'] ?? '').toString().trim(),
+      teamId: r['team_id']?.toString(),
     );
   }
 
@@ -120,7 +150,27 @@ class VideoItem {
         teamLogo: (v['team_logo'] ?? '').toString().trim(),
         coverUrl: (v['cover'] ?? '').toString().trim(),
         logoUrl: logo,
+        teamId: v['team_id']?.toString(),
+        players: [
+          for (final p in (v['players'] as List? ?? const []))
+            if (p is Map) VideoTag.fromMap(p),
+        ],
       );
+
+  /// Profildeki röportaj listesinden (player_videos).
+  factory VideoItem.fromPlayerRow(Map r) => VideoItem(
+    id: (r['id'] ?? '').toString(),
+    url: (r['url'] ?? '').toString(),
+    kind: VideoKind.of(r['kind']?.toString()),
+    seasonId: (r['season_id'] ?? '').toString(),
+    matchId: r['match_id']?.toString(),
+    title: (r['title'] ?? '').toString().trim(),
+    teamName: (r['team_name'] ?? '').toString().trim(),
+    teamLogo: (r['team_logo'] ?? '').toString().trim(),
+    matchLabel: (r['match_label'] ?? '').toString(),
+    week: (r['week'] as num?)?.toInt(),
+    coverUrl: (r['cover_url'] ?? '').toString().trim(),
+  );
 }
 
 class VideoService {
@@ -132,7 +182,8 @@ class VideoService {
   static final changed = ValueNotifier<int>(0);
 
   static const _select =
-      'id, season_id, match_id, kind, title, url, pinned, cover_url, '
+      'id, season_id, match_id, kind, team_id, title, url, pinned, '
+      'cover_url, '
       'created_at, teams(name, logo_url), seasons(leagues(logo_url)), '
       'matches(week, home:teams!home_team_id(name), away:teams!away_team_id(name))';
 
@@ -154,7 +205,8 @@ class VideoService {
     return [for (final r in rows) VideoItem.fromRow(r)];
   }
 
-  static Future<void> add({
+  /// Ekler ve yeni videonun kimliğini döner.
+  static Future<String> add({
     String? seasonId,
     String? matchId,
     required VideoKind kind,
@@ -165,7 +217,7 @@ class VideoService {
     bool asNews = false,
     String? coverUrl,
   }) async {
-    await _db.rpc(
+    final id = await _db.rpc(
       'video_add',
       params: {
         'p_season': seasonId,
@@ -180,6 +232,50 @@ class VideoService {
       },
     );
     changed.value++;
+    return (id ?? '').toString();
+  }
+
+  /// Maçın iki takımının kadrosu (etiketleme için).
+  static Future<List<VideoTagCandidate>> tagCandidates(String matchId) async {
+    final rows =
+        await _db.rpc('video_tag_candidates', params: {'p_match': matchId})
+            as List;
+    return [
+      for (final r in rows)
+        if (r is Map)
+          VideoTagCandidate(
+            VideoTag.fromMap(r),
+            (r['team_id'] ?? '').toString(),
+            (r['team_name'] ?? '').toString(),
+          ),
+    ];
+  }
+
+  /// Videonun şu anki etiketleri (futbolcu kimlikleri).
+  static Future<Set<String>> taggedIds(String videoId) async {
+    final rows = await _db
+        .from('video_players')
+        .select('player_id')
+        .eq('video_id', videoId);
+    return {for (final r in rows) r['player_id'].toString()};
+  }
+
+  static Future<void> setPlayers(String videoId, Iterable<String> ids) async {
+    await _db.rpc(
+      'video_set_players',
+      params: {'p_id': videoId, 'p_players': ids.toList()},
+    );
+    changed.value++;
+  }
+
+  /// Futbolcunun etiketlendiği röportajlar (profil).
+  static Future<List<VideoItem>> forPlayer(String playerId) async {
+    final rows =
+        await _db.rpc('player_videos', params: {'p_player': playerId}) as List;
+    return [
+      for (final r in rows)
+        if (r is Map) VideoItem.fromPlayerRow(r),
+    ];
   }
 
   static Future<void> delete(String id) async {
@@ -547,6 +643,18 @@ Future<void> showVideoActions(
               ),
               onTap: () => Navigator.pop(ctx, 'pin'),
             ),
+          if (v.matchId != null)
+            ListTile(
+              leading: const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: Colors.white70,
+              ),
+              title: const Text(
+                'Kişileri etiketle',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.pop(ctx, 'tag'),
+            ),
           ListTile(
             leading: const Icon(Icons.image_outlined, color: Colors.white70),
             title: Text(
@@ -596,6 +704,25 @@ Future<void> showVideoActions(
       await VideoService.setCover(v.id, url);
       messenger.showSnackBar(
         const SnackBar(content: Text('Kapak fotoğrafı güncellendi.')),
+      );
+    } else if (action == 'tag') {
+      final cands = await VideoService.tagCandidates(v.matchId!);
+      final cur = await VideoService.taggedIds(v.id);
+      if (!context.mounted) return;
+      final picked = await showDialog<Set<String>>(
+        context: context,
+        builder: (_) => _TagDialog(
+          candidates: [
+            for (final c in cands)
+              if (v.teamId == null || c.teamId == v.teamId) c,
+          ],
+          selected: cur,
+        ),
+      );
+      if (picked == null) return;
+      await VideoService.setPlayers(v.id, picked);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Etiketler kaydedildi.')),
       );
     } else if (action == 'uncover') {
       await VideoService.setCover(v.id, null);
@@ -690,6 +817,25 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
 
   /// Seçilen kapak fotoğrafı (isteğe bağlı).
   XFile? _cover;
+
+  /// Röportaj yapılan futbolcular (en çok 3).
+  final _tags = <String>{};
+  late final Future<List<VideoTagCandidate>>? _cands = widget.match == null
+      ? null
+      : VideoService.tagCandidates(
+          widget.match!.id,
+        ).catchError((_) => <VideoTagCandidate>[]);
+
+  String? get _teamId {
+    final m = widget.match;
+    if (m == null) return null;
+    return _side == 'home'
+        ? m.homeId
+        : _side == 'away'
+        ? m.awayId
+        : null;
+  }
+
   String? _error;
 
   @override
@@ -729,7 +875,7 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
     });
     try {
       final cover = _cover == null ? null : await uploadVideoCover(_cover!);
-      await VideoService.add(
+      final id = await VideoService.add(
         seasonId: widget.seasonId,
         matchId: m?.id,
         kind: _kind,
@@ -746,6 +892,9 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
         asNews: m == null && _asNews,
         coverUrl: cover,
       );
+      if (_tags.isNotEmpty && id.isNotEmpty) {
+        await VideoService.setPlayers(id, _tags);
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -857,7 +1006,36 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
                       (null, 'Genel'),
                     ],
                     _side,
-                    (v) => _side = v,
+                    (v) {
+                      _side = v;
+                      _tags.clear();
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'RÖPORTAJ YAPILAN (İSTEĞE BAĞLI, EN ÇOK 3)',
+                    style: labelStyle,
+                  ),
+                  const SizedBox(height: 6),
+                  FutureBuilder<List<VideoTagCandidate>>(
+                    future: _cands,
+                    builder: (context, snap) {
+                      if (!snap.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: LinearProgressIndicator(color: kAdminAccent),
+                        );
+                      }
+                      final team = _teamId;
+                      return VideoTagPicker(
+                        candidates: [
+                          for (final c in snap.data!)
+                            if (team == null || c.teamId == team) c,
+                        ],
+                        selected: _tags,
+                        onChanged: () => setState(() {}),
+                      );
+                    },
                   ),
                   const SizedBox(height: 14),
                 ] else ...[
@@ -1068,5 +1246,189 @@ class VideosShortcut {
           .eq('season_id', seasonId);
       if (_seasonId == seasonId) count.value = n;
     } catch (_) {}
+  }
+}
+
+/// Futbolcu seçimi (en çok 3): kadro çipleri, fotoğraflı.
+class VideoTagPicker extends StatelessWidget {
+  const VideoTagPicker({
+    super.key,
+    required this.candidates,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<VideoTagCandidate> candidates;
+
+  /// Yerinde değiştirilir.
+  final Set<String> selected;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (candidates.isEmpty) {
+      return const Text(
+        'Kadroda futbolcu bulunamadı.',
+        style: TextStyle(color: Colors.white54, fontSize: 12.5),
+      );
+    }
+    final full = selected.length >= 3;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final c in candidates)
+          FilterChip(
+            label: Text(c.tag.name),
+            selected: selected.contains(c.tag.id),
+            showCheckmark: false,
+            avatar: c.tag.photo.isEmpty
+                ? null
+                : ClipOval(
+                    child: WebSafeImage(
+                      url: c.tag.photo,
+                      width: 22,
+                      height: 22,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+            onSelected: (on) {
+              if (on && full) return;
+              on ? selected.add(c.tag.id) : selected.remove(c.tag.id);
+              onChanged();
+            },
+            labelStyle: TextStyle(
+              color: selected.contains(c.tag.id)
+                  ? Colors.white
+                  : (full ? Colors.white30 : Colors.white70),
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+            ),
+            backgroundColor: const Color(0xFF131D33),
+            selectedColor: kAdminAccent.withValues(alpha: 0.35),
+            side: BorderSide(
+              color: selected.contains(c.tag.id)
+                  ? kAdminAccent
+                  : const Color(0xFF263248),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TagDialog extends StatefulWidget {
+  const _TagDialog({required this.candidates, required this.selected});
+  final List<VideoTagCandidate> candidates;
+  final Set<String> selected;
+
+  @override
+  State<_TagDialog> createState() => _TagDialogState();
+}
+
+class _TagDialogState extends State<_TagDialog> {
+  late final _sel = {...widget.selected};
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+      child: AdminDialogCloseOverlay(
+        onClose: () => Navigator.pop(context),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: adminDialogDecoration(),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const AdminDialogHeader(
+                  icon: Icons.person_add_alt_1_rounded,
+                  title: 'Kişileri Etiketle',
+                  subtitle: 'Röportaj yapılan futbolcular (en çok 3)',
+                ),
+                const SizedBox(height: 16),
+                VideoTagPicker(
+                  candidates: widget.candidates,
+                  selected: _sel,
+                  onChanged: () => setState(() {}),
+                ),
+                const SizedBox(height: 18),
+                AdminPrimaryButton(
+                  label: 'KAYDET',
+                  onPressed: () => Navigator.pop(context, _sel),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Etiketli futbolcular: fotoğraf + ad; dokununca profili.
+class VideoTagsRow extends StatelessWidget {
+  const VideoTagsRow({super.key, required this.tags, required this.onTap});
+  final List<VideoTag> tags;
+  final ValueChanged<VideoTag> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final t in tags)
+          InkWell(
+            onTap: () => onTap(t),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipOval(
+                    child: t.photo.isEmpty
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: ColoredBox(
+                              color: Color(0xFF334155),
+                              child: Icon(
+                                Icons.person_rounded,
+                                size: 16,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          )
+                        : WebSafeImage(
+                            url: t.photo,
+                            width: 22,
+                            height: 22,
+                            fit: BoxFit.cover,
+                          ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    t.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
