@@ -902,27 +902,15 @@ class _MyProfileViewState extends State<MyProfileView> {
                 if (_bioLabel != null) ...[
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      children: [
-                        _cardButton(
-                          icon: _bioLabel == 'Parmak izi'
-                              ? Icons.fingerprint_rounded
-                              : Icons.face_rounded,
-                          label: _bioLabel!,
-                          color: _bioOn ? kAdminAccent : Colors.white,
-                          onTap: _toggleBio,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _bioOn ? 'AÇIK' : 'KAPALI',
-                          style: TextStyle(
-                            color: _bioOn ? kAdminAccent : Colors.white54,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
+                    child: _cardButton(
+                      icon: _bioLabel == 'Parmak izi'
+                          ? Icons.fingerprint_rounded
+                          : Icons.face_rounded,
+                      label: _bioLabel!,
+                      color: _bioOn ? kAdminAccent : Colors.white,
+                      onTap: _toggleBio,
+                      status: _bioOn ? 'AÇIK' : 'KAPALI',
+                      statusColor: _bioOn ? kAdminAccent : kAdminDanger,
                     ),
                   ),
                 ],
@@ -1133,7 +1121,14 @@ class _MyProfileViewState extends State<MyProfileView> {
     required String label,
     required Color color,
     required VoidCallback onTap,
+    String? status,
+    Color? statusColor,
   }) {
+    final text = Text(
+      label,
+      maxLines: 1,
+      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+    );
     return SizedBox(
       height: 42,
       child: OutlinedButton.icon(
@@ -1147,13 +1142,28 @@ class _MyProfileViewState extends State<MyProfileView> {
         ),
         onPressed: onTap,
         icon: Icon(icon, size: 16),
+        // [status] verilirse adın altında küçük durum yazısı (kutu büyümez).
         label: FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(
-            label,
-            maxLines: 1,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-          ),
+          child: status == null
+              ? text
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    text,
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
