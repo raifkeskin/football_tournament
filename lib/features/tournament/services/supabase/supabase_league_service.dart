@@ -668,7 +668,7 @@ class SupabaseLeagueService implements ILeagueService {
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
       'auto_kind, match_id, week, auto_data, link_url, headline, article, pending_until, '
-      'reactions, comment_count, poll';
+      'reactions, comment_count, poll, pinned_at';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -775,6 +775,7 @@ class SupabaseLeagueService implements ILeagueService {
           ? null
           : r['link_url'].toString().trim(),
       pendingUntil: _readDate(r['pending_until']),
+      pinnedAt: _readDate(r['pinned_at']),
       reactions: {
         if (r['reactions'] is Map)
           for (final e in (r['reactions'] as Map).entries)
@@ -883,6 +884,7 @@ class SupabaseLeagueService implements ILeagueService {
       'live_draw_id',
       'auto_data',
       'link_url',
+      'pinned_at',
     ];
     for (final k in watched) {
       if (!next.containsKey(k)) continue;
@@ -953,8 +955,14 @@ class SupabaseLeagueService implements ILeagueService {
         return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
 
-      List<NewsItem> items(List<Map<String, dynamic>> rows) =>
-          rows.map((r) => _newsFromRow(r)).toList();
+      // Turnuvanın akışında sabitlenen haberler (en yeni sabitlenen) üstte.
+      List<NewsItem> items(List<Map<String, dynamic>> rows) {
+        final list = rows.map((r) => _newsFromRow(r)).toList();
+        if (id.isEmpty && sid.isEmpty) return list;
+        final pinned = list.where((n) => n.pinnedAt != null).toList()
+          ..sort((a, b) => b.pinnedAt!.compareTo(a.pinnedAt!));
+        return [...pinned, ...list.where((n) => n.pinnedAt == null)];
+      }
 
       // Yalnızca beğeni sayısı değiştiyse (en sık değişiklik) satır yerinde
       // güncellenir; liste yeniden indirilmez. Diğer değişikliklerde

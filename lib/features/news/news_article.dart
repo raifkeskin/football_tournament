@@ -38,6 +38,8 @@ extension NewsItemKind on NewsItem {
     if (autoKind == 'player_of_week') return 'HAFTANIN OYUNCUSU';
     if (autoKind == 'team_of_week') return 'HAFTANIN TAKIMI';
     if (autoKind == 'week_awards') return 'HAFTANIN ENLERİ';
+    if (autoKind == 'interviews') return 'RÖPORTAJ';
+    if (autoKind == 'video') return 'VİDEO';
     if (isInstagram) return 'INSTAGRAM';
     return 'DUYURU';
   }

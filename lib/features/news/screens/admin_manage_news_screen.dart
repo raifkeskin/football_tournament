@@ -19,7 +19,18 @@ import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'week_awards_screen.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
-  const AdminManageNewsScreen({super.key});
+  const AdminManageNewsScreen({
+    super.key,
+    this.leagueId,
+    this.embedded = false,
+  });
+
+  /// Verilirse yalnız bu turnuvanın haberleri (turnuva filtresi yok).
+  final String? leagueId;
+
+  /// Başka bir sayfanın sekmesi olarak (bant ve başlık yok; Haber Ekle
+  /// sağ altta).
+  final bool embedded;
 
   @override
   State<AdminManageNewsScreen> createState() => _AdminManageNewsScreenState();
@@ -37,7 +48,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
   /// Kullanıcının yönetebildiği turnuvalar (admin: hepsi, sahibi: kendi).
   List<League> _tournaments = const [];
-  String? _selectedTournamentId;
+  late String? _selectedTournamentId = widget.leagueId;
   _NewsStatus _status = _NewsStatus.all;
 
   /// Filtrede "Tümü" (bütün yönetilebilen turnuvalar).
@@ -103,17 +114,18 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     return showAdminFilterDialog(
       context: context,
       fieldsBuilder: (ctx, refresh) => [
-        CustomPopupSelector<String>(
-          label: 'Turnuva',
-          selectedValue: _selectedTournamentId,
-          items: [_allTournaments, ..._tournaments.map((l) => l.id)],
-          labelBuilder: (id) =>
-              id == _allTournaments ? 'Tümü' : _tournamentName(id),
-          onChanged: (v) {
-            setState(() => _selectedTournamentId = v);
-            refresh();
-          },
-        ),
+        if (widget.leagueId == null)
+          CustomPopupSelector<String>(
+            label: 'Turnuva',
+            selectedValue: _selectedTournamentId,
+            items: [_allTournaments, ..._tournaments.map((l) => l.id)],
+            labelBuilder: (id) =>
+                id == _allTournaments ? 'Tümü' : _tournamentName(id),
+            onChanged: (v) {
+              setState(() => _selectedTournamentId = v);
+              refresh();
+            },
+          ),
         CustomPopupSelector<_NewsStatus>(
           label: 'Durum',
           selectedValue: _status,
@@ -146,6 +158,26 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       if (mounted) {
         _snack(next ? 'Haber yayınlandı.' : 'Haber yayından kaldırıldı.');
       }
+    } catch (e) {
+      if (mounted) _snack('Hata: $e');
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(newsId));
+    }
+  }
+
+  /// Haberi turnuvanın akışında en üste sabitler (turnuva başına en çok 3).
+  Future<void> _pin(String newsId, bool pin) async {
+    setState(() => _busyIds.add(newsId));
+    try {
+      await Supabase.instance.client.rpc(
+        'news_set_pinned',
+        params: {'p_news': newsId, 'p_pinned': pin},
+      );
+      if (mounted) {
+        _snack(pin ? 'Haber en üste sabitlendi.' : 'Sabitleme kaldırıldı.');
+      }
+    } on PostgrestException catch (e) {
+      if (mounted) _snack(e.message);
     } catch (e) {
       if (mounted) _snack('Hata: $e');
     } finally {
@@ -842,6 +874,19 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                 )
               else ...[
                 AdminSmallAction(
+                  icon: doc.pinnedAt != null
+                      ? Icons.push_pin_rounded
+                      : Icons.push_pin_outlined,
+                  tooltip: doc.pinnedAt != null
+                      ? 'Sabitlemeyi kaldır'
+                      : 'Haberlerde sabitle',
+                  color: doc.pinnedAt != null
+                      ? const Color(0xFFFBBF24)
+                      : Colors.white54,
+                  onTap: () => _pin(doc.id, doc.pinnedAt == null),
+                ),
+                const SizedBox(width: 6),
+                AdminSmallAction(
                   icon: isPublished
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
@@ -889,6 +934,20 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         ),
       );
     }
+    if (widget.embedded) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        floatingActionButton: FloatingActionButton(
+          heroTag: null,
+          tooltip: 'Haber Ekle',
+          backgroundColor: kAdminAccent,
+          foregroundColor: Colors.white,
+          onPressed: () => _openNewsForm(),
+          child: const Icon(Icons.post_add_rounded, size: 26),
+        ),
+        body: _body(session),
+      );
+    }
     return AdminPageScaffold(
       title: 'Haber Yönetimi',
       actions: [
@@ -910,107 +969,111 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
           onPressed: () => _openNewsForm(),
         ),
       ],
-      body: StreamBuilder<List<League>>(
-        stream: _leaguesStream,
-        builder: (context, tSnap) {
-          if (!tSnap.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: kAdminAccent),
-            );
-          }
-          // Admin her turnuvayı; kurucu ve bölge sorumlusu kendininkileri.
-          final allowed = session.panelLeagueIds;
-          _tournaments = (tSnap.data ?? const <League>[])
-              .where((l) => allowed == null || allowed.contains(l.id))
-              .toList();
-          final myRegions = {for (final r in session.ownedRegions) r.id};
-          if (_tournaments.isEmpty) {
-            return const Center(
-              child: Text(
-                'Turnuva bulunamadı.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            );
-          }
-          if (_selectedTournamentId != _allTournaments &&
-              _tournaments.every((l) => l.id != _selectedTournamentId)) {
-            _selectedTournamentId = _allTournaments;
-          }
-          final tId = (_selectedTournamentId ?? '').trim();
-          final showAll = tId == _allTournaments;
+      body: _body(session),
+    );
+  }
 
-          return Column(
-            children: [
-              AdminFilterBar(
-                summary:
-                    '${showAll ? 'Tüm turnuvalar' : _tournamentName(tId)} • '
-                    '${_statusLabel(_status)}',
-                onTap: _openFilters,
-              ),
-              Expanded(
-                child: StreamBuilder<List<NewsItem>>(
-                  stream: showAll
-                      ? _leagueService.watchNewsForLeagues(
-                          _tournaments.map((l) => l.id).toSet(),
-                        )
-                      : _leagueService.watchNews(
-                          tournamentId: tId,
-                          includeUnpublished: true,
-                        ),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(
-                        child: CircularProgressIndicator(color: kAdminAccent),
-                      );
-                    }
-                    // Sunucu created_at'e göre azalan sırada döner (en yeni üstte).
-                    final docs = (snapshot.data ?? const <NewsItem>[])
-                        .where((n) => !_deletedIds.contains(n.id))
-                        .where(
-                          (n) => switch (_status) {
-                            _NewsStatus.all => true,
-                            _NewsStatus.live => n.isLive,
-                            _NewsStatus.passive => !n.isLive,
-                          },
-                        )
-                        // Bölge sorumlusu yalnızca kendi bölgesinin haberleri.
-                        .where(
-                          (n) =>
-                              session.canManageLeague(n.tournamentId) ||
-                              myRegions.contains(n.regionId),
-                        )
-                        .toList();
-                    if (docs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          _status == _NewsStatus.all
-                              ? 'Kayıtlı haber bulunamadı.\n'
-                                    'Sağ üstteki butondan haber ekleyebilirsiniz.'
-                              : '${_statusLabel(_status)} haber yok.',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white54),
-                        ),
-                      );
-                    }
-                    return ListView(
-                      padding: const EdgeInsets.fromLTRB(
-                        16,
-                        0,
-                        16,
-                        kAdminFabClearance,
-                      ),
-                      children: [
-                        for (final d in docs)
-                          _newsCard(d, showTournament: showAll),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
+  Widget _body(AppSessionState session) {
+    return StreamBuilder<List<League>>(
+      stream: _leaguesStream,
+      builder: (context, tSnap) {
+        if (!tSnap.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(color: kAdminAccent),
           );
-        },
-      ),
+        }
+        // Admin her turnuvayı; kurucu ve bölge sorumlusu kendininkileri.
+        final allowed = session.panelLeagueIds;
+        _tournaments = (tSnap.data ?? const <League>[])
+            .where((l) => allowed == null || allowed.contains(l.id))
+            .toList();
+        final myRegions = {for (final r in session.ownedRegions) r.id};
+        if (_tournaments.isEmpty) {
+          return const Center(
+            child: Text(
+              'Turnuva bulunamadı.',
+              style: TextStyle(color: Colors.white54),
+            ),
+          );
+        }
+        if (_selectedTournamentId != _allTournaments &&
+            _tournaments.every((l) => l.id != _selectedTournamentId)) {
+          _selectedTournamentId = _allTournaments;
+        }
+        final tId = (_selectedTournamentId ?? '').trim();
+        final showAll = tId == _allTournaments;
+
+        return Column(
+          children: [
+            AdminFilterBar(
+              summary:
+                  '${showAll ? 'Tüm turnuvalar' : _tournamentName(tId)} • '
+                  '${_statusLabel(_status)}',
+              onTap: _openFilters,
+            ),
+            Expanded(
+              child: StreamBuilder<List<NewsItem>>(
+                stream: showAll
+                    ? _leagueService.watchNewsForLeagues(
+                        _tournaments.map((l) => l.id).toSet(),
+                      )
+                    : _leagueService.watchNews(
+                        tournamentId: tId,
+                        includeUnpublished: true,
+                      ),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: kAdminAccent),
+                    );
+                  }
+                  // Sunucu created_at'e göre azalan sırada döner (en yeni üstte).
+                  final docs = (snapshot.data ?? const <NewsItem>[])
+                      .where((n) => !_deletedIds.contains(n.id))
+                      .where(
+                        (n) => switch (_status) {
+                          _NewsStatus.all => true,
+                          _NewsStatus.live => n.isLive,
+                          _NewsStatus.passive => !n.isLive,
+                        },
+                      )
+                      // Bölge sorumlusu yalnızca kendi bölgesinin haberleri.
+                      .where(
+                        (n) =>
+                            session.canManageLeague(n.tournamentId) ||
+                            myRegions.contains(n.regionId),
+                      )
+                      .toList();
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _status == _NewsStatus.all
+                            ? 'Kayıtlı haber bulunamadı.\n'
+                                  'Sağ üstteki butondan haber ekleyebilirsiniz.'
+                            : '${_statusLabel(_status)} haber yok.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  }
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      16,
+                      0,
+                      16,
+                      kAdminFabClearance,
+                    ),
+                    children: [
+                      for (final d in docs)
+                        _newsCard(d, showTournament: showAll),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

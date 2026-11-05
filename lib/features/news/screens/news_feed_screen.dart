@@ -1,3 +1,4 @@
+import '../../videos/video_sections.dart';
 import 'package:flutter/material.dart';
 import '../../match/screens/live_draw_screen.dart';
 import 'package:share_plus/share_plus.dart';
@@ -223,6 +224,18 @@ class _NewsViewState extends State<NewsView> {
                       onToggleLike: () => _toggleLike(n, liked),
                       onShare: () => _share(n),
                     );
+            }
+            if (NewsVideosCard.handles(n)) {
+              return NewsVideosCard(
+                key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                item: n,
+                meta: _timeAgo(n.createdAt),
+                loggedIn: loggedIn,
+                liked: liked,
+                likeCount: count,
+                onToggleLike: () => _toggleLike(n, liked),
+                onShare: () => _share(n),
+              );
             }
             if (n.isWeekAwards) {
               return WeekAwardsNewsCard(
