@@ -63,20 +63,47 @@ class PenaltyBallIcon extends StatelessWidget {
 
 /// Kart ikonu.
 class CardIcon extends StatelessWidget {
-  const CardIcon({super.key, required this.red, this.size = 13});
+  const CardIcon({
+    super.key,
+    required this.red,
+    this.secondYellow = false,
+    this.size = 13,
+  });
 
   final bool red;
+
+  /// Çift sarıdan ihraç: sarı kartın üstüne kayık kırmızı.
+  final bool secondYellow;
   final double size;
 
-  @override
-  Widget build(BuildContext context) => Container(
+  Widget _card(Color c) => Container(
     width: size * 0.7,
     height: size,
-    decoration: BoxDecoration(
-      color: red ? _red : _yellow,
-      borderRadius: BorderRadius.circular(2),
-    ),
+    decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2)),
   );
+
+  @override
+  Widget build(BuildContext context) {
+    if (!secondYellow) return _card(red ? _red : _yellow);
+    return SizedBox(
+      width: size * 1.05,
+      height: size * 1.1,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            child: Transform.rotate(angle: -0.2, child: _card(_yellow)),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Transform.rotate(angle: 0.15, child: _card(_red)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Kadro satırında oyuncunun olayları: gol, penaltı golü, kendi kalesine,
