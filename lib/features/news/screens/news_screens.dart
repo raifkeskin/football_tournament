@@ -1,3 +1,4 @@
+import '../../videos/video_sections.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -1066,6 +1067,17 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     void share() => shareNews(n);
     if (n.isDayPreview) {
       return DayPreviewNewsCard(
+        item: n,
+        meta: meta,
+        loggedIn: loggedIn,
+        liked: _liked,
+        likeCount: _count,
+        onToggleLike: like,
+        onShare: share,
+      );
+    }
+    if (NewsVideosCard.handles(n)) {
+      return NewsVideosCard(
         item: n,
         meta: meta,
         loggedIn: loggedIn,

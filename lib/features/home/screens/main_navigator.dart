@@ -32,6 +32,8 @@ import '../../../core/services/follows.dart';
 import '../../follows/follow_list_screen.dart';
 import '../../search/search_screen.dart';
 import '../../tournament/regulations/regulations_screen.dart';
+import '../../videos/video_sections.dart';
+import '../../videos/videos.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -93,6 +95,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     ActiveTournament.currentLeagueId.addListener(_onSettings);
     AppSettings.regulationsEnabled.addListener(_onSettings);
     RegulationsShortcut.current.addListener(_onSettings);
+    VideosShortcut.count.addListener(_onSettings);
   }
 
   void _onSettings() {
@@ -114,6 +117,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     ActiveTournament.currentLeagueId.removeListener(_onSettings);
     AppSettings.regulationsEnabled.removeListener(_onSettings);
     RegulationsShortcut.current.removeListener(_onSettings);
+    VideosShortcut.count.removeListener(_onSettings);
     LeagueSwitchScope.clearHome(_route);
     super.dispose();
   }
@@ -190,6 +194,16 @@ class _MainNavigatorState extends State<MainNavigator> {
     RegulationsShortcut.sync(ActiveTournament.currentLeagueId.value);
     final regulations = RegulationsShortcut.current.value;
     final showRegulations = regulations?.shownTo(session.value) ?? false;
+    // Videolar: video varsa herkese, yoksa yalnız ekleyebilene.
+    VideosShortcut.sync(regulations?.seasonId);
+    final showVideos =
+        regulations != null &&
+        (VideosShortcut.count.value > 0 ||
+            canManageVideos(
+              session.value,
+              regulations.leagueId,
+              regulations.seasonId,
+            ));
     // Turnuva seçicisi yalnızca ana sekmelerde (Profil / yönetim panelinde
     // değil).
     LeagueSwitchScope.setHome(
@@ -297,6 +311,17 @@ class _MainNavigatorState extends State<MainNavigator> {
               ? () {
                   Navigator.of(context).pop(); // çekmeceyi kapat
                   regulations!.open(this.context);
+                }
+              : null,
+          videoCount: VideosShortcut.count.value,
+          onVideos: showVideos
+              ? () {
+                  Navigator.of(context).pop(); // çekmeceyi kapat
+                  TournamentVideosScreen.open(
+                    this.context,
+                    leagueId: regulations.leagueId,
+                    seasonId: regulations.seasonId,
+                  );
                 }
               : null,
         ),
@@ -588,6 +613,8 @@ class _MenuDrawer extends StatelessWidget {
     required this.onLogout,
     required this.onEnterCode,
     this.onRegulations,
+    this.onVideos,
+    this.videoCount = 0,
   });
 
   final int activeIndex;
@@ -599,6 +626,10 @@ class _MenuDrawer extends StatelessWidget {
 
   /// Seçili turnuvanın talimatnamesi (yoksa / kapalıysa null).
   final VoidCallback? onRegulations;
+
+  /// Turnuva videoları (video yoksa ve ekleyemiyorsa null).
+  final VoidCallback? onVideos;
+  final int videoCount;
 
   static const _ground = Color(0xFF0F172A);
   static const _surface = Color(0xFF1E293B);
@@ -795,6 +826,13 @@ class _MenuDrawer extends StatelessWidget {
           const Color(0xFF64748B),
           () => _open(t!.websiteUrl),
           'Web sitesi',
+        ),
+      if (t != null && onVideos != null)
+        (
+          Icons.play_arrow_rounded,
+          const Color(0xFF10B981),
+          onVideos!,
+          videoCount > 0 ? 'Videolar ($videoCount)' : 'Videolar',
         ),
     ];
     // Turnuva talimatnamesi: sosyal hesapların yanında, üst banttaki

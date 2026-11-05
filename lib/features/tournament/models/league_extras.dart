@@ -48,7 +48,12 @@ class NewsItem {
     this.reactions = const {},
     this.commentCount = 0,
     this.poll = const {},
+    this.pinnedAt,
   });
+
+  /// Turnuvanın haber akışında en üste sabitlendiği an (turnuva başına en
+  /// çok 3); null ise sabit değil.
+  final DateTime? pinnedAt;
 
   /// Tribün tepkileri: yuva (1-3) → sayı. Etiketler haber türüne göre.
   final Map<int, int> reactions;

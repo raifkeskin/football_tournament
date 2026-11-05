@@ -1,0 +1,30 @@
+-- Röportaj / turnuva videosu haberleri ('interviews', 'video') test süresince
+-- yalnız admine görünür (eski sürümler dahil; süzme sunucuda). Herkese açmak:
+--   update app_settings set value = 'true' where key = 'video_news_public';
+insert into public.app_settings (key, value) values ('video_news_public', 'false'::jsonb)
+on conflict (key) do nothing;
+
+create or replace function public.video_news_visible(p_auto_kind text)
+returns boolean
+language sql
+stable
+security definer
+set search_path to ''
+as $$
+  select p_auto_kind is null
+      or p_auto_kind not in ('interviews', 'video')
+      or public.is_admin()
+      or coalesce((select value = 'true'::jsonb from public.app_settings
+                    where key = 'video_news_public'), false)
+$$;
+grant execute on function public.video_news_visible(text) to anon, authenticated;
+
+drop policy if exists news_read on public.news;
+create policy news_read on public.news for select using (
+  public.video_news_visible(auto_kind) and (
+    public.owns_news(season_id, region_id)
+    or (is_published
+        and (publish_until is null or publish_until > now())
+        and public.can_view_season(season_id))
+  )
+);
