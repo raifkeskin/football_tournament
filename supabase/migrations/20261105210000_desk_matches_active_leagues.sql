@@ -1,0 +1,88 @@
+-- Yönetim Masası: pasif turnuvaların maçları da listeleniyordu (turnuva
+-- seçicisi zaten yalnız aktifleri gösteriyor). Maç listesi de yalnız aktif
+-- turnuvalarla sınırlanır.
+
+CREATE OR REPLACE FUNCTION public.desk_matches(p_date date)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with mine as (
+    select m.*, coalesce(m.league_id, s.league_id) as lid, s.name as season_name,
+           g.name as group_name
+    from public.matches m
+    join public.seasons s on s.id = m.season_id and s.deleted_at is null
+    left join public.groups g on g.id = m.group_id
+    where auth.uid() is not null
+      and m.deleted_at is null
+      and (g.id is null or g.deleted_at is null)
+      and exists (select 1 from public.leagues l
+                  where l.id = coalesce(m.league_id, s.league_id)
+                    and coalesce(l.status, 'active') = 'active')
+      and (
+        public.is_admin()
+        or public.owns_league(coalesce(m.league_id, s.league_id))
+        or (g.region_id is not null and exists (
+          select 1 from public.region_owners ro
+          where ro.region_id = g.region_id and ro.user_id = auth.uid()
+        ))
+      )
+      and (
+        m.match_date = p_date
+        or (m.status in ('notStarted', 'live', 'halftime')
+            and m.match_date between current_date - 60 and current_date
+            and m.match_time ~ '^\d{1,2}:\d{2}'
+            and ((m.match_date + left(m.match_time, 5)::time)
+                   at time zone 'Europe/Istanbul') < now() - interval '2 hours')
+      )
+  )
+  select jsonb_build_object(
+    'can', public.is_admin()
+           or exists (select 1 from public.league_owners o where o.user_id = auth.uid())
+           or exists (select 1 from public.region_owners r where r.user_id = auth.uid()),
+    -- Kişinin yönettiği turnuvalar (üst banttaki seçici; renk ve logo).
+    'leagues', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', l.id, 'name', l.name, 'logo', l.logo_url,
+        'primary', l.theme_primary, 'secondary', l.theme_secondary
+      ) order by l.is_demo, l.name)
+      from public.leagues l
+      where coalesce(l.status, 'active') = 'active'
+        and (
+          public.is_admin()
+          or exists (select 1 from public.league_owners o
+                     where o.league_id = l.id and o.user_id = auth.uid())
+          or exists (select 1 from public.region_owners ro
+                     join public.season_regions sr on sr.id = ro.region_id
+                     join public.seasons s on s.id = sr.season_id
+                     where s.league_id = l.id and ro.user_id = auth.uid())
+        )
+    ), '[]'::jsonb),
+    'matches', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', m.id,
+        'league_id', m.lid,
+        'league', l.name,
+        'league_logo', l.logo_url,
+        'season', m.season_name,
+        'group', m.group_name,
+        'week', m.week,
+        'cup_round', m.cup_round,
+        'date', m.match_date,
+        'time', m.match_time,
+        'status', m.status,
+        'knockout', m.tiebreak is not null,
+        'home', ht.name, 'home_logo', ht.logo_url,
+        'away', at.name, 'away_logo', at.logo_url,
+        'hs', m.home_score, 'as', m.away_score,
+        'hp', m.home_pens, 'ap', m.away_pens,
+        'overdue', m.match_date <> p_date
+      ) order by l.name, m.match_date, m.match_time, ht.name)
+      from mine m
+      left join public.leagues l on l.id = m.lid
+      left join public.teams ht on ht.id = m.home_team_id
+      left join public.teams at on at.id = m.away_team_id
+    ), '[]'::jsonb)
+  );
+$function$;
