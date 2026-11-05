@@ -513,9 +513,8 @@ class _PlayerCardState extends State<PlayerCard> {
       if (_showPhotosTab) 'Medya',
     ],
     indicatorColor: _tone,
-    // Çok sekmede ve büyük yazı boyutunda yazılar küçülüp üst üste
-    // binmesin: sekmeler yana kayar, aralarında ince ayraç.
-    scrollable: true,
+    // Çok sekmede hepsi görünsün: iki sıra, alçak sekmeler.
+    twoRows: true,
     onChanged: (i) => setState(() => _tab = i),
   );
 
