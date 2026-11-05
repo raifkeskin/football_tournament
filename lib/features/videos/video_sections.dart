@@ -6,6 +6,7 @@ import '../../core/widgets/app_name_band.dart';
 import '../news/screens/admin_manage_news_screen.dart';
 import '../news/widgets/result_news_cards.dart';
 import '../tournament/models/league_extras.dart';
+import 'instagram_embed.dart';
 import 'videos.dart';
 
 /// Maç detayı › Medya › Röportajlar: maç öncesi / maç anı / maç sonrası
@@ -194,8 +195,8 @@ class _AddSlot extends StatelessWidget {
 }
 
 /// Haber kartı: maç röportajları ('interviews') ve turnuva videosu
-/// ('video'). Videolar yan yana; dokununca oynatıcı.
-class NewsVideosCard extends StatelessWidget {
+/// ('video'). Videolar yan yana; dokununca kartın içinde oynar.
+class NewsVideosCard extends StatefulWidget {
   const NewsVideosCard({
     super.key,
     required this.item,
@@ -220,14 +221,24 @@ class NewsVideosCard extends StatelessWidget {
       n.autoData != null;
 
   @override
+  State<NewsVideosCard> createState() => _NewsVideosCardState();
+}
+
+class _NewsVideosCardState extends State<NewsVideosCard> {
+  /// Kartın içinde oynayan video; null: kapaklar.
+  int? _playing;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final d = item.autoData!;
+    final logo = (d['logo'] ?? '').toString().trim();
     final kind = item.autoKind == 'video'
         ? VideoKind.tournament
         : VideoKind.of(d['kind']?.toString());
     final videos = [
       for (final v in (d['videos'] as List? ?? const []))
-        if (v is Map) VideoItem.fromNews(v, kind),
+        if (v is Map) VideoItem.fromNews(v, kind, logo: logo),
     ];
     final title = (item.headline ?? '').trim().isNotEmpty
         ? item.headline!
@@ -281,7 +292,7 @@ class NewsVideosCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      meta,
+                      widget.meta,
                       style: const TextStyle(
                         color: Colors.white38,
                         fontSize: 11.5,
@@ -302,37 +313,71 @@ class NewsVideosCard extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            height: videos.length == 1 ? 220 : 190,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+          if (_playing != null && _playing! < videos.length)
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
-              children: [
-                for (var i = 0; i < videos.length; i++)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      right: i == videos.length - 1 ? 0 : 8,
-                    ),
-                    child: SizedBox(
-                      width: videos.length == 1
-                          ? MediaQuery.sizeOf(context).width - 56
-                          : 150,
-                      child: VideoTile(
-                        item: videos[i],
-                        large: videos.length == 1,
-                        onTap: () => openVideoPlayer(context, videos, i),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: Stack(
+                    children: [
+                      InstagramEmbed(url: videos[_playing!].url, focused: true),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Material(
+                          color: const Color(0x99000000),
+                          shape: const CircleBorder(),
+                          child: IconButton(
+                            tooltip: 'Kapat',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () => setState(() => _playing = null),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: videos.length == 1 ? 220 : 190,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                children: [
+                  for (var i = 0; i < videos.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        right: i == videos.length - 1 ? 0 : 8,
+                      ),
+                      child: SizedBox(
+                        width: videos.length == 1
+                            ? MediaQuery.sizeOf(context).width - 56
+                            : 150,
+                        child: VideoTile(
+                          item: videos[i],
+                          large: videos.length == 1,
+                          onTap: () => setState(() => _playing = i),
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
           NewsCardActions(
-            loggedIn: loggedIn,
-            liked: liked,
-            likeCount: likeCount,
-            onToggleLike: onToggleLike,
-            onShare: onShare,
+            loggedIn: widget.loggedIn,
+            liked: widget.liked,
+            likeCount: widget.likeCount,
+            onToggleLike: widget.onToggleLike,
+            onShare: widget.onShare,
             linkText: item.matchId != null ? 'Maça git' : null,
             onLink: item.matchId != null
                 ? () => openNewsMatch(context, item.matchId!)
