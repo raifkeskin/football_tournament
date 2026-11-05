@@ -45,7 +45,7 @@ class TeamPageTabBar extends StatelessWidget {
   final bool scrollable;
 
   /// true: 4'ten çok sekme iki sıraya bölünür (hepsi görünür); sekmeler
-  /// alçak, genişlikleri satır boyunca ad uzunluğuyla orantılı (oyuncu
+  /// alçak, hepsi eşit genişlikte, iki sırada aynı sütunlarda (oyuncu
   /// kartı).
   final bool twoRows;
 
@@ -114,8 +114,6 @@ extension on TeamPageTabBar {
               color: Colors.white.withValues(alpha: 0.14),
             ),
           Expanded(
-            // Uzun ad geniş, kısa ad dar: satır boyunca orantılı.
-            flex: labels[i].length.clamp(4, 14),
             child: InkWell(
               onTap: () => onChanged(i),
               child: Container(
@@ -145,6 +143,8 @@ extension on TeamPageTabBar {
             ),
           ),
         ],
+        // Eksik sırada boş hücre: sütunlar iki sırada hizalı kalır.
+        for (var k = to - from; k < split; k++) const Spacer(),
       ],
     );
     return Container(
