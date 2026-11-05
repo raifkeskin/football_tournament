@@ -25,6 +25,7 @@ import '../../identity/verified_badge.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../share/player_season_poster.dart';
+import '../../videos/videos.dart';
 import 'player_positions_tab.dart';
 
 // Uygulamanın ortak renkleri
@@ -210,6 +211,13 @@ class _PlayerCardState extends State<PlayerCard> {
   int _statTab = 0;
   late final Future<_StarPhotos> _photos = _loadPhotos();
 
+  /// Etiketlendiği röportajlar (Medya sekmesinin üstünde).
+  late final Future<List<VideoItem>> _videos = _cardPlayerId.isEmpty
+      ? Future.value(const <VideoItem>[])
+      : VideoService.forPlayer(
+          _cardPlayerId,
+        ).catchError((_) => const <VideoItem>[]);
+
   /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
   int _tab = 0;
 
@@ -340,6 +348,7 @@ class _PlayerCardState extends State<PlayerCard> {
                 'tekrar basınca çıkar.',
                 const Color(0xFF34D399),
               ),
+            _interviewsSection(),
             if (d.urls.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(24),
@@ -407,6 +416,60 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
+  /// Etiketli röportajlar: yatay şerit; dokununca oynatıcı.
+  Widget _interviewsSection() {
+    return FutureBuilder<List<VideoItem>>(
+      future: _videos,
+      builder: (context, snap) {
+        final list = snap.data ?? const <VideoItem>[];
+        if (list.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                child: Text(
+                  '${list.length} RÖPORTAJ',
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 176,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 6),
+                  itemBuilder: (context, i) {
+                    final v = list[i];
+                    return SizedBox(
+                      width: 124,
+                      child: VideoTile(
+                        item: v,
+                        caption: [
+                          v.kind.label.toUpperCase(),
+                          if (v.week != null) '${v.week}. HAFTA',
+                        ].join(' · '),
+                        onTap: () => openVideoPlayer(context, list, i),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _openPhotos(List<String> urls, int start) {
     final page = PageController(initialPage: start);
     Navigator.of(context)
@@ -447,7 +510,7 @@ class _PlayerCardState extends State<PlayerCard> {
       'Kariyer',
       'İstatistik',
       if (_showPositionsTab) 'Mevki',
-      if (_showPhotosTab) 'Fotoğraflar',
+      if (_showPhotosTab) 'Medya',
     ],
     indicatorColor: _tone,
     // Çok sekmede ve büyük yazı boyutunda yazılar küçülüp üst üste
