@@ -681,3 +681,104 @@ class _VideosTabState extends State<_VideosTab>
     );
   }
 }
+
+/// Takım sayfası › Medya: takımın röportajları (en yenisi önce).
+class TeamVideosTab extends StatefulWidget {
+  const TeamVideosTab({
+    super.key,
+    required this.seasonId,
+    required this.teamId,
+  });
+
+  final String? seasonId;
+  final String teamId;
+
+  @override
+  State<TeamVideosTab> createState() => _TeamVideosTabState();
+}
+
+class _TeamVideosTabState extends State<TeamVideosTab> {
+  late Future<List<VideoItem>> _f = _load();
+
+  Future<List<VideoItem>> _load() {
+    final sid = widget.seasonId;
+    if (sid == null || sid.isEmpty) return Future.value(const []);
+    return VideoService.forTeam(sid, widget.teamId);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    VideoService.changed.addListener(_reload);
+  }
+
+  @override
+  void didUpdateWidget(covariant TeamVideosTab old) {
+    super.didUpdateWidget(old);
+    if (old.seasonId != widget.seasonId) _f = _load();
+  }
+
+  @override
+  void dispose() {
+    VideoService.changed.removeListener(_reload);
+    super.dispose();
+  }
+
+  void _reload() {
+    if (mounted) setState(() => _f = _load());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<VideoItem>>(
+      future: _f,
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(
+              child: CircularProgressIndicator(color: kAdminAccent),
+            ),
+          );
+        }
+        final list = snap.data!;
+        if (list.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(32),
+            child: Text(
+              'Henüz röportaj yok.\nMaç detayında Medya › Röportaj bölümünden '
+              'eklenen videolar burada görünür.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, height: 1.4),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: list.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              childAspectRatio: 9 / 14,
+            ),
+            itemBuilder: (context, i) {
+              final v = list[i];
+              return VideoTile(
+                item: v,
+                caption: [
+                  v.kind.label.toUpperCase(),
+                  if (v.week != null) '${v.week}. HAFTA',
+                ].join(' · '),
+                onTap: () => openVideoPlayer(context, list, i),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}

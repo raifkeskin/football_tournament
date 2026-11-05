@@ -24,6 +24,7 @@ class TeamPageTabBar extends StatelessWidget {
     this.filled = false,
     this.icons = const [],
     this.scrollable = false,
+    this.twoRows = false,
   });
 
   final int index;
@@ -43,9 +44,15 @@ class TeamPageTabBar extends StatelessWidget {
   /// olur; yazı büyütülse de küçülmez, üst üste binmez (oyuncu kartı).
   final bool scrollable;
 
+  /// true: 4'ten çok sekme iki sıraya bölünür (hepsi görünür); sekmeler
+  /// alçak, genişlikleri satır boyunca ad uzunluğuyla orantılı (oyuncu
+  /// kartı).
+  final bool twoRows;
+
   @override
   Widget build(BuildContext context) {
     if (filled) return _buildFilled();
+    if (twoRows) return _buildRows();
     if (scrollable) return _ScrollTabs(bar: this);
     return Container(
       decoration: BoxDecoration(
@@ -86,6 +93,69 @@ class TeamPageTabBar extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+extension on TeamPageTabBar {
+  Widget _buildRows() {
+    final n = labels.length;
+    final split = n > 4 ? (n + 1) ~/ 2 : n;
+    final line = Colors.white.withValues(alpha: 0.08);
+    Widget row(int from, int to) => Row(
+      children: [
+        for (var i = from; i < to; i++) ...[
+          if (i > from)
+            Container(
+              width: 1,
+              height: 14,
+              color: Colors.white.withValues(alpha: 0.14),
+            ),
+          Expanded(
+            // Uzun ad geniş, kısa ad dar: satır boyunca orantılı.
+            flex: labels[i].length.clamp(4, 14),
+            child: InkWell(
+              onTap: () => onChanged(i),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(4, 7, 4, 6),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: i == index ? indicatorColor : Colors.transparent,
+                      width: 2.5,
+                    ),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    labels[i],
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: i == index ? Colors.white : _muted,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: line)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          row(0, split),
+          if (split < n) ...[Container(height: 1, color: line), row(split, n)],
         ],
       ),
     );

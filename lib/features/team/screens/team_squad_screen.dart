@@ -50,6 +50,7 @@ import '../../../core/utils/string_utils.dart';
 import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
+import '../../videos/video_sections.dart' show TeamVideosTab;
 import '../widgets/team_page_tabs.dart';
 import '../widgets/squad_popups.dart';
 import '../../admin/services/approval_service.dart';
@@ -661,8 +662,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           index: _tab,
           filled: true,
           onChanged: (i) => setState(() => _tab = i),
-          labels: const ['Kadro', 'Fikstür', 'İstatistik', ''],
+          labels: const ['Kadro', 'Fikstür', 'İstatistik', 'Medya', ''],
           icons: [
+            null,
             null,
             null,
             null,
@@ -2312,7 +2314,15 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         canAdd ? 150 : 72,
                                       ),
                                       children: [
-                                        if (_tab == 3) _warningsTab(allPlayers),
+                                        if (_tab == 4) _warningsTab(allPlayers),
+                                        if (_tab == 3)
+                                          TeamVideosTab(
+                                            key: ValueKey(
+                                              effectiveTournamentId,
+                                            ),
+                                            seasonId: effectiveTournamentId,
+                                            teamId: widget.teamId,
+                                          ),
                                         if (_tab == 0) ...[
                                           const SizedBox(height: 8),
                                           if (_idScanOn(canAdd))
