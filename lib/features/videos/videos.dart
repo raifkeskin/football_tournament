@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/app_session.dart';
 import '../../core/services/image_upload_service.dart';
+import '../../core/utils/string_utils.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/app_name_band.dart';
@@ -192,6 +193,17 @@ class VideoService {
         .from('videos')
         .select(_select)
         .eq('season_id', seasonId)
+        .order('created_at', ascending: false);
+    return [for (final r in rows) VideoItem.fromRow(r)];
+  }
+
+  /// Takımın röportajları (video eklerken seçilen takım).
+  static Future<List<VideoItem>> forTeam(String seasonId, String teamId) async {
+    final rows = await _db
+        .from('videos')
+        .select(_select)
+        .eq('season_id', seasonId)
+        .eq('team_id', teamId)
         .order('created_at', ascending: false);
     return [for (final r in rows) VideoItem.fromRow(r)];
   }
@@ -1249,8 +1261,10 @@ class VideosShortcut {
   }
 }
 
-/// Futbolcu seçimi (en çok 3): kadro çipleri, fotoğraflı.
-class VideoTagPicker extends StatelessWidget {
+/// Futbolcu seçimi (en çok 3): seçilenler çip olarak; altında arama alanı
+/// (yazınca eşleşenler listelenir) ve yanında "Seç" düğmesi (tüm kadro
+/// listesi açılır).
+class VideoTagPicker extends StatefulWidget {
   const VideoTagPicker({
     super.key,
     required this.candidates,
@@ -1264,55 +1278,386 @@ class VideoTagPicker extends StatelessWidget {
   final Set<String> selected;
   final VoidCallback onChanged;
 
+  static const max = 3;
+
+  @override
+  State<VideoTagPicker> createState() => _VideoTagPickerState();
+}
+
+class _VideoTagPickerState extends State<VideoTagPicker> {
+  final _q = TextEditingController();
+
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
+
+  bool get _full => widget.selected.length >= VideoTagPicker.max;
+
+  void _toggle(String id) {
+    final s = widget.selected;
+    if (s.contains(id)) {
+      s.remove(id);
+    } else if (!_full) {
+      s.add(id);
+    }
+    widget.onChanged();
+    setState(() {});
+  }
+
+  Future<void> _openList() async {
+    FocusScope.of(context).unfocus();
+    final picked = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _TagListDialog(
+        candidates: widget.candidates,
+        selected: widget.selected,
+      ),
+    );
+    if (picked == null) return;
+    widget.selected
+      ..clear()
+      ..addAll(picked);
+    widget.onChanged();
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (candidates.isEmpty) {
+    if (widget.candidates.isEmpty) {
       return const Text(
         'Kadroda futbolcu bulunamadı.',
         style: TextStyle(color: Colors.white54, fontSize: 12.5),
       );
     }
-    final full = selected.length >= 3;
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+    final byId = {for (final c in widget.candidates) c.tag.id: c};
+    final chosen = [
+      for (final id in widget.selected)
+        if (byId[id] != null) byId[id]!,
+    ];
+    final q = StringUtils.normalizeTrKey(_q.text);
+    final hits = q.isEmpty
+        ? const <VideoTagCandidate>[]
+        : [
+            for (final c in widget.candidates)
+              if (!widget.selected.contains(c.tag.id) &&
+                  StringUtils.normalizeTrKey(c.tag.name).contains(q))
+                c,
+          ].take(6).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final c in candidates)
-          FilterChip(
-            label: Text(c.tag.name),
-            selected: selected.contains(c.tag.id),
-            showCheckmark: false,
-            avatar: c.tag.photo.isEmpty
-                ? null
-                : ClipOval(
-                    child: WebSafeImage(
-                      url: c.tag.photo,
-                      width: 22,
-                      height: 22,
-                      fit: BoxFit.cover,
+        if (chosen.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final c in chosen)
+                InputChip(
+                  label: Text(c.tag.name),
+                  avatar: _TagAvatar(photo: c.tag.photo, size: 22),
+                  onDeleted: () => _toggle(c.tag.id),
+                  deleteIconColor: Colors.white70,
+                  labelStyle: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                  ),
+                  backgroundColor: kAdminAccent.withValues(alpha: 0.25),
+                  side: const BorderSide(color: kAdminAccent),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _q,
+                enabled: !_full,
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: _full ? 'En çok 3 kişi seçildi' : 'İsim yazın…',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFF0B1220),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 11,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF263248)),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF263248)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: kAdminAccent,
+                      width: 1.5,
                     ),
                   ),
-            onSelected: (on) {
-              if (on && full) return;
-              on ? selected.add(c.tag.id) : selected.remove(c.tag.id);
-              onChanged();
-            },
-            labelStyle: TextStyle(
-              color: selected.contains(c.tag.id)
-                  ? Colors.white
-                  : (full ? Colors.white30 : Colors.white70),
-              fontWeight: FontWeight.w700,
-              fontSize: 12.5,
+                ),
+              ),
             ),
-            backgroundColor: const Color(0xFF131D33),
-            selectedColor: kAdminAccent.withValues(alpha: 0.35),
-            side: BorderSide(
-              color: selected.contains(c.tag.id)
-                  ? kAdminAccent
-                  : const Color(0xFF263248),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: _openList,
+              icon: const Icon(Icons.list_rounded, size: 18),
+              label: const Text('Seç'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kAdminAccent,
+                side: const BorderSide(color: kAdminAccent),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
+          ],
+        ),
+        if (q.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B1220),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF263248)),
+            ),
+            child: hits.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'Eşleşen futbolcu yok.',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (final c in hits)
+                        _TagRow(
+                          c: c,
+                          selected: false,
+                          onTap: () {
+                            _q.clear();
+                            _toggle(c.tag.id);
+                          },
+                        ),
+                    ],
+                  ),
           ),
       ],
+    );
+  }
+}
+
+class _TagAvatar extends StatelessWidget {
+  const _TagAvatar({required this.photo, this.size = 30});
+  final String photo;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: photo.isEmpty
+          ? SizedBox(
+              width: size,
+              height: size,
+              child: ColoredBox(
+                color: const Color(0xFF334155),
+                child: Icon(
+                  Icons.person_rounded,
+                  size: size * 0.7,
+                  color: Colors.white54,
+                ),
+              ),
+            )
+          : WebSafeImage(
+              url: photo,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+            ),
+    );
+  }
+}
+
+/// Listede tek futbolcu satırı: fotoğraf, ad, takım; sağda seçim kutusu.
+class _TagRow extends StatelessWidget {
+  const _TagRow({required this.c, required this.selected, required this.onTap});
+  final VideoTagCandidate c;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          children: [
+            _TagAvatar(photo: c.tag.photo),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    c.tag.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: onTap == null ? Colors.white38 : Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    c.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected
+                  ? Icons.check_box_rounded
+                  : Icons.check_box_outline_blank_rounded,
+              color: selected ? kAdminAccent : Colors.white38,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Seç": tüm kadro, aramalı liste; en çok 3 işaretlenir.
+class _TagListDialog extends StatefulWidget {
+  const _TagListDialog({required this.candidates, required this.selected});
+  final List<VideoTagCandidate> candidates;
+  final Set<String> selected;
+
+  @override
+  State<_TagListDialog> createState() => _TagListDialogState();
+}
+
+class _TagListDialogState extends State<_TagListDialog> {
+  late final _sel = {...widget.selected};
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final q = StringUtils.normalizeTrKey(_q);
+    final list = [
+      for (final c in widget.candidates)
+        if (q.isEmpty || StringUtils.normalizeTrKey(c.tag.name).contains(q)) c,
+    ];
+    final full = _sel.length >= VideoTagPicker.max;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        decoration: adminDialogDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Röportaj yapılan · ${_sel.length}/${VideoTagPicker.max}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Kapat',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                ),
+              ],
+            ),
+            TextField(
+              autofocus: false,
+              onChanged: (v) => setState(() => _q = v),
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Ara',
+                hintStyle: const TextStyle(color: Colors.white38),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+                filled: true,
+                fillColor: const Color(0xFF0B1220),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final c = list[i];
+                  final on = _sel.contains(c.tag.id);
+                  return _TagRow(
+                    c: c,
+                    selected: on,
+                    onTap: on || !full
+                        ? () => setState(
+                            () =>
+                                on ? _sel.remove(c.tag.id) : _sel.add(c.tag.id),
+                          )
+                        : null,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            AdminPrimaryButton(
+              label: 'TAMAM',
+              onPressed: () => Navigator.pop(context, _sel),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
