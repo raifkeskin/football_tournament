@@ -241,6 +241,88 @@ class _Squad {
   final List<_Pick> bench;
 }
 
+/// Olay girişinin tek kuralı (Detay alt düğmeleri ve dizilişte oyuncuya
+/// dokunma aynı listeyi kullanır). İki takımın sahadakileri: ilk 11 − çıkanlar − kırmızı kart + girenler;
+/// kenardakiler: henüz oyuna girmemiş yedekler.
+Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
+  final client = Supabase.instance.client;
+  final teamIds = [m.homeTeamId, m.awayTeamId];
+  final results = await Future.wait([
+    client
+        .from('match_events')
+        .select('event_type, team_id, player_id, sub_in_player_id')
+        .eq('match_id', m.id),
+    client
+        .from('match_rosters')
+        .select(
+          'team_id, player_id, is_starting, jersey_number, '
+          'players(name, surname)',
+        )
+        .eq('match_id', m.id),
+    client
+        .from('season_team_players')
+        .select('player_id, jersey_number')
+        .eq('season_id', m.seasonId)
+        .inFilter('team_id', teamIds),
+  ]);
+  final events = results[0];
+  final rosters = results[1];
+  final seasonNo = {
+    for (final r in results[2])
+      r['player_id'].toString(): (r['jersey_number'] ?? '').toString(),
+  };
+  final result = <String, _Squad>{};
+  for (final teamId in teamIds) {
+    final out = <String>{};
+    final inn = <String>{};
+    final yellows = <String, int>{};
+    for (final e in events) {
+      if (e['team_id']?.toString() != teamId) continue;
+      final pid = e['player_id']?.toString() ?? '';
+      switch (e['event_type']) {
+        case 'substitution':
+          out.add(pid);
+          final i = e['sub_in_player_id']?.toString() ?? '';
+          if (i.isNotEmpty) inn.add(i);
+        case 'red_card':
+          out.add(pid);
+        case 'yellow_card':
+          yellows[pid] = (yellows[pid] ?? 0) + 1;
+          if (yellows[pid]! >= 2) out.add(pid);
+      }
+    }
+    _Pick pick(Map<String, dynamic> r) {
+      final id = r['player_id'].toString();
+      final p = r['players'] as Map<String, dynamic>?;
+      final name = '${p?['name'] ?? ''} ${p?['surname'] ?? ''}'.trim();
+      final no = (r['jersey_number'] ?? seasonNo[id] ?? '').toString();
+      return _Pick(id, name.isEmpty ? '-' : name, no.trim());
+    }
+
+    int byNumber(_Pick a, _Pick b) {
+      final c = (int.tryParse(a.number) ?? 999).compareTo(
+        int.tryParse(b.number) ?? 999,
+      );
+      return c != 0 ? c : a.name.compareTo(b.name);
+    }
+
+    final onPitch = <_Pick>[];
+    final bench = <_Pick>[];
+    for (final r in rosters) {
+      if (r['team_id']?.toString() != teamId) continue;
+      final id = r['player_id'].toString();
+      if (out.contains(id)) continue;
+      if (r['is_starting'] == true || inn.contains(id)) {
+        onPitch.add(pick(r));
+      } else {
+        bench.add(pick(r));
+      }
+    }
+    result[teamId] = _Squad(onPitch..sort(byNumber), bench..sort(byNumber));
+  }
+  return result;
+}
+
 class _QuickEventSheet extends StatefulWidget {
   const _QuickEventSheet({
     required this.match,
@@ -266,7 +348,7 @@ class _QuickEventSheet extends StatefulWidget {
 }
 
 class _QuickEventSheetState extends State<_QuickEventSheet> {
-  late final Future<Map<String, _Squad>> _squads = _loadSquads();
+  late final Future<Map<String, _Squad>> _squads = _loadSquads(widget.match);
 
   /// Kart rengi: 'yellow_card' / 'red_card'.
   String? _card;
@@ -300,87 +382,6 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       // Devre arası: ilk yarının sonu.
       _minute = m.status == MatchStatus.halftime ? period : 1;
     }
-  }
-
-  /// İki takımın sahadakileri: ilk 11 − çıkanlar − kırmızı kart + girenler;
-  /// kenardakiler: henüz oyuna girmemiş yedekler.
-  Future<Map<String, _Squad>> _loadSquads() async {
-    final client = Supabase.instance.client;
-    final teamIds = [m.homeTeamId, m.awayTeamId];
-    final results = await Future.wait([
-      client
-          .from('match_events')
-          .select('event_type, team_id, player_id, sub_in_player_id')
-          .eq('match_id', m.id),
-      client
-          .from('match_rosters')
-          .select(
-            'team_id, player_id, is_starting, jersey_number, '
-            'players(name, surname)',
-          )
-          .eq('match_id', m.id),
-      client
-          .from('season_team_players')
-          .select('player_id, jersey_number')
-          .eq('season_id', m.seasonId)
-          .inFilter('team_id', teamIds),
-    ]);
-    final events = results[0];
-    final rosters = results[1];
-    final seasonNo = {
-      for (final r in results[2])
-        r['player_id'].toString(): (r['jersey_number'] ?? '').toString(),
-    };
-    final result = <String, _Squad>{};
-    for (final teamId in teamIds) {
-      final out = <String>{};
-      final inn = <String>{};
-      final yellows = <String, int>{};
-      for (final e in events) {
-        if (e['team_id']?.toString() != teamId) continue;
-        final pid = e['player_id']?.toString() ?? '';
-        switch (e['event_type']) {
-          case 'substitution':
-            out.add(pid);
-            final i = e['sub_in_player_id']?.toString() ?? '';
-            if (i.isNotEmpty) inn.add(i);
-          case 'red_card':
-            out.add(pid);
-          case 'yellow_card':
-            yellows[pid] = (yellows[pid] ?? 0) + 1;
-            if (yellows[pid]! >= 2) out.add(pid);
-        }
-      }
-      _Pick pick(Map<String, dynamic> r) {
-        final id = r['player_id'].toString();
-        final p = r['players'] as Map<String, dynamic>?;
-        final name = '${p?['name'] ?? ''} ${p?['surname'] ?? ''}'.trim();
-        final no = (r['jersey_number'] ?? seasonNo[id] ?? '').toString();
-        return _Pick(id, name.isEmpty ? '-' : name, no.trim());
-      }
-
-      int byNumber(_Pick a, _Pick b) {
-        final c = (int.tryParse(a.number) ?? 999).compareTo(
-          int.tryParse(b.number) ?? 999,
-        );
-        return c != 0 ? c : a.name.compareTo(b.name);
-      }
-
-      final onPitch = <_Pick>[];
-      final bench = <_Pick>[];
-      for (final r in rosters) {
-        if (r['team_id']?.toString() != teamId) continue;
-        final id = r['player_id'].toString();
-        if (out.contains(id)) continue;
-        if (r['is_starting'] == true || inn.contains(id)) {
-          onPitch.add(pick(r));
-        } else {
-          bench.add(pick(r));
-        }
-      }
-      result[teamId] = _Squad(onPitch..sort(byNumber), bench..sort(byNumber));
-    }
-    return result;
   }
 
   /// Adımlar: 3 parça (takım butonu + iki soru).
@@ -950,6 +951,32 @@ Future<void> showPlayerQuickEvent(
   final added = live?.added;
   final tracks =
       SeasonMatchSettings.cached(match.seasonId)?.tracksGoalMinutes ?? true;
+  // Detaydaki alt düğmelerle aynı kural: yalnız o an sahada olan oyuncuya
+  // gol, kart ve değişiklik girilir (kırmızı kart / iki sarı / oyundan
+  // çıkan oyuncuya yalnız "Olay ekle" ile puan olayı).
+  final Map<String, _Squad> squads;
+  try {
+    squads = await _loadSquads(match);
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Kadro yüklenemedi: $e')));
+    return;
+  }
+  if (!context.mounted) return;
+  final onPitch = squads[teamId]?.onPitch.any((p) => p.id == playerId) ?? false;
+  if (!onPitch) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '$playerName şu an oyunda değil (kırmızı kart, iki sarı ya da '
+            'oyundan çıktı). Bu oyuncuya yalnız "Olay ekle" ile puan olayı '
+            'girilebilir.',
+          ),
+        ),
+      );
+    return;
+  }
   final kind = await showModalBottomSheet<String>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -960,7 +987,8 @@ Future<void> showPlayerQuickEvent(
     ),
   );
   if (kind == null || !context.mounted) return;
-  if (kind == 'substitution') {
+  if (kind == 'substitution' || kind == 'goal') {
+    // Golde asist, değişiklikte giren oyuncu Detaydaki aynı ekranda sorulur.
     final saved = await showModalBottomSheet<MatchEvent>(
       context: context,
       isScrollControlled: true,
@@ -970,7 +998,7 @@ Future<void> showPlayerQuickEvent(
         teamId: teamId,
         teamName: teamId == match.homeTeamId ? homeName : awayName,
         rivalName: teamId == match.homeTeamId ? awayName : homeName,
-        kind: _Kind.sub,
+        kind: kind == 'goal' ? _Kind.goal : _Kind.sub,
         preset: _Pick(playerId, playerName, number),
       ),
     );
