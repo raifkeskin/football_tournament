@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/app_session.dart';
+import '../../core/services/image_upload_service.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/app_name_band.dart';
+import '../../core/widgets/picked_image.dart';
 import '../../core/widgets/web_safe_image.dart';
 import 'instagram_embed.dart';
 
@@ -44,6 +47,8 @@ class VideoItem {
     this.pinned = false,
     this.matchLabel = '',
     this.week,
+    this.coverUrl = '',
+    this.logoUrl = '',
   });
 
   final String id;
@@ -60,6 +65,17 @@ class VideoItem {
   final String matchLabel;
   final int? week;
 
+  /// Yüklenen kapak fotoğrafı; yoksa turnuva videosunda [logoUrl].
+  final String coverUrl;
+
+  /// Turnuva logosu (kapaksız turnuva videosunun görseli).
+  final String logoUrl;
+
+  /// Kutucukta görsel var mı (kapak ya da turnuva videosunda logo).
+  bool get hasImage =>
+      coverUrl.isNotEmpty ||
+      (kind == VideoKind.tournament && logoUrl.isNotEmpty);
+
   /// Kutucukta ve oynatıcıda görünen ad.
   String get label {
     if (title.isNotEmpty) return title;
@@ -72,6 +88,10 @@ class VideoItem {
     final m = r['matches'] is Map ? r['matches'] as Map : const {};
     final home = m['home'] is Map ? (m['home'] as Map)['name'] : null;
     final away = m['away'] is Map ? (m['away'] as Map)['name'] : null;
+    final season = r['seasons'] is Map ? r['seasons'] as Map : const {};
+    final league = season['leagues'] is Map
+        ? season['leagues'] as Map
+        : const {};
     return VideoItem(
       id: (r['id'] ?? '').toString(),
       url: (r['url'] ?? '').toString(),
@@ -84,18 +104,23 @@ class VideoItem {
       pinned: r['pinned'] == true,
       matchLabel: home == null || away == null ? '' : '$home – $away',
       week: (m['week'] as num?)?.toInt(),
+      coverUrl: (r['cover_url'] ?? '').toString().trim(),
+      logoUrl: (league['logo_url'] ?? '').toString().trim(),
     );
   }
 
   /// Haberdeki video listesinden (news.auto_data.videos).
-  factory VideoItem.fromNews(Map v, VideoKind kind) => VideoItem(
-    id: (v['id'] ?? '').toString(),
-    url: (v['url'] ?? '').toString(),
-    kind: kind,
-    title: (v['title'] ?? '').toString().trim(),
-    teamName: (v['team'] ?? '').toString().trim(),
-    teamLogo: (v['team_logo'] ?? '').toString().trim(),
-  );
+  factory VideoItem.fromNews(Map v, VideoKind kind, {String logo = ''}) =>
+      VideoItem(
+        id: (v['id'] ?? '').toString(),
+        url: (v['url'] ?? '').toString(),
+        kind: kind,
+        title: (v['title'] ?? '').toString().trim(),
+        teamName: (v['team'] ?? '').toString().trim(),
+        teamLogo: (v['team_logo'] ?? '').toString().trim(),
+        coverUrl: (v['cover'] ?? '').toString().trim(),
+        logoUrl: logo,
+      );
 }
 
 class VideoService {
@@ -107,8 +132,8 @@ class VideoService {
   static final changed = ValueNotifier<int>(0);
 
   static const _select =
-      'id, season_id, match_id, kind, title, url, pinned, created_at, '
-      'teams(name, logo_url), '
+      'id, season_id, match_id, kind, title, url, pinned, cover_url, '
+      'created_at, teams(name, logo_url), seasons(leagues(logo_url)), '
       'matches(week, home:teams!home_team_id(name), away:teams!away_team_id(name))';
 
   static Future<List<VideoItem>> forSeason(String seasonId) async {
@@ -138,6 +163,7 @@ class VideoService {
     required String url,
     bool pinned = false,
     bool asNews = false,
+    String? coverUrl,
   }) async {
     await _db.rpc(
       'video_add',
@@ -150,6 +176,7 @@ class VideoService {
         'p_url': url.trim(),
         'p_pinned': pinned,
         'p_as_news': asNews,
+        'p_cover': coverUrl,
       },
     );
     changed.value++;
@@ -157,6 +184,12 @@ class VideoService {
 
   static Future<void> delete(String id) async {
     await _db.rpc('video_delete', params: {'p_id': id});
+    changed.value++;
+  }
+
+  /// Kapak fotoğrafını değiştirir; null kaldırır.
+  static Future<void> setCover(String id, String? coverUrl) async {
+    await _db.rpc('video_set_cover', params: {'p_id': id, 'p_cover': coverUrl});
     changed.value++;
   }
 
@@ -169,6 +202,9 @@ class VideoService {
   static String errorText(Object e) {
     if (e is PostgrestException && e.message.trim().isNotEmpty) {
       return e.message;
+    }
+    if (e is Exception && e.toString().startsWith('Exception: ')) {
+      return e.toString().substring(11);
     }
     return 'Video eklenemedi. Bağlantıyı kontrol edin.';
   }
@@ -227,6 +263,37 @@ class VideoTile extends StatelessWidget {
           ),
           child: Stack(
             children: [
+              if (item.coverUrl.isNotEmpty)
+                Positioned.fill(
+                  child: WebSafeImage(url: item.coverUrl, fit: BoxFit.cover),
+                )
+              else if (item.kind == VideoKind.tournament &&
+                  item.logoUrl.isNotEmpty)
+                Positioned.fill(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: RadialGradient(
+                        colors: [Color(0xFF1E3A8A), Color(0xFF0B1220)],
+                        radius: 0.9,
+                      ),
+                    ),
+                    padding: EdgeInsets.all(large ? 22 : 12),
+                    child: WebSafeImage(url: item.logoUrl, fit: BoxFit.contain),
+                  ),
+                ),
+              if (item.hasImage)
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0.55, 1],
+                        colors: [Colors.transparent, Color(0xB3000000)],
+                      ),
+                    ),
+                  ),
+                ),
               if (item.teamLogo.isNotEmpty)
                 Positioned(
                   left: 8,
@@ -378,7 +445,8 @@ class _VideoPlayerPageState extends State<_VideoPlayerPage> {
                   controller: _pc,
                   itemCount: n,
                   onPageChanged: (i) => setState(() => _i = i),
-                  itemBuilder: (_, i) => InstagramEmbed(url: items[i].url),
+                  itemBuilder: (_, i) =>
+                      InstagramEmbed(url: items[i].url, focused: true),
                 ),
               ),
               Container(
@@ -480,6 +548,28 @@ Future<void> showVideoActions(
               onTap: () => Navigator.pop(ctx, 'pin'),
             ),
           ListTile(
+            leading: const Icon(Icons.image_outlined, color: Colors.white70),
+            title: Text(
+              v.coverUrl.isEmpty
+                  ? 'Kapak fotoğrafı seç'
+                  : 'Kapak fotoğrafını değiştir',
+              style: const TextStyle(color: Colors.white),
+            ),
+            onTap: () => Navigator.pop(ctx, 'cover'),
+          ),
+          if (v.coverUrl.isNotEmpty)
+            ListTile(
+              leading: const Icon(
+                Icons.hide_image_outlined,
+                color: Colors.white70,
+              ),
+              title: const Text(
+                'Kapağı kaldır',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.pop(ctx, 'uncover'),
+            ),
+          ListTile(
             leading: const Icon(
               Icons.delete_outline_rounded,
               color: kAdminDanger,
@@ -499,6 +589,16 @@ Future<void> showVideoActions(
   try {
     if (action == 'pin') {
       await VideoService.setPinned(v.id, !v.pinned);
+    } else if (action == 'cover') {
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (picked == null) return;
+      final url = await uploadVideoCover(picked);
+      await VideoService.setCover(v.id, url);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Kapak fotoğrafı güncellendi.')),
+      );
+    } else if (action == 'uncover') {
+      await VideoService.setCover(v.id, null);
     } else {
       final yes = await showAdminConfirmDialog(
         context: context,
@@ -515,6 +615,19 @@ Future<void> showVideoActions(
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(VideoService.errorText(e))));
   }
+}
+
+/// Kapak fotoğrafını yükler (news/videos klasörü) ve linkini döner.
+Future<String> uploadVideoCover(XFile file) async {
+  final url = (await SupabaseImageUploadService().uploadImage(
+    file,
+    folder: MediaFolder.news,
+    subfolder: 'videos',
+  ))?.trim();
+  if ((url ?? '').isEmpty) {
+    throw Exception('Kapak fotoğrafı yüklenemedi, lütfen tekrar deneyin.');
+  }
+  return url!;
 }
 
 /// Maçın iki takımı (röportaj ekleme penceresinde takım seçimi).
@@ -574,6 +687,9 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
   bool _pinned = false;
   bool _asNews = true;
   bool _busy = false;
+
+  /// Seçilen kapak fotoğrafı (isteğe bağlı).
+  XFile? _cover;
   String? _error;
 
   @override
@@ -612,6 +728,7 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
       _error = null;
     });
     try {
+      final cover = _cover == null ? null : await uploadVideoCover(_cover!);
       await VideoService.add(
         seasonId: widget.seasonId,
         matchId: m?.id,
@@ -627,6 +744,7 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
         url: url,
         pinned: m == null && _pinned,
         asNews: m == null && _asNews,
+        coverUrl: cover,
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -784,6 +902,10 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
                   'Gönderi ya da Reels bağlantısı. Hikâyeler eklenemez.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
+                const SizedBox(height: 14),
+                const Text('KAPAK FOTOĞRAFI (İSTEĞE BAĞLI)', style: labelStyle),
+                const SizedBox(height: 6),
+                _coverPicker(m == null),
                 if (m == null) ...[
                   const SizedBox(height: 10),
                   _check('En üstte sabitle', _pinned, (v) => _pinned = v),
@@ -815,6 +937,88 @@ class _AddVideoDialogState extends State<_AddVideoDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _pickCover() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked != null && mounted) setState(() => _cover = picked);
+  }
+
+  Widget _coverPicker(bool tournament) {
+    final c = _cover;
+    return Row(
+      children: [
+        InkWell(
+          onTap: _busy ? null : _pickCover,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 64,
+            height: 80,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B1220),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF263248)),
+              image: c == null
+                  ? null
+                  : DecorationImage(
+                      image: pickedImageProvider(c),
+                      fit: BoxFit.cover,
+                    ),
+            ),
+            child: c == null
+                ? const Icon(
+                    Icons.add_photo_alternate_outlined,
+                    color: Colors.white54,
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                c == null
+                    ? (tournament
+                          ? 'Seçilmezse turnuva logosu gösterilir.'
+                          : 'Seçilmezse takım arması gösterilir.')
+                    : 'Kapak seçildi.',
+                style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: _busy ? null : _pickCover,
+                    child: Text(
+                      c == null ? 'Fotoğraf seç' : 'Değiştir',
+                      style: const TextStyle(
+                        color: kAdminAccent,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (c != null)
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _cover = null),
+                      child: const Text(
+                        'Kaldır',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
