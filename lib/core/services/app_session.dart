@@ -245,6 +245,28 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     return null;
   }
 
+  /// Giriş yapmış kişinin şifresi doğru mu (ör. profilde parmak izi girişini
+  /// açarken). Aynı hesapla yeniden giriş yapılır; oturum değişmez.
+  Future<bool> checkPassword(String phone, String password) async {
+    final raw = phone.trim();
+    if (raw.isEmpty || password.isEmpty) return false;
+    try {
+      final email = _resolveEmailFromPhoneInput(raw);
+      final res = email != null
+          ? await _supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            )
+          : await _supabase.auth.signInWithPassword(
+              phone: raw,
+              password: password,
+            );
+      return res.user?.id == _supabase.auth.currentUser?.id;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> signInWithPhonePassword({
     String? phoneInput,
     String? phone,

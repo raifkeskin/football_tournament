@@ -12,6 +12,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/photo_crop_screen.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../auth/biometric_login.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../home/screens/home_screen.dart';
 import '../../match/models/match.dart';
@@ -112,6 +113,73 @@ class _MyProfileViewState extends State<MyProfileView> {
   void initState() {
     super.initState();
     _load();
+    _loadBio();
+  }
+
+  /// Parmak izi / yüz tanıma ile giriş: cihazda yoksa düğme görünmez.
+  String? _bioLabel;
+  bool _bioOn = false;
+
+  Future<void> _loadBio() async {
+    // Numarasız (e-postayla giren) hesapta giriş bilgisi saklanamaz.
+    if (normalizePhoneToRaw10(widget.phone).length != 10) return;
+    if (!await BiometricLogin.available()) return;
+    final label = await BiometricLogin.label();
+    final saved = await BiometricLogin.savedPhone();
+    if (!mounted) return;
+    setState(() {
+      _bioLabel = label;
+      _bioOn = saved != null && saved == normalizePhoneToRaw10(widget.phone);
+    });
+  }
+
+  Future<void> _toggleBio() async {
+    final label = _bioLabel;
+    if (label == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (_bioOn) {
+      final yes = await showAdminConfirmDialog(
+        context: context,
+        title: '$label ile Giriş',
+        message:
+            'Kapatılsın mı? Bu telefonda saklanan bilgiler silinir; girişte '
+            'şifre yazarsın.',
+        confirmLabel: 'KAPAT',
+        destructive: true,
+      );
+      if (!yes) return;
+      await BiometricLogin.clear();
+      if (mounted) setState(() => _bioOn = false);
+      return;
+    }
+    final raw = normalizePhoneToRaw10(widget.phone);
+    if (raw.length != 10) return;
+    final session = AppSession.of(context);
+    final password = await showAdminTextInputDialog(
+      context: context,
+      title: '$label ile Giriş',
+      icon: label == 'Parmak izi'
+          ? Icons.fingerprint_rounded
+          : Icons.face_rounded,
+      subtitle:
+          'Açmak için şifreni bir kez gir. Şifren yalnız bu telefonda, '
+          'şifreli olarak saklanır.',
+      label: 'Şifre',
+      fieldIcon: Icons.lock_outline_rounded,
+      obscureText: true,
+      confirmLabel: 'DEVAM',
+      validator: (v) => v.isEmpty ? 'Şifreni yaz.' : null,
+    );
+    if (password == null || !mounted) return;
+    if (!await session.checkPassword(raw, password)) {
+      messenger.showSnackBar(const SnackBar(content: Text('Şifre hatalı.')));
+      return;
+    }
+    if (!await BiometricLogin.authenticate('$label ile girişi aç')) return;
+    await BiometricLogin.save(raw, password);
+    if (!mounted) return;
+    setState(() => _bioOn = true);
+    messenger.showSnackBar(SnackBar(content: Text('$label ile giriş açıldı.')));
   }
 
   @override
@@ -790,10 +858,12 @@ class _MyProfileViewState extends State<MyProfileView> {
                 ),
               ),
             ),
-          // Bilgiler, izinler (eksikse sarı) ve bildirim ayarları: tek satır.
+          // Bilgiler, izinler (eksikse sarı), bildirim ayarları ve (cihazda
+          // varsa) parmak izi girişi: tek satır.
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: _cardButton(
@@ -824,11 +894,38 @@ class _MyProfileViewState extends State<MyProfileView> {
                 Expanded(
                   child: _cardButton(
                     icon: Icons.notifications_none_rounded,
-                    label: 'Bildirimler',
+                    label: _bioLabel == null ? 'Bildirimler' : 'Bildirim',
                     color: Colors.white,
                     onTap: () => NotificationSettingsScreen.open(context),
                   ),
                 ),
+                if (_bioLabel != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _cardButton(
+                          icon: _bioLabel == 'Parmak izi'
+                              ? Icons.fingerprint_rounded
+                              : Icons.face_rounded,
+                          label: _bioLabel!,
+                          color: _bioOn ? kAdminAccent : Colors.white,
+                          onTap: _toggleBio,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _bioOn ? 'AÇIK' : 'KAPALI',
+                          style: TextStyle(
+                            color: _bioOn ? kAdminAccent : Colors.white54,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
