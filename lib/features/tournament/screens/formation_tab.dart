@@ -820,10 +820,7 @@ class _FormationTabState extends State<FormationTab>
                         const Spacer(),
                         // Gösterim tercihi diziliş afişine de uygulanır.
                         // Yalnız ikon: yazılarla dar ekranda taşıyordu.
-                        PitchTokenStyleToggle(
-                          compact: true,
-                          showPhoto: insights != null,
-                        ),
+                        PitchTokenStyleToggle(compact: true, showPhoto: true),
                         if (_canShare && widget.onShare != null)
                           IconButton(
                             tooltip: 'Diziliş afişini paylaş',
@@ -874,12 +871,7 @@ class _FormationTabState extends State<FormationTab>
                                     ? cutouts
                                     : const {},
                                 teamColor: teamColor,
-                                // Profil yalnız yeni özellik açıkken.
-                                style:
-                                    style == PitchTokenStyle.photo &&
-                                        insights == null
-                                    ? PitchTokenStyle.shirt
-                                    : style,
+                                style: style,
                                 insights: insights,
                                 onSwap: _canEdit
                                     ? (from, to) => _swap(currentIds, from, to)
@@ -1997,9 +1989,8 @@ class VsFormationPitch extends StatelessWidget {
                       insights,
                       // VS'de seçici yok: hep Profil (fotoğrafsız forma);
                       // takım sekmesindeki seçim buraya taşınmaz.
-                      insights == null
-                          ? PitchTokenStyle.shirt
-                          : PitchTokenStyle.photo,
+                      // Fotoğraf/dekupe herkese (puan ayarından bağımsız).
+                      PitchTokenStyle.photo,
                       PhotoCutouts.visible(context) ? cutouts : const {},
                     ),
                   ),
