@@ -5132,9 +5132,11 @@ class _LineupTabState extends State<_LineupTab>
   /// Canlı maçta alttaki takım butonlarında (OLAY).
   _SpeedDialAction? _momentsAction(MatchModel m) {
     final insights = _insights;
-    if (insights == null ||
-        !widget.isSuperAdmin ||
-        m.status != MatchStatus.finished) {
+    // Admin, kurucu başkan ve bölge sorumlusu (kayıt: can_manage_match).
+    final s = AppSession.of(context).value;
+    final staff =
+        s.isAdmin || s.canManageLeague(m.leagueId) || s.isRegionOwner;
+    if (insights == null || !staff || m.status != MatchStatus.finished) {
       return null;
     }
     return _SpeedDialAction(

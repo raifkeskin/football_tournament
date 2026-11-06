@@ -10,11 +10,12 @@ import '../../../core/services/service_locator.dart';
 import '../models/match.dart';
 
 /// Kadro/Diziliş olay ikonları, futbolcu puanı ve "Olay ekle" (yeni
-/// özellik): admin ve kurucu başkan her zaman, diğerleri ayar açıksa görür.
+/// özellik): admin, kurucu başkan ve bölge sorumlusu her zaman, diğerleri
+/// ayar açıksa görür.
 bool matchInsightsVisible(BuildContext context) {
   try {
     final s = AppSession.of(context).value;
-    if (s.isAdmin || s.isLeagueOwner) return true;
+    if (s.isAdmin || s.isLeagueOwner || s.isRegionOwner) return true;
   } catch (_) {}
   return AppSettings.matchInsightsEnabled.value;
 }
