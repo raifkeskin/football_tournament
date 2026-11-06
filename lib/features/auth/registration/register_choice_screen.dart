@@ -4,6 +4,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../identity/verified_badge.dart';
 import '../../tournament_request/tournament_request.dart';
+import 'register_fan_screen.dart';
 import 'register_player_screen.dart';
 
 /// Kayıt Ol: Futbolcu Profili (kimlikle) ya da Turnuva Kurucu / Sorumlusu.
@@ -39,6 +40,20 @@ class RegisterChoiceScreen extends StatelessWidget {
             style: TextStyle(color: kAdminMuted, fontSize: 14),
           ),
           const SizedBox(height: 22),
+          _ChoiceCard(
+            title: 'Taraftar',
+            text:
+                'Ücretsiz hesabınla turnuva haberlerini, videoları, fikstürü '
+                've puan durumunu takip et. Telefonunu doğrula, hesabını oluştur.',
+            icon: Icons.stadium_rounded,
+            colors: const [Color(0xFF2563EB), Color(0xFF172554)],
+            onTap: () => _open(
+              context,
+              'RegisterFanScreen',
+              const RegisterFanScreen(),
+            ),
+          ),
+          const SizedBox(height: 14),
           _ChoiceCard(
             title: 'Futbolcu Profili',
             text:

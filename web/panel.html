@@ -151,12 +151,14 @@ button.tile:hover { border-color: #33476e; }
 /* Liste + sağda maç: maça tıklayınca sağ bölme açılır, liste daralır. */
 .split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
 .split.open { grid-template-columns: minmax(440px, .8fr) minmax(0, 1.3fr); }
+.split.open.fixtures-hidden { grid-template-columns: minmax(0, 1fr); }
 .listcol { display: grid; gap: 22px; align-content: start; min-width: 0; container-type: inline-size; }
 .detail { display: none; min-width: 0; container-type: inline-size; }
 .split.open .detail {
   display: grid; gap: 14px; align-content: start;
   position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; padding-right: 2px;
 }
+.split.open.fixtures-hidden .listcol { display: none; }
 .dhead { display: flex; align-items: center; gap: 8px; }
 .dhead .sub { margin: 0 auto 0 0; font-size: 13px; }
 .dhead .btn { padding: 5px 10px; font-size: 13px; }
@@ -242,6 +244,7 @@ button.tile:hover { border-color: #33476e; }
 .lgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .roster { display: grid; gap: 4px; padding: 8px; }
 .roster h4 { margin: 8px 6px 2px; font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.roster-edit { padding: 4px 8px; font-size: 11.5px; }
 .pl { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid transparent; background: transparent; text-align: left; }
 .pl:hover { background: var(--card-2); }
 .armed .pl:hover { border-color: var(--accent); background: rgba(16,185,129,.12); }
@@ -255,6 +258,7 @@ button.tile:hover { border-color: #33476e; }
    yedeği sahadakinin üstüne sürükle = değişiklik. */
 .pitchgrid { display: grid; grid-template-columns: 136px minmax(0, 1fr) 136px; gap: 10px; align-items: stretch; }
 .bench { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.bench .bench-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .bench h4 { margin: 2px 4px 0; font: 700 12.5px/1.2 var(--display); letter-spacing: 1.2px; color: var(--accent); }
 .bench small { margin: 0 4px 4px; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp { display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px; border-radius: 9px; background: var(--bg); border: 1px solid var(--line); text-align: left; font-weight: 600; font-size: 12.5px; line-height: 1.15; touch-action: none; cursor: grab; }
@@ -328,6 +332,7 @@ button.tile:hover { border-color: #33476e; }
   .split.open { grid-template-columns: minmax(0, 1fr); }
   .split.open .listcol { display: none; }
   .split.open .detail { position: static; max-height: none; overflow: visible; }
+  .fixture-toggle { display: none; }
 }
 
 /* ---- Maç yönetimi şeridi ---- */
@@ -370,6 +375,25 @@ button.tile:hover { border-color: #33476e; }
 .pen-n { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
 .pen-n input { width: 46px; padding: 5px; text-align: center; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 800 16px/1 var(--display); }
 .dlg textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
+.roster-dlg { max-width: 820px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+.roster-dlg .sub { margin-bottom: 8px; }
+.roster-counts { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.roster-counts span { padding: 4px 9px; border-radius: 8px; background: var(--card-2); font-size: 12.5px; font-weight: 700; }
+.roster-counts .bad { color: var(--danger); }
+.roster-list { overflow: auto; min-height: 0; max-height: min(58vh, 560px); border: 1px solid var(--line); border-radius: 10px; }
+.roster-row { display: grid; grid-template-columns: 30px minmax(160px, 1fr) 130px 88px 100px; gap: 8px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); }
+.roster-row:first-child { border-top: 0; }
+.roster-row.head { position: sticky; top: 0; z-index: 1; background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+.roster-row input[type="checkbox"], .roster-row input[type="radio"] { accent-color: var(--accent); }
+.roster-row input[type="text"], .roster-row select { width: 100%; min-width: 0; padding: 6px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.roster-row .rp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.roster-row .rp-name small { color: var(--muted); font-weight: 500; }
+.roster-dlg .roster-search { width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+@media (max-width: 560px) {
+  .roster-dlg { padding: 16px; }
+  .roster-row { grid-template-columns: 24px minmax(90px, 1fr) 90px 70px 62px; gap: 5px; padding: 6px; font-size: 12px; }
+  .roster-row input[type="text"], .roster-row select { padding: 5px 3px; font-size: 12px; }
+}
 
 /* ---- Sezon bölümleri ---- */
 .sel, .inp { padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--card-2); color: var(--fg); font: inherit; }
@@ -482,7 +506,7 @@ button.tile:hover { border-color: #33476e; }
   var session = null;   // {access_token, refresh_token, expires_at, user}
   var state = {view: 'today', date: today(), data: null, sel: -1, dlg: null, league: null,
     // Canlı maç: seçili maç, verisi, seçili olay türü ve yarım kalan seçim.
-    liveId: null, live: null, liveSig: '', mode: null, pick: null, minuteManual: false, offset: 0,
+    liveId: null, live: null, liveSig: '', fixturesHidden: false, mode: null, pick: null, minuteManual: false, offset: 0,
     appr: null, apprSel: -1,
     // Sezon bölümleri: sezon verisi, fikstürde hafta, takım, lisans araması.
     season: null, fxWeek: null, teamSel: null, lisQ: '', lisTeam: null,
@@ -828,7 +852,7 @@ button.tile:hover { border-color: #33476e; }
     var el = document.getElementById('content');
     if (!el) return;
     if (state.view === 'today' || state.view === 'live') {
-      el.innerHTML = '<div class="split' + (state.liveId ? ' open' : '') + '" id="split">' +
+      el.innerHTML = '<div class="split' + (state.liveId ? ' open' : '') + (state.fixturesHidden ? ' fixtures-hidden' : '') + '" id="split">' +
         '<div class="listcol" id="listcol"></div><section class="detail" id="detail" aria-label="Maç"></section></div>';
       renderList();
       renderDetail();
@@ -1145,6 +1169,7 @@ button.tile:hover { border-color: #33476e; }
   function openLive(id) {
     if (state.liveId !== id) {
       state.liveId = id;
+      state.fixturesHidden = false;
       state.live = null;
       state.liveSig = '';
       state.mode = null;
@@ -1163,6 +1188,7 @@ button.tile:hover { border-color: #33476e; }
   }
   function closeLive() {
     state.liveId = null;
+    state.fixturesHidden = false;
     state.live = null;
     state.liveSig = '';
     state.mode = null;
@@ -1311,10 +1337,425 @@ button.tile:hover { border-color: #33476e; }
     return on;
   }
 
+  function rosterSignature(rows, includeLayout) {
+    return rows.map(function (r) {
+      var fields = [
+        r.player_id,
+        r.is_starting === true ? '1' : '0',
+        r.jersey_number == null ? '' : String(r.jersey_number).trim(),
+        r.is_captain === true ? '1' : '0'
+      ];
+      if (includeLayout) fields.push(r.list_order == null ? '' : r.list_order, r.pos_x == null ? '' : r.pos_x);
+      return fields.join('|');
+    }).sort().join(',');
+  }
+
+  function editRoster(teamId) {
+    if (state.dlg || !state.live || !state.liveId) return;
+    var d = state.live, matchId = d.id, isHome = teamId === d.home_id;
+    var teamName = isHome ? d.home : d.away;
+    var saving = false;
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML = '<div class="dlg roster-dlg" role="dialog" aria-modal="true">' +
+      '<h3>Esameyi düzenle</h3><div class="sub">' + esc(teamName) + ' · ' +
+      esc(shortDate(d.date) + ' ' + (d.time || '').slice(0, 5)) + '</div>' +
+      '<div class="empty" style="border:0">Kadro yükleniyor…</div></div>';
+    document.body.appendChild(ov);
+    state.dlg = ov;
+
+    function close(force) {
+      if (saving && !force) return;
+      if (state.dlg !== ov) return;
+      ov.remove();
+      state.dlg = null;
+    }
+
+    function fail(err) {
+      close();
+      toast('Esame açılamadı: ' + err.message, true);
+    }
+
+    function getEligiblePlayers(seasonId) {
+      var path = 'season_team_players?select=player_id,jersey_number,players!inner(id,name,surname,birth_date,main_position)' +
+        '&team_id=eq.' + encodeURIComponent(teamId) +
+        '&season_id=eq.' + encodeURIComponent(seasonId) +
+        '&is_active=eq.true';
+      return api(path).then(function (rows) {
+        return rows.map(function (row) {
+          var p = Array.isArray(row.players) ? row.players[0] : row.players;
+          if (!p) return null;
+          return {
+            id: String(p.id || row.player_id),
+            name: [p.name, p.surname].filter(Boolean).join(' ').trim(),
+            number: row.jersey_number == null ? '' : row.jersey_number,
+            birthDate: p.birth_date,
+            position: p.main_position || '',
+            selected: false,
+            starting: false,
+            captain: false,
+            saved: false,
+            slot: null
+          };
+        }).filter(function (p) { return p && p.id && p.name; });
+      });
+    }
+
+    function getVerified(ids) {
+      var verified = {};
+      var jobs = [];
+      for (var i = 0; i < ids.length; i += 150) {
+        var part = ids.slice(i, i + 150);
+        jobs.push(api('player_verifications?select=player_id&player_id=in.(' + part.join(',') + ')')
+          .then(function (rows) {
+            rows.forEach(function (r) { verified[r.player_id] = true; });
+          }));
+      }
+      return Promise.all(jobs).then(function () { return verified; });
+    }
+
+    function load() {
+      return Promise.all([
+        api('matches?id=eq.' + encodeURIComponent(matchId) +
+          '&select=id,season_id,league_id,home_team_id,away_team_id'),
+        api('match_rosters?select=player_id,team_id,is_starting,jersey_number,is_captain,list_order,pos_x' +
+          '&match_id=eq.' + encodeURIComponent(matchId) +
+          '&team_id=eq.' + encodeURIComponent(teamId))
+      ]).then(function (loaded) {
+        var matchRows = loaded[0], savedRoster = loaded[1];
+        var match = matchRows && matchRows[0];
+        if (!match || !match.season_id) throw new Error('Maçın sezon bilgisi bulunamadı.');
+        var startSignature = rosterSignature(savedRoster, true);
+        var displayed = d.roster.filter(function (r) { return r.team_id === teamId; });
+        var displayedSignature = rosterSignature(displayed.map(function (r) {
+          return {
+            player_id: r.player_id,
+            is_starting: r.starting,
+            jersey_number: r.no,
+            is_captain: r.captain
+          };
+        }));
+        if (rosterSignature(savedRoster) !== displayedSignature) {
+          throw new Error('Esame başka bir kullanıcı tarafından güncellenmiş. Maçı yenileyip tekrar açın.');
+        }
+        return api('seasons?id=eq.' + encodeURIComponent(match.season_id) +
+          '&select=league_id,starting_player_count,sub_player_count,age_rules,require_verified_id')
+          .then(function (seasons) {
+            var season = seasons && seasons[0];
+            if (!season) throw new Error('Sezon kuralları bulunamadı.');
+            return Promise.all([
+              getEligiblePlayers(match.season_id),
+              api('player_penalties?select=player_id&season_id=eq.' +
+                encodeURIComponent(match.season_id) +
+                '&is_active=eq.true')
+            ]).then(function (values) {
+              var players = values[0], penalties = {};
+              values[1].forEach(function (p) {
+                if (!p.status || p.status === 'approved') penalties[p.player_id] = true;
+              });
+              var byId = {};
+              players.forEach(function (p) { byId[p.id] = p; });
+              displayed.forEach(function (r) {
+                var existing = byId[r.player_id];
+                if (!existing) {
+                  existing = {
+                    id: r.player_id, name: r.name, number: r.no, birthDate: null,
+                    position: r.pos || '', selected: false, starting: false,
+                    captain: false, saved: false, slot: r.slot
+                  };
+                  players.push(existing);
+                  byId[r.player_id] = existing;
+                }
+                existing.selected = true;
+                existing.starting = r.starting === true;
+                existing.captain = r.captain === true;
+                existing.saved = true;
+                existing.number = r.no == null ? '' : r.no;
+                existing.slot = r.slot;
+              });
+              players.forEach(function (p) {
+                p.verified = false;
+                p.penalized = !!penalties[p.id];
+              });
+              var ids = players.map(function (p) { return p.id; });
+              var check = season.require_verified_id ? getVerified(ids) : Promise.resolve({});
+              return check.then(function (verified) {
+                players.forEach(function (p) { p.verified = !!verified[p.id]; });
+                players.sort(function (a, b) {
+                  if (a.selected !== b.selected) return a.selected ? -1 : 1;
+                  if (a.starting !== b.starting) return a.starting ? -1 : 1;
+                  return a.name.localeCompare(b.name, 'tr');
+                });
+                render(players, savedRoster, startSignature, {
+                  seasonId: match.season_id,
+                  leagueId: match.league_id || season.league_id || d.league_id,
+                  startingLimit: season.starting_player_count == null ? 11 : Number(season.starting_player_count),
+                  subLimit: season.sub_player_count == null ? 7 : Number(season.sub_player_count),
+                  requireVerified: season.require_verified_id === true,
+                  ageRules: season.age_rules || {}
+                });
+              });
+            });
+          });
+      });
+    }
+
+    function render(players, savedRoster, startSignature, config) {
+      var rows = players.map(function (p) {
+        var disallowNew = p.penalized && !p.selected;
+        var extra = p.penalized ? ' · Cezalı' : '';
+        if (config.requireVerified && !p.verified) extra += ' · Kimlik onaysız';
+        return '<div class="roster-row" data-player="' + esc(p.id) + '" data-saved="' + p.saved + '">' +
+          '<input type="checkbox" data-include aria-label="' + esc(p.name) + ' esameye dahil et"' +
+          (p.selected ? ' checked' : '') + (disallowNew ? ' disabled' : '') + '>' +
+          '<span class="rp-name" title="' + esc(p.name + extra) + '">' + esc(p.name) +
+          (extra ? ' <small>' + esc(extra) + '</small>' : '') + '</span>' +
+          '<select data-role aria-label="' + esc(p.name) + ' görev"' + (p.selected ? '' : ' disabled') + '>' +
+          '<option value="starter"' + (p.starting ? ' selected' : '') + '>İlk 11</option>' +
+          '<option value="sub"' + (!p.starting ? ' selected' : '') + '>Yedek</option></select>' +
+          '<input type="text" inputmode="numeric" data-number aria-label="' + esc(p.name) + ' forma numarası" value="' +
+          esc(p.number == null ? '' : p.number) + '"' + (p.selected ? '' : ' disabled') + '>' +
+          '<label><input type="radio" name="rosterCaptain" data-captain value="' + esc(p.id) + '"' +
+          (p.captain ? ' checked' : '') + (p.selected && p.starting ? '' : ' disabled') + '> Kaptan</label>' +
+          '</div>';
+      }).join('');
+      ov.innerHTML = '<div class="dlg roster-dlg" role="dialog" aria-modal="true">' +
+        '<h3>Esameyi düzenle</h3><div class="sub">' + esc(teamName) +
+        ' · ' + esc(shortDate(d.date) + ' ' + (d.time || '').slice(0, 5)) +
+        ' · uygun sezon kadrosundan oyuncu ekleyip çıkarabilirsiniz.</div>' +
+        '<input class="roster-search" id="rosterSearch" type="search" placeholder="Oyuncu ara…" aria-label="Oyuncu ara">' +
+        '<div class="roster-counts"><span id="starterCount"></span><span id="subCount"></span>' +
+        '<label><input type="radio" name="rosterCaptain" data-captain-clear value=""> Kaptan yok</label></div>' +
+        '<div class="roster-list"><div class="roster-row head"><span>Esame</span><span>Oyuncu</span><span>Görev</span><span>Forma no</span><span>Kaptan</span></div>' +
+        (rows || '<div class="empty">Sezon kadrosunda uygun oyuncu bulunamadı.</div>') + '</div>' +
+        '<div class="acts"><span class="hint">İlk 11 tam olmalı; forma numaraları benzersiz olmalı.</span>' +
+        '<button class="btn" data-cancel>Vazgeç</button><button class="btn primary" data-save' +
+        (rows ? '' : ' disabled') + '>Kaydet</button></div></div>';
+
+      var saveButton = ov.querySelector('[data-save]');
+      var cancelButton = ov.querySelector('[data-cancel]');
+      var search = ov.querySelector('#rosterSearch');
+      function selectedRows() {
+        return Array.prototype.map.call(ov.querySelectorAll('.roster-row[data-player]'), function (row) {
+          return {
+            row: row,
+            id: row.getAttribute('data-player'),
+            selected: row.querySelector('[data-include]').checked,
+            starting: row.querySelector('[data-role]').value === 'starter',
+            number: row.querySelector('[data-number]').value.trim(),
+            captain: row.querySelector('[data-captain]').checked,
+            player: players.filter(function (p) { return p.id === row.getAttribute('data-player'); })[0]
+          };
+        }).filter(function (r) { return r.selected; });
+      }
+      function counts() {
+        var selected = selectedRows();
+        var starters = selected.filter(function (r) { return r.starting; }).length;
+        var subs = selected.length - starters;
+        var sc = ov.querySelector('#starterCount'), bc = ov.querySelector('#subCount');
+        sc.textContent = 'İlk 11: ' + starters + '/' + config.startingLimit;
+        bc.textContent = 'Yedek: ' + subs + '/' + config.subLimit;
+        sc.classList.toggle('bad', starters !== config.startingLimit);
+        bc.classList.toggle('bad', subs > config.subLimit);
+      }
+      function syncRow(row) {
+        var included = row.querySelector('[data-include]').checked;
+        var player = players.filter(function (p) { return p.id === row.getAttribute('data-player'); })[0];
+        row.querySelector('[data-include]').disabled =
+          player.penalized && (!player.saved || !included);
+        var role = row.querySelector('[data-role]');
+        var number = row.querySelector('[data-number]');
+        var captain = row.querySelector('[data-captain]');
+        role.disabled = !included;
+        number.disabled = !included;
+        captain.disabled = !included || role.value !== 'starter';
+        if (captain.disabled) captain.checked = false;
+      }
+      Array.prototype.forEach.call(ov.querySelectorAll('.roster-row[data-player]'), function (row) {
+        var include = row.querySelector('[data-include]');
+        include.onchange = function () { syncRow(row); counts(); };
+        row.querySelector('[data-role]').onchange = function () { syncRow(row); counts(); };
+        syncRow(row);
+      });
+      search.oninput = function () {
+        var q = search.value.trim().toLocaleLowerCase('tr');
+        Array.prototype.forEach.call(ov.querySelectorAll('.roster-row[data-player]'), function (row) {
+          var p = players.filter(function (x) { return x.id === row.getAttribute('data-player'); })[0];
+          row.hidden = !!q && p.name.toLocaleLowerCase('tr').indexOf(q) < 0;
+        });
+      };
+      counts();
+      cancelButton.onclick = close;
+      ov.onclick = function (e) { if (e.target === ov) close(); };
+      ov.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      });
+      saveButton.onclick = function () {
+        if (saveButton.disabled) return;
+        var selected = selectedRows();
+        selected.sort(function (a, b) {
+          if (a.starting !== b.starting) return a.starting ? -1 : 1;
+          return 0;
+        });
+        var starters = selected.filter(function (r) { return r.starting; });
+        var subs = selected.length - starters.length;
+        // Olayı olan oyuncu esameden çıkarılamaz; değişiklikte yer alan
+        // oyuncunun ilk 11 durumu değişmez (sahadakiler hesabı bozulmasın).
+        var evIds = {}, subIds = {};
+        (state.live.events || []).forEach(function (e) {
+          if (e.team_id !== teamId) return;
+          [e.player_id, e.assist_id, e.sub_in_id].forEach(function (x) { if (x) evIds[x] = true; });
+          if (e.type === 'substitution') {
+            if (e.player_id) subIds[e.player_id] = true;
+            if (e.sub_in_id) subIds[e.sub_in_id] = true;
+          }
+        });
+        var picked = {};
+        selected.forEach(function (r) { picked[r.id] = r; });
+        var lost = savedRoster.filter(function (r) { return evIds[r.player_id] && !picked[r.player_id]; });
+        if (lost.length) {
+          toast('Maçta olayı olan oyuncu esameden çıkarılamaz. Önce olayını silin.', true);
+          return;
+        }
+        var flipped = savedRoster.filter(function (r) {
+          var now = picked[r.player_id];
+          return subIds[r.player_id] && now && !!now.starting !== (r.is_starting === true);
+        });
+        if (flipped.length) {
+          toast('Değişiklikte yer alan oyuncunun ilk 11 durumu değiştirilemez. Önce değişikliği silin.', true);
+          return;
+        }
+        if (starters.length !== config.startingLimit) {
+          toast('İlk 11 tam ' + config.startingLimit + ' oyuncu olmalı.', true);
+          return;
+        }
+        if (subs > config.subLimit) {
+          toast('Yedek sayısı ' + config.subLimit + ' kişiyi geçemez.', true);
+          return;
+        }
+        var numbers = {};
+        for (var i = 0; i < selected.length; i++) {
+          var entry = selected[i], p = entry.player;
+          if (!/^\d+$/.test(entry.number)) {
+            toast(p.name + ' için geçerli forma numarası girin.', true);
+            return;
+          }
+          if (numbers[entry.number]) {
+            toast(entry.number + ' forma numarası birden fazla oyuncuda kullanılamaz.', true);
+            return;
+          }
+          numbers[entry.number] = true;
+          if (config.requireVerified && !p.verified) {
+            toast(p.name + ' kimliği onaylı olmadığı için esameye eklenemez.', true);
+            return;
+          }
+          if (p.penalized && !p.saved) {
+            toast(p.name + ' cezalı olduğu için esameye eklenemez.', true);
+            return;
+          }
+        }
+        var rules = config.ageRules;
+        function yearOf(p) {
+          var m = /(\d{4})/.exec(String(p.birthDate || ''));
+          return m ? Number(m[1]) : null;
+        }
+        function isQuota(p) {
+          var year = yearOf(p), pos = String(p.position || '').toLocaleLowerCase('tr');
+          if (year == null || pos.indexOf('kaleci') >= 0) return false;
+          var maxYear = Number(rules.player_max_year);
+          if (!maxYear || year <= maxYear) return false;
+          return (rules.quotas || []).some(function (q) {
+            return q.gk !== true && (q.years || []).map(Number).indexOf(year) >= 0;
+          });
+        }
+        var quota = selected.filter(function (r) { return isQuota(r.player); });
+        var fieldQuota = starters.filter(function (r) { return isQuota(r.player); });
+        var ageIssue = (rules.match_max != null && quota.length > Number(rules.match_max)) ||
+          (rules.match_field_max != null && fieldQuota.length > Number(rules.match_field_max));
+        (rules.quotas || []).forEach(function (q) {
+          if (q.gk === true || q.match_max == null) return;
+          var n = selected.filter(function (r) {
+            var y = yearOf(r.player), maxYear = Number(rules.player_max_year);
+            return y != null && (!maxYear || y > maxYear) &&
+              (q.years || []).map(Number).indexOf(y) >= 0;
+          }).length;
+          if (n > Number(q.match_max)) ageIssue = true;
+        });
+        if (ageIssue) {
+          toast('Esame sezonun yaş ve kontenjan kurallarını aşıyor.', true);
+          return;
+        }
+        var current = selected.map(function (r, index) {
+          return {
+            match_id: matchId,
+            league_id: config.leagueId,
+            season_id: config.seasonId,
+            team_id: teamId,
+            player_id: r.id,
+            is_home: isHome,
+            is_starting: r.starting,
+            jersey_number: r.number,
+            is_captain: r.captain && r.starting,
+            list_order: index,
+            pos_x: r.starting ? (r.player.slot == null ? (index === 0 ? 0 : null) : r.player.slot) : null
+          };
+        });
+        var currentIds = {};
+        current.forEach(function (r) { currentIds[r.player_id] = true; });
+        var removedIds = savedRoster.map(function (r) { return r.player_id; })
+          .filter(function (id) { return !currentIds[id]; });
+        saveButton.disabled = true;
+        cancelButton.disabled = true;
+        saveButton.textContent = 'Kaydediliyor…';
+        api('match_rosters?select=player_id,team_id,is_starting,jersey_number,is_captain,list_order,pos_x' +
+          '&match_id=eq.' + encodeURIComponent(matchId) +
+          '&team_id=eq.' + encodeURIComponent(teamId))
+          .then(function (latest) {
+            if (rosterSignature(latest, true) !== startSignature) {
+              throw new Error('Esame düzenleme sırasında başka bir kullanıcı tarafından değiştirildi. Yenileyip tekrar deneyin.');
+            }
+            return api('match_rosters?on_conflict=match_id,player_id&select=player_id', {
+              method: 'POST',
+              body: current,
+              prefer: 'resolution=merge-duplicates,return=representation'
+            });
+          }).then(function (saved) {
+            if (!saved || saved.length !== current.length) {
+              throw new Error('Esame kaydedilemedi; yetki ve sezon kurallarını kontrol edin.');
+            }
+            saving = true;
+            if (!removedIds.length) return null;
+            return api('match_rosters?match_id=eq.' + encodeURIComponent(matchId) +
+              '&team_id=eq.' + encodeURIComponent(teamId) +
+              '&player_id=in.(' + removedIds.map(encodeURIComponent).join(',') + ')', {
+                method: 'DELETE'
+              });
+          }).then(function () {
+            close(true);
+            toast('Esame kaydedildi.');
+            return loadLive();
+          }).catch(function (err) {
+            if (saving) {
+              close(true);
+              toast('Esame kaydedildi ancak çıkarılan oyuncuların kaydı tamamlanamadı: ' + err.message, true);
+              loadLive();
+              return;
+            }
+            saveButton.disabled = false;
+            cancelButton.disabled = false;
+            saveButton.textContent = 'Kaydet';
+            toast('Esame kaydedilemedi: ' + err.message, true);
+          });
+      };
+    }
+
+    load().catch(fail);
+  }
+
   function rosterHtml(d, teamId, mk) {
     var list = d.roster.filter(function (r) { return r.team_id === teamId; });
     if (!list.length) {
-      return '<div class="empty" style="border:0">Esame girilmemiş.<br>Olay girmek için önce uygulamadan esameyi girin.</div>';
+      return '<div class="empty" style="border:0">Esame girilmemiş.</div>';
     }
     var sentOff = sentOffMap(d);
     var on = onPitch(d, teamId);
@@ -1541,7 +1982,10 @@ button.tile:hover { border-color: #33476e; }
         '<span class="no">' + (r.no == null ? '–' : r.no) + '</span><span class="nm">' + esc(r.name) + '</span>' +
         '<span class="mk">' + (mk[id] || '') + '</span></button>';
     }).join('');
-    return '<div class="bench ' + (home ? 'h' : 'a') + '"><h4>YEDEKLER</h4><small>' + esc(home ? d.home : d.away) + '</small>' +
+    return '<div class="bench ' + (home ? 'h' : 'a') + '">' +
+      '<div class="bench-head"><h4>YEDEKLER</h4><button class="btn ghost roster-edit" data-roster-edit data-team="' +
+      esc(teamId) + '" title="Esameyi düzenle">Düzenle</button></div><small>' +
+      esc(home ? d.home : d.away) + '</small>' +
       (rows || '<small>Yedek yok</small>') + '</div>';
   }
 
@@ -1915,6 +2359,7 @@ button.tile:hover { border-color: #33476e; }
     el.innerHTML =
       '<section class="board">' +
       '<div class="dhead"><span class="sub">' + esc(meta) + '</span>' +
+      '<button class="btn ghost fixture-toggle" id="fixtureToggle" aria-expanded="' + (!state.fixturesHidden) + '">' + (state.fixturesHidden ? 'Fikstürü göster' : 'Fikstürü gizle') + '</button>' +
       (d.roster.some(function (r) { return r.starting; }) ? '<button class="btn ghost" id="lview">' + (state.pitchView ? 'Liste görünümü' : 'Saha görünümü') + '</button>' : '') +
       '<button class="btn ghost" id="lref">Yenile</button><button class="btn ghost" id="lclose" title="Kapat (Esc)">✕ Kapat</button></div>' +
       '<div class="sb">' + side(d.home, d.home_logo, true) +
@@ -1928,9 +2373,9 @@ button.tile:hover { border-color: #33476e; }
         ? '<div class="pitchgrid">' + benchHtml(d, d.home_id, mk, true) + pitchHtml(d, mk) + benchHtml(d, d.away_id, mk, false) + '</div>' +
           '<section class="box evbox evfull"><div class="box-head"><h2 class="label">Olaylar</h2><span class="hint">' + d.events.length + '</span></div><div class="evs">' + eventsHtml(d) + '</div></section>'
         : '<div class="lgrid' + (mode ? ' armed' : '') + '">' +
-          '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.home) + '</h2></div>' + rosterHtml(d, d.home_id, mk) + '</section>' +
+          '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.home) + '</h2><button class="btn ghost roster-edit" data-roster-edit data-team="' + esc(d.home_id) + '">Esameyi düzenle</button></div>' + rosterHtml(d, d.home_id, mk) + '</section>' +
           '<section class="box evbox"><div class="box-head"><h2 class="label">Olaylar</h2><span class="hint">' + d.events.length + '</span></div><div class="evs">' + eventsHtml(d) + '</div></section>' +
-          '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.away) + '</h2></div>' + rosterHtml(d, d.away_id, mk) + '</section>' +
+          '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.away) + '</h2><button class="btn ghost roster-edit" data-roster-edit data-team="' + esc(d.away_id) + '">Esameyi düzenle</button></div>' + rosterHtml(d, d.away_id, mk) + '</section>' +
           '</div>') +
       '<div class="keys"><span><span class="kbd">G</span> gol</span><span><span class="kbd">P</span> penaltı</span><span><span class="kbd">O</span> kendi kalesine</span><span><span class="kbd">S</span> sarı</span><span><span class="kbd">R</span> kırmızı</span><span><span class="kbd">D</span> değişiklik</span><span><span class="kbd">M</span> dakika</span><span><span class="kbd">Esc</span> vazgeç / kapat</span>' +
       (pv ? '<span>· Oyuncunun üstüne gel + harf = tek tuşla olay · yedeği sürükle-bırak = değişiklik</span>' : '') + '</div>';
@@ -1938,6 +2383,14 @@ button.tile:hover { border-color: #33476e; }
     bindCtl(el);
 
     document.getElementById('lclose').onclick = closeLive;
+    var ft = document.getElementById('fixtureToggle');
+    if (ft) ft.onclick = function () {
+      state.fixturesHidden = !state.fixturesHidden;
+      var split = document.getElementById('split');
+      if (split) split.classList.toggle('fixtures-hidden', state.fixturesHidden);
+      ft.textContent = state.fixturesHidden ? 'Fikstürü göster' : 'Fikstürü gizle';
+      ft.setAttribute('aria-expanded', String(!state.fixturesHidden));
+    };
     var lv = document.getElementById('lview');
     if (lv) lv.onclick = function () {
       state.pitchView = !state.pitchView;
@@ -1958,6 +2411,11 @@ button.tile:hover { border-color: #33476e; }
     if (cp) cp.onclick = cancelPick;
     function each(sel, fn) { Array.prototype.forEach.call(el.querySelectorAll(sel), fn); }
     each('[data-mode]', function (b) { b.onclick = function () { setMode(b.getAttribute('data-mode')); }; });
+    each('[data-roster-edit]', function (b) {
+      // Maçı başkası yönetirken esame de değiştirilemez.
+      if (locked) { b.disabled = true; b.title = 'Esame yalnız maçı yöneten kişide düzenlenebilir'; return; }
+      b.onclick = function () { editRoster(b.getAttribute('data-team')); };
+    });
     each('[data-pl]', function (b) { b.onclick = function () { pickPlayer(b.getAttribute('data-pl'), b.getAttribute('data-team')); }; });
     each('[data-tk]', function (b) {
       b.onclick = function () {
@@ -2236,7 +2694,7 @@ button.tile:hover { border-color: #33476e; }
   // Sağda maç açıkken harf tuşları olay türünü seçer; Esc önce yarım kalan
   // seçimi, sonra maçı kapatır.
   function liveKey(e) {
-    if (!state.liveId || !state.live) return false;
+    if (!state.liveId || !state.live || state.dlg) return false;
     var k = e.key.length === 1 ? e.key.toLocaleUpperCase('tr') : e.key;
     if (k === 'Escape') {
       e.preventDefault();

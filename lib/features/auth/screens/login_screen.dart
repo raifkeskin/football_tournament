@@ -21,7 +21,7 @@ import '../../tournament_request/tournament_request.dart';
 import '../../../core/services/app_settings.dart';
 import '../registration/register_choice_screen.dart';
 
-/// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır).
+/// Eski misafir-kipi tercihini temizleyip giriş kapısını zorunlu tutar.
 class GuestMode {
   GuestMode._();
 
@@ -31,17 +31,24 @@ class GuestMode {
   static Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      chosen = prefs.getBool(_key) ?? false;
+      chosen = false;
+      if (prefs.getBool(_key) == true) {
+        await prefs.setBool(_key, false);
+      }
     } catch (_) {}
   }
 
   static Future<void> set(bool value) async {
-    chosen = value;
+    chosen = false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_key, value);
+      if (value) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setBool(_key, false);
+      }
     } catch (_) {}
-    // Misafir: son baktığı turnuvanın kimliği; kapıya dönüş: tema temizlenir.
+    // Oturum değişince aktif turnuva teması yeniden belirlenir.
     await ActiveTournament.refresh();
   }
 }
@@ -49,8 +56,7 @@ class GuestMode {
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.gate = false});
 
-  /// Uygulama açılışındaki giriş kapısı: menü yok, girişten sonra ana
-  /// sayfa, altta "Misafir olarak devam et".
+  /// Uygulama açılışındaki giriş kapısı: menü yok; girişten sonra ana sayfa.
   final bool gate;
 
   /// Giriş yapıldı, ana sayfaya yönlendirme bekleniyor: profil sekmesi bu
@@ -69,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordFocus = FocusNode();
   bool _rememberMe = false;
   bool _loading = false;
+  bool _roleSelected = false;
   int _adminTapCount = 0;
   Timer? _adminTapTimer;
 
@@ -103,10 +110,16 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _bioLabel;
 
   Future<void> _loadBiometric() async {
-    if (await BiometricLogin.savedPhone() == null) return;
+    final savedPhone = await BiometricLogin.savedPhone();
+    if (savedPhone == null) return;
     if (!await BiometricLogin.available()) return;
     final label = await BiometricLogin.label();
-    if (mounted) setState(() => _bioLabel = label);
+    if (!mounted) return;
+    setState(() => _bioLabel = label);
+    if (!widget.gate) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _bioLogin(AppSession.of(context));
+    });
   }
 
   Future<void> _bioLogin(AppSessionController session) async {
@@ -381,22 +394,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Saha (futbolcu) mı Kulübe (sorumlu) mi seçili. Giriş yöntemi aynı;
-  /// yalnız metinler ve girişten sonra açılan ilk sayfa değişir.
+  /// Taraftar seçeneği de aynı telefon/şifre girişini kullanır.
   bool _staff = false;
+  bool _fan = false;
 
   static const _green = Color(0xFF10B981);
-
-  Future<void> _continueAsGuest() async {
-    await GuestMode.set(true);
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'MainNavigator'),
-        builder: (_) => const MainNavigator(),
-      ),
-      (Route<dynamic> route) => false,
-    );
-  }
 
   void _openRegistration() {
     // Yeni akış açıksa kayıt türü seçimi, değilse eski kayıt talebi.
@@ -462,14 +464,11 @@ class _LoginScreenState extends State<LoginScreen> {
             final h = constraints.maxHeight;
             // Kaydırma çıkmasın: kartlar ve aralar ekran yüksekliğine göre
             // küçülür (~700 tam boy, ~560 en küçük); daha kısa ekranda kart
-            // alt yazıları da gizlenir, yine sığmazsa kaydırılır. Telefon,
-            // şifre ve giriş düğmesi küçülmez.
+            // alt yazıları da gizlenir, yine sığmazsa kaydırılır.
             final s = ((h - 560) / 140).clamp(0.0, 1.0);
             final subtitles = h >= 520;
             final gap = 6 + 4 * s;
-            // Klavye açıkken: kartlar ince seçiciye döner, Tribün / Kayıt Ol
-            // ve turnuva kartı gizlenir; açıklama yalnız yer varsa kalır.
-            final showInfo = !keyboard || h >= 400;
+            // Klavyede giriş formu kalsın; seçim ve kayıt kartları gizlensin.
             return Center(
               child: SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
@@ -496,13 +495,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                   Color(0xFF22C55E),
                                   Color(0xFF0F6B35),
                                 ],
-                                selected: !_staff,
+                                selected: _roleSelected && !_staff && !_fan,
                                 compact: keyboard,
                                 scale: s,
                                 showSubtitle: subtitles,
                                 onTap: _loading
                                     ? null
-                                    : () => setState(() => _staff = false),
+                                    : () => setState(() {
+                                        _roleSelected = true;
+                                        _staff = false;
+                                        _fan = false;
+                                      }),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -515,13 +518,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                   Color(0xFFF59E0B),
                                   Color(0xFF9A5B06),
                                 ],
-                                selected: _staff,
+                                selected: _roleSelected && _staff && !_fan,
                                 compact: keyboard,
                                 scale: s,
                                 showSubtitle: subtitles,
                                 onTap: _loading
                                     ? null
-                                    : () => setState(() => _staff = true),
+                                    : () => setState(() {
+                                        _roleSelected = true;
+                                        _staff = true;
+                                        _fan = false;
+                                      }),
                               ),
                             ),
                           ],
@@ -534,17 +541,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             SizedBox(height: gap),
                             _WideTile(
-                              title: 'Tribün',
-                              subtitle:
-                                  'Misafir girişi yaparak, tüm turnuvaları takip et',
+                              title: 'Taraftar',
+                              subtitle: 'Turnuvaları hesabınla takip et',
                               icon: Icons.stadium_rounded,
                               colors: const [
-                                Color(0xFF1E3A8A),
+                                Color(0xFF2563EB),
                                 Color(0xFF172554),
                               ],
+                              selected: _roleSelected && _fan,
                               scale: s,
                               showSubtitle: subtitles,
-                              onTap: _loading ? null : _continueAsGuest,
+                              showChevron: false,
+                              onTap: _loading
+                                  ? null
+                                  : () => setState(() {
+                                      _roleSelected = true;
+                                      _staff = false;
+                                      _fan = true;
+                                    }),
                             ),
                             SizedBox(height: gap),
                             _WideTile(
@@ -562,27 +576,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                       ),
-                      _Collapse(
-                        visible: showInfo,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: keyboard ? 12 : 12 + 10 * s,
-                          ),
-                          child: Text(
-                            _staff
-                                ? 'Takım, bölge veya turnuva yönettiğin hesabınla gir; '
-                                      'yönetim sayfan açılır.'
-                                : 'Takımına kayıtlı telefon numaranla gir; maçların ve '
-                                      'istatistiklerin seni bekliyor.',
-                            style: const TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 13.5,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: keyboard ? 8 : 14),
                       TextField(
                         controller: _phoneController,
                         textInputAction: TextInputAction.next,
@@ -706,7 +700,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                           elevation: 0,
                                         ),
                                         child: Text(
-                                          _staff
+                                          !_roleSelected
+                                              ? 'GİRİŞ YAP'
+                                              : _fan
+                                              ? 'TRİBÜNE ÇIK'
+                                              : _staff
                                               ? 'KULÜBEYE GEÇ'
                                               : 'SAHAYA ÇIK',
                                           style: const TextStyle(
@@ -877,7 +875,7 @@ class _RoleTile extends StatelessWidget {
   }
 }
 
-/// Tribün / Kayıt Ol: tam genişlik, dokununca doğrudan ilgili yere gider.
+/// Kayıt Ol: tam genişlik, dokununca doğrudan kayıt türü seçimine gider.
 class _WideTile extends StatelessWidget {
   const _WideTile({
     required this.title,
@@ -885,8 +883,10 @@ class _WideTile extends StatelessWidget {
     required this.icon,
     required this.colors,
     required this.onTap,
+    this.selected = false,
     this.scale = 1,
     this.showSubtitle = true,
+    this.showChevron = true,
   });
 
   final String title;
@@ -894,15 +894,17 @@ class _WideTile extends StatelessWidget {
   final IconData icon;
   final List<Color> colors;
   final VoidCallback? onTap;
+  final bool selected;
   final double scale;
   final bool showSubtitle;
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
     final v = 6 + 4 * scale;
     return _TileFrame(
       colors: colors,
-      selected: false,
+      selected: selected,
       onTap: onTap,
       child: Padding(
         padding: EdgeInsets.fromLTRB(14, v, 10, v),
@@ -926,7 +928,8 @@ class _WideTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white),
+            if (showChevron)
+              const Icon(Icons.chevron_right_rounded, color: Colors.white),
           ],
         ),
       ),

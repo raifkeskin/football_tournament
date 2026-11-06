@@ -224,6 +224,54 @@ class MatchHighlightService {
     return (rows as List).length;
   }
 
+  /// Maç olayına bağlı gol kesitlerinde, gol kaydedildiği andaki skoru verir.
+  static Future<Map<String, String>> goalScores({
+    required String matchId,
+    required String homeTeamId,
+    required String awayTeamId,
+  }) async {
+    final rows = await _db
+        .from('match_events')
+        .select('id, team_id, minute, added_minute, is_own_goal, created_at')
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal');
+    final goals = List<Map<String, dynamic>>.from(rows);
+    int? number(dynamic value) =>
+        value is num ? value.toInt() : int.tryParse('$value');
+    goals.sort((a, b) {
+      final am = number(a['minute']);
+      final bm = number(b['minute']);
+      if (am != bm) {
+        if (am == null) return 1;
+        if (bm == null) return -1;
+        return am.compareTo(bm);
+      }
+      final aa = number(a['added_minute']) ?? 0;
+      final ba = number(b['added_minute']) ?? 0;
+      if (aa != ba) return aa.compareTo(ba);
+      return (a['created_at'] ?? '').toString().compareTo(
+        (b['created_at'] ?? '').toString(),
+      );
+    });
+
+    var home = 0;
+    var away = 0;
+    final scores = <String, String>{};
+    for (final goal in goals) {
+      final teamId = (goal['team_id'] ?? '').toString();
+      final ownGoal = goal['is_own_goal'] == true;
+      if (teamId == homeTeamId) {
+        ownGoal ? away++ : home++;
+      } else if (teamId == awayTeamId) {
+        ownGoal ? home++ : away++;
+      } else {
+        continue;
+      }
+      scores[goal['id'].toString()] = '$home-$away';
+    }
+    return scores;
+  }
+
   /// Maçın YouTube yayın linkinin video kimliği (yoksa null).
   static Future<String?> streamVideoId(String matchId) async {
     try {

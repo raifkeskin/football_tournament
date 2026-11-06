@@ -356,8 +356,19 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
     if (code == null || !mounted) return;
+    try {
+      await ActiveTournament.selectAfterAccessCode(league.id);
+    } catch (e) {
+      if (!mounted) return;
+      await showAdminInfoDialog(
+        context: context,
+        title: 'Turnuva açılamadı',
+        message: e.toString().replaceFirst('Exception: ', ''),
+      );
+      return;
+    }
+    if (!mounted) return;
     setState(() => _activeLeagueId = league.id);
-    GlobalFilter.setLeague(league.id);
     if (parentContext.mounted) Navigator.pop(parentContext); // menüyü kapat
   }
 

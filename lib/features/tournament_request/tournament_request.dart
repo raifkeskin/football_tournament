@@ -131,7 +131,7 @@ class TournamentRequestLoginCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Turnuva mı düzenliyorsun?',
+                          'Turnuva mı düzenleyeceksin?',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,

@@ -467,6 +467,8 @@ class _MyAppState extends State<MyApp> {
         ),
         builder: (context, child) {
           if (child == null) return const SizedBox.shrink();
+          final reserveAndroidNavigationSpace =
+              Theme.of(context).platform == TargetPlatform.android;
           // Telefonun yazı büyütmesi en çok %130 uygulanır (küçültmeye
           // dokunulmaz); çok büyük ayarda dar alanlar (sponsor, skor,
           // sekmeler) taşmasın.
@@ -479,7 +481,15 @@ class _MyAppState extends State<MyApp> {
               ),
               child: KeyboardInsetGuard(
                 child: WebResponsiveFrame(
-                  child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+                  child: SafeArea(
+                    bottom: reserveAndroidNavigationSpace,
+                    minimum: reserveAndroidNavigationSpace
+                        ? const EdgeInsets.only(bottom: 24)
+                        : EdgeInsets.zero,
+                    child: AppNameBand(
+                      child: ErrorRecoveryOverlay(child: child),
+                    ),
+                  ),
                 ),
               ),
             ),

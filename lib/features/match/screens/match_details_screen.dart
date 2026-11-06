@@ -4843,6 +4843,11 @@ class _LineupTabState extends State<_LineupTab>
         if (_view == null) ...[
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
+          if (top) ...[
+            const SizedBox(height: 10),
+            _rosterBand(title: 'KADROLAR'),
+            const SizedBox(height: 2),
+          ],
           _vsRow(m, head: false, only: 'xi'),
           // İki takımın da kadrosu yoksa yalnız "Kadro girilmemiş." kalır;
           // YEDEKLER bandı ve yedek satırı çizilmez.
@@ -4862,7 +4867,7 @@ class _LineupTabState extends State<_LineupTab>
                   children: [
                     if (top) ...[
                       const SizedBox(height: 10),
-                      _benchBand(),
+                      _rosterBand(title: 'YEDEKLER'),
                       const SizedBox(height: 2),
                     ] else
                       const SizedBox(height: 12),
@@ -4931,7 +4936,7 @@ class _LineupTabState extends State<_LineupTab>
 
   /// VS'de ilk 11 ile yedekler arasında tam genişlik bant: ortada
   /// YEDEKLER, iki yanda takım renginde çizgi.
-  Widget _benchBand() {
+  Widget _rosterBand({required String title}) {
     Widget line(Color c) => Expanded(
       child: Container(
         height: 3,
@@ -4951,10 +4956,10 @@ class _LineupTabState extends State<_LineupTab>
       child: Row(
         children: [
           line(widget.homeColor ?? _green),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 10),
             child: Text(
-              'YEDEKLER',
+              title,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 12.5,

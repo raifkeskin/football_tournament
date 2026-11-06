@@ -281,6 +281,33 @@ class ActiveTournament {
     }
   }
 
+  /// Kodla erişim verilen turnuvayı mevcut kullanıcı için seçer.
+  /// Bu seçim yalnızca o hesaba veya misafir cihazına kaydedilir.
+  static Future<void> selectAfterAccessCode(String leagueId) async {
+    final id = leagueId.trim();
+    if (id.isEmpty) return;
+
+    final gen = ++_generation;
+    final prefs = await SharedPreferences.getInstance();
+    final realUser = _isRealUser;
+    if (realUser) {
+      final uid = _sb.auth.currentUser!.id;
+      _sessionPick = (uid: uid, id: id);
+      await prefs.setString(_kChosen(uid), id);
+    } else {
+      await prefs.setString(_kGuestLeague, id);
+    }
+
+    await _apply(id, gen: gen);
+
+    try {
+      final choices = await _loadMyLeagues(guest: !realUser);
+      if (gen == _generation) myLeagues.value = choices;
+    } catch (e) {
+      debugPrint('Turnuva seçici listesi güncellenemedi: $e');
+    }
+  }
+
   /// Kişinin turnuvaları: admin ve misafir tüm aktif turnuvalar (gizli
   /// turnuvalar veritabanı kuralıyla misafire gelmez), diğerleri
   /// my_league_ids: kendi turnuvaları (my_own_league_ids: oyuncu, sorumlu,
