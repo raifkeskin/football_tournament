@@ -288,9 +288,14 @@ class MatchInsights {
     required this.rules,
     required this.matchMinutes,
     required this.moments,
+    this.subs = const [],
   });
 
   final MatchModel match;
+
+  /// Değişiklikler sırayla: (çıkan, giren). Dizilişte giren çıkanın yerine
+  /// geçer.
+  final List<(String, String)> subs;
   final Map<String, PlayerMarks> marks;
   final RatingRules rules;
   final int matchMinutes;
@@ -312,6 +317,7 @@ class MatchInsights {
     required int matchMinutes,
   }) {
     final marks = <String, PlayerMarks>{};
+    final subs = <(String, String)>[];
     PlayerMarks m(String? id) => marks.putIfAbsent(id ?? '', PlayerMarks.new);
     for (final e in events) {
       final type = '${e['event_type'] ?? ''}';
@@ -336,6 +342,7 @@ class MatchInsights {
             m(inId)
               ..subbedIn = true
               ..subIn = min;
+            subs.add((pid, inId));
           }
         case 'yellow_card':
           m(pid).yellows.add(min);
@@ -354,6 +361,7 @@ class MatchInsights {
       rules: rules,
       matchMinutes: matchMinutes,
       moments: moments,
+      subs: subs,
     );
   }
 

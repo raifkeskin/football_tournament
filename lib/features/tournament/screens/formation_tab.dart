@@ -327,6 +327,47 @@ _Layout? _computeLayout(
   );
 }
 
+/// Değişiklikleri sahaya işler: giren oyuncu çıkanın yerine geçer (saha
+/// sırası [ _Layout.ids ] ilk 11 olarak kalır; kayıt bozulmaz).
+_Layout? _withSubs(
+  _Layout? l,
+  MatchInsights? ins,
+  List<MatchRosterModel> rosters,
+  Map<String, PlayerModel> players,
+) {
+  if (l == null || ins == null || ins.subs.isEmpty) return l;
+  final byId = {for (final r in rosters) r.playerId: r};
+  final lines = [
+    for (final line in l.lines) [...line],
+  ];
+  for (final (out, inn) in ins.subs) {
+    final r = byId[inn];
+    if (r == null) continue;
+    for (final line in lines) {
+      final i = line.indexWhere((x) => x.id == out);
+      if (i < 0) continue;
+      final old = line[i];
+      final p = players[inn];
+      line[i] = _PitchPlayer(
+        id: inn,
+        name: (p?.name ?? '').trim().isEmpty ? '-' : p!.name,
+        number: (r.jerseyNumber ?? p?.number ?? '').trim(),
+        line: old.line,
+        wide: old.wide,
+        isCaptain: r.isCaptain,
+        photoUrl: p?.photoUrl,
+      );
+    }
+  }
+  return _Layout(
+    lines: lines,
+    formation: l.formation,
+    autoFormation: l.autoFormation,
+    outfieldCount: l.outfieldCount,
+    ids: l.ids,
+  );
+}
+
 /// Kadrolar sekmesi için: ilk 11 oyuncu id'lerini diziliş sahasındaki
 /// sırayla döndürür (kaleci → defans → orta saha → forvet). Oyuncunun
 /// kayıtlı mevkisi değil, o maçtaki saha yeri esas alınır.
@@ -705,11 +746,16 @@ class _FormationTabState extends State<FormationTab>
                 final starterRosters = rosterSnap.data!
                     .where((r) => r.isStarting)
                     .toList();
-                final layout = _computeLayout(
-                  starterRosters,
+                final layout = _withSubs(
+                  _computeLayout(
+                    starterRosters,
+                    players,
+                    formation: _chosen[_selected] ?? _savedFormation,
+                    order: _order[_selected],
+                  ),
+                  insights,
+                  rosterSnap.data!,
                   players,
-                  formation: _chosen[_selected] ?? _savedFormation,
-                  order: _order[_selected],
                 );
                 if (layout == null) {
                   if (widget.embedded) return const SizedBox.shrink();
@@ -1886,7 +1932,11 @@ class VsFormationPitch extends StatelessWidget {
   )?
   onPlayerTap;
 
-  Widget _team(String teamId, Widget Function(_Layout? layout) builder) {
+  Widget _team(
+    String teamId,
+    MatchInsights? insights,
+    Widget Function(_Layout? layout) builder,
+  ) {
     return StreamBuilder<List<PlayerModel>>(
       stream: ServiceLocator.teamService.watchPlayers(
         teamId: teamId,
@@ -1906,7 +1956,12 @@ class VsFormationPitch extends StatelessWidget {
               ? match.homeFormation
               : match.awayFormation;
           return builder(
-            _computeLayout(starters, players, formation: formation),
+            _withSubs(
+              _computeLayout(starters, players, formation: formation),
+              insights,
+              rosterSnap.data ?? const [],
+              players,
+            ),
           );
         },
       ),
@@ -1921,7 +1976,8 @@ class VsFormationPitch extends StatelessWidget {
       match: match,
       builder: (context, insights) => _team(
         match.homeTeamId,
-        (home) => _team(match.awayTeamId, (away) {
+        insights,
+        (home) => _team(match.awayTeamId, insights, (away) {
           if (home == null && away == null) return const SizedBox.shrink();
           final fold = onToggleCollapsed;
           if (fold != null && collapsed) {

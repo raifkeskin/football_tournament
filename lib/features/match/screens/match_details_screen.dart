@@ -5935,22 +5935,33 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             // tek oyuncu; her sütun kendi puanlarını maç panosuna bildirir.
             if (ins != null) _MotmBoard.report(match.id, teamId, ratings);
 
+            // Oyundan çıkan, kırmızı kart ya da iki sarı gören: soluk (bu
+            // oyunculara gol/kart/değişiklik girilmez).
+            bool gone(String id) {
+              final k = ins?.of(id);
+              return k != null &&
+                  (k.subbedOut || k.reds.isNotEmpty || k.yellows.length >= 2);
+            }
+
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
                 for (final r in list)
-                  _row(
-                    playerId: r.playerId,
-                    jersey: jerseyOf(r),
-                    name: byId[r.playerId]?.name ?? '-',
-                    // VS'de dar sütunda ismi kapatır; yalnız tek takımda.
-                    quotaYear: widget.only != null
-                        ? null
-                        : _quotaYear(byId[r.playerId]),
-                    // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
-                    line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
-                    isCaptain: r.isCaptain,
-                    rating: ratings[r.playerId],
-                    best: ins != null && motm == r.playerId,
+                  Opacity(
+                    opacity: gone(r.playerId) ? 0.45 : 1,
+                    child: _row(
+                      playerId: r.playerId,
+                      jersey: jerseyOf(r),
+                      name: byId[r.playerId]?.name ?? '-',
+                      // VS'de dar sütunda ismi kapatır; yalnız tek takımda.
+                      quotaYear: widget.only != null
+                          ? null
+                          : _quotaYear(byId[r.playerId]),
+                      // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
+                      line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
+                      isCaptain: r.isCaptain,
+                      rating: ratings[r.playerId],
+                      best: ins != null && motm == r.playerId,
+                    ),
                   ),
               ];
             }
