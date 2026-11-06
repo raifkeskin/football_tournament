@@ -2311,7 +2311,40 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   /// Akış adımını uygular; maç sonu için skor onayı ister.
   Future<void> _runPhaseAction(MatchModel m, String action) async {
     if (action == 'clock') return _setClock(m);
-    if (action == 'finish' || action == 'undo') {
+    if (action == 'undo') {
+      // Önce ne geri alınacağı: son olay (saat değişmez) ya da aşama.
+      Map<String, dynamic>? pv;
+      try {
+        pv = Map<String, dynamic>.from(
+          await Supabase.instance.client.rpc(
+                'match_undo_preview',
+                params: {'p_match_id': m.id},
+              )
+              as Map,
+        );
+      } catch (_) {}
+      if (!mounted) return;
+      final event = pv?['kind'] == 'event';
+      final resets = pv?['resets_clock'] == true;
+      final label = pv?['label']?.toString();
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: event
+            ? 'Son Olayı Geri Al'
+            : resets
+            ? 'Maç Saati Sıfırlanacak'
+            : 'Son Adımı Geri Al',
+        message: label == null
+            ? _undoMessage(m)
+            : event
+            ? '$label silinecek. Maç saati ve durumu değişmez.'
+            : '$label${resets ? '. Emin misiniz?' : '.'}',
+        confirmLabel: 'GERİ AL',
+        destructive: !event,
+        icon: Icons.undo_rounded,
+      );
+      if (!ok) return;
+    } else if (action == 'finish') {
       final ok = await showAdminConfirmDialog(
         context: context,
         title: action == 'finish' ? 'Maçı Bitir' : 'Son Adımı Geri Al',

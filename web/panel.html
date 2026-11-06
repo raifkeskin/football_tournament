@@ -2567,7 +2567,14 @@ button.tile:hover { border-color: #33476e; }
       start_shootout: ['Penaltılara geç', 'Penaltı atışları başlar.', 'Penaltılara geç', false],
       start_extra_time: ['Uzatmaya geç', 'Uzatma devresi başlar.', 'Uzatmaya geç', false]
     }[action];
-    var go2 = ask ? confirmBox(ask[0], ask[1], ask[2], ask[3]) : Promise.resolve(true);
+    // Geri al: önce ne geri alınacağı sorulur (son olay ya da aşama).
+    var go2 = action === 'undo'
+      ? api('rpc/match_undo_preview', {method: 'POST', body: {p_match_id: state.live.id}}).then(function (pv) {
+          if (pv.kind === 'event') return confirmBox('Son olayı geri al', pv.label + ' silinecek. Maç saati ve durumu değişmez.', 'Geri al', false);
+          return confirmBox(pv.resets_clock ? 'Maç saati sıfırlanacak' : 'Son adımı geri al',
+            pv.label + (pv.resets_clock ? '. Emin misiniz?' : '.'), 'Geri al', true);
+        }, function (e) { toast(e.message, true); return false; })
+      : ask ? confirmBox(ask[0], ask[1], ask[2], ask[3]) : Promise.resolve(true);
     go2.then(function (ok) {
       if (!ok) return;
       btn.disabled = true;
