@@ -5136,7 +5136,12 @@ class _LineupTabState extends State<_LineupTab>
     final s = AppSession.of(context).value;
     final staff =
         s.isAdmin || s.canManageLeague(m.leagueId) || s.isRegionOwner;
-    if (insights == null || !staff || m.status != MatchStatus.finished) {
+    // Maç sırasında da (puanlar anlık değişir) ve bittikten sonra.
+    final playing =
+        m.status == MatchStatus.live ||
+        m.status == MatchStatus.halftime ||
+        m.status == MatchStatus.finished;
+    if (insights == null || !staff || !playing) {
       return null;
     }
     return _SpeedDialAction(
