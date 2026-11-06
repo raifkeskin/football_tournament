@@ -329,7 +329,3 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Forma numarası filigranı yalnız numara biliniyorsa çıkıyor.
   - Zemin, takım rengi koyuysa (yeşil/lacivert) donuk görünüyor.
 - **Ne zaman:** Kapışma afişiyle birlikte, telefonda dekupe hazır olunca.
-
-## 31. Tam ekran canlı giriş (mobil + tablet) — SIRADA (2026-11-05, güncelleme 2026-11-07)
-- Yapıldı ve nottan çıkarıldı: asist, Detay = diziliş tek kural (veritabanında), kırmızı/çift sarı engeli, Olay ekle mevki sekmeleri + kaleciye otomatik + dokununca kayıt + dakika otomatik, Olay ekle maç sırasında ve Kadro sekmesinde.
-- **Kalan:** Kadro sekmesinde tam ekran düğmesi → yatay saha (web masasındaki akış: dokun → menü, yedeği sürükle → değişiklik). Önizleme: https://claude.ai/artifact/3Wm5Ava1ZtTrFWunBsgJGe

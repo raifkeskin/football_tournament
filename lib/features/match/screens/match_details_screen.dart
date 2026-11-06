@@ -4838,6 +4838,7 @@ class _LineupTabState extends State<_LineupTab>
               onPlayerTap: _pitchTap(m, editing: false),
               collapsed: !_pitchOpen,
               onToggleCollapsed: _togglePitch,
+              onFullscreen: _fullscreen(m),
             )
           else
             FormationTab(
@@ -4862,6 +4863,7 @@ class _LineupTabState extends State<_LineupTab>
               embedded: true,
               collapsed: !_pitchOpen,
               onToggleCollapsed: _togglePitch,
+              onFullscreen: _fullscreen(m),
               singleTeam: true,
               initialTeam: _view == m.homeTeamId ? 0 : 1,
               onPlayerTap: _pitchTap(
@@ -4940,6 +4942,38 @@ class _LineupTabState extends State<_LineupTab>
           list,
         Positioned(right: 16, bottom: 16, child: _lineupFab(m)),
       ],
+    );
+  }
+
+  /// Tam ekran yatay saha (hızlı olay girişi): olay girebilen yetkiliye;
+  /// yeni özellik, admin dışında ayar açıksa.
+  VoidCallback? _fullscreen(MatchModel m) {
+    if (!widget.canAddEvents) return null;
+    if (!AppSession.of(context).value.isAdmin &&
+        !AppSettings.livePitchEnabled.value) {
+      return null;
+    }
+    return () => openLivePitch(
+      context,
+      match: m,
+      homeName: widget.homeName,
+      awayName: widget.awayName,
+      homeColor: widget.homeColor,
+      awayColor: widget.awayColor,
+      onMoments: _momentsAction(m) == null
+          ? null
+          : (ctx, teamId) async {
+              final ins = _insights;
+              if (ins == null) return;
+              await openMatchMoments(
+                ctx,
+                match: m,
+                insights: ins,
+                homeName: widget.homeName,
+                awayName: widget.awayName,
+                teamId: teamId,
+              );
+            },
     );
   }
 

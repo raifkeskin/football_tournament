@@ -25,6 +25,7 @@ class Season {
     this.assistantReferees = true,
     this.requireVerifiedId = false,
     this.goalkeeperAddAnytime = false,
+    this.rollingSubs = false,
   });
 
   final String id;
@@ -65,6 +66,10 @@ class Season {
   /// Kaleci istisnası: lig başladıktan sonra transfer dönemi dışında da ana
   /// mevkisi kaleci olan oyuncu kadroya eklenebilir (sunucu da uygular).
   final bool goalkeeperAddAnytime;
+
+  /// Tekrar oyuna giriş: oyundan çıkan oyuncu yeniden girebilir (halısahada
+  /// dönüşümlü değişiklik). Kapalıyken çıkan yedeklerde seçilemez (sunucu da).
+  final bool rollingSubs;
 
   factory Season.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -144,6 +149,10 @@ class Season {
         v('goalkeeperAddAnytime', 'goalkeeper_add_anytime'),
         fallback: false,
       ),
+      rollingSubs: boolFrom(
+        v('rollingSubs', 'rolling_subs'),
+        fallback: false,
+      ),
       transferStartDate: _readDate(
         v('transferStartDate', 'transfer_start_date'),
       ),
@@ -193,6 +202,7 @@ class Season {
       'assistant_referees_enabled': assistantReferees,
       'require_verified_id': requireVerifiedId,
       'goalkeeper_add_anytime': goalkeeperAddAnytime,
+      'rolling_subs': rollingSubs,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
     };
   }
@@ -232,6 +242,7 @@ class Season {
         'assistantReferees': assistantReferees,
         'requireVerifiedId': requireVerifiedId,
         'goalkeeperAddAnytime': goalkeeperAddAnytime,
+        'rollingSubs': rollingSubs,
         'teamsPerGroup': teamsPerGroup,
       };
     }

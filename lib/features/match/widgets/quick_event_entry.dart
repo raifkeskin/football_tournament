@@ -236,14 +236,21 @@ class _Pick {
 
 /// Maçtaki bir takımın sahadaki ve kenardaki oyuncuları (olaylara göre).
 class _Squad {
-  const _Squad(this.onPitch, this.bench);
+  const _Squad(this.onPitch, this.bench, [this.locked = const []]);
   final List<_Pick> onPitch;
   final List<_Pick> bench;
+
+  /// Kenarda ama oyuna giremeyenler: oyundan çıkanlar (sezonda tekrar giriş
+  /// kapalıysa). Değişiklik listesinde soluk ve seçilemez görünür.
+  final List<_Pick> locked;
 }
 
 /// Olay girişinin tek kuralı (Detay alt düğmeleri ve dizilişte oyuncuya
-/// dokunma aynı listeyi kullanır). İki takımın sahadakileri: ilk 11 − çıkanlar − kırmızı kart + girenler;
-/// kenardakiler: henüz oyuna girmemiş yedekler.
+/// dokunma aynı listeyi kullanır; veritabanındaki match_on_pitch_at ile
+/// aynı). Sahadakiler: ilk 11, sonra olaylar sırayla (değişiklikte çıkan
+/// iner giren çıkar; kırmızı ya da ikinci sarı gören iner). Kenardakiler:
+/// sahada olmayan, atılmamış oyuncular; çıkmış olan, sezonda tekrar giriş
+/// açık değilse kilitli.
 Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
   final client = Supabase.instance.client;
   final teamIds = [m.homeTeamId, m.awayTeamId];
@@ -251,7 +258,9 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
     client
         .from('match_events')
         .select('event_type, team_id, player_id, sub_in_player_id')
-        .eq('match_id', m.id),
+        .eq('match_id', m.id)
+        .order('minute', nullsFirst: false)
+        .order('created_at'),
     client
         .from('match_rosters')
         .select(
@@ -265,6 +274,7 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
         .eq('season_id', m.seasonId)
         .inFilter('team_id', teamIds),
   ]);
+  final rolling = (await SeasonMatchSettings.of(m.seasonId)).rollingSubs;
   final events = results[0];
   final rosters = results[1];
   final seasonNo = {
@@ -273,22 +283,32 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
   };
   final result = <String, _Squad>{};
   for (final teamId in teamIds) {
-    final out = <String>{};
-    final inn = <String>{};
+    final on = <String>{
+      for (final r in rosters)
+        if (r['team_id']?.toString() == teamId && r['is_starting'] == true)
+          r['player_id'].toString(),
+    };
+    final sentOff = <String>{};
+    final subbedOut = <String>{};
     final yellows = <String, int>{};
     for (final e in events) {
       if (e['team_id']?.toString() != teamId) continue;
       final pid = e['player_id']?.toString() ?? '';
       switch (e['event_type']) {
         case 'substitution':
-          out.add(pid);
+          on.remove(pid);
+          subbedOut.add(pid);
           final i = e['sub_in_player_id']?.toString() ?? '';
-          if (i.isNotEmpty) inn.add(i);
+          if (i.isNotEmpty) on.add(i);
         case 'red_card':
-          out.add(pid);
+          on.remove(pid);
+          sentOff.add(pid);
         case 'yellow_card':
           yellows[pid] = (yellows[pid] ?? 0) + 1;
-          if (yellows[pid]! >= 2) out.add(pid);
+          if (yellows[pid]! >= 2) {
+            on.remove(pid);
+            sentOff.add(pid);
+          }
       }
     }
     _Pick pick(Map<String, dynamic> r) {
@@ -308,17 +328,25 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
 
     final onPitch = <_Pick>[];
     final bench = <_Pick>[];
+    final locked = <_Pick>[];
     for (final r in rosters) {
       if (r['team_id']?.toString() != teamId) continue;
       final id = r['player_id'].toString();
-      if (out.contains(id)) continue;
-      if (r['is_starting'] == true || inn.contains(id)) {
+      if (on.contains(id)) {
         onPitch.add(pick(r));
+      } else if (sentOff.contains(id)) {
+        continue;
+      } else if (subbedOut.contains(id) && !rolling) {
+        locked.add(pick(r));
       } else {
         bench.add(pick(r));
       }
     }
-    result[teamId] = _Squad(onPitch..sort(byNumber), bench..sort(byNumber));
+    result[teamId] = _Squad(
+      onPitch..sort(byNumber),
+      bench..sort(byNumber),
+      locked..sort(byNumber),
+    );
   }
   return result;
 }
@@ -820,6 +848,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       case _Kind.sub:
         return _grid(
           _player == null ? own.onPitch : own.bench,
+          locked: _player == null ? const [] : own.locked,
           empty: _player == null ? 'Sahada oyuncu yok.' : 'Girecek yedek yok.',
         );
     }
@@ -862,8 +891,12 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
     ),
   );
 
-  Widget _grid(List<_Pick> list, {String empty = 'Sahada oyuncu yok.'}) {
-    if (list.isEmpty) {
+  Widget _grid(
+    List<_Pick> list, {
+    List<_Pick> locked = const [],
+    String empty = 'Sahada oyuncu yok.',
+  }) {
+    if (list.isEmpty && locked.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Text(
@@ -881,44 +914,50 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       crossAxisSpacing: 8,
       childAspectRatio: 1.25,
       children: [
-        for (final p in list)
-          Material(
-            color: const Color(0xFF1E293B),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _saving ? null : () => _onPick(p),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      p.number.isEmpty ? '-' : p.number,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        height: 1.1,
+        for (final p in [...list, ...locked])
+          Opacity(
+            opacity: locked.contains(p) ? 0.35 : 1,
+            child: Material(
+              color: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _saving || locked.contains(p) ? null : () => _onPick(p),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        p.number.isEmpty ? '-' : p.number,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          height: 1.1,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      p.name,
-                      maxLines: 2,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
+                      const SizedBox(height: 2),
+                      Text(
+                        p.name,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFCBD5E1),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          height: 1.15,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

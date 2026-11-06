@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/services/photo_cutouts.dart';
 
 import '../../../core/widgets/match_event_icons.dart';
@@ -15,6 +17,11 @@ import '../../match/models/match.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/services/service_locator.dart';
 import '../../match/services/supabase/supabase_match_service.dart';
+import '../../match/utils/match_clock.dart';
+import '../../match/utils/season_match_settings.dart';
+import '../../match/widgets/minute_input_dialog.dart';
+
+part 'live_pitch_screen.dart';
 
 const _accent = Color(0xFF10B981);
 const _midText = Color(0xFF94A3B8);
@@ -419,11 +426,15 @@ class FormationTab extends StatefulWidget {
     this.onPlayerTap,
     this.collapsed = false,
     this.onToggleCollapsed,
+    this.onFullscreen,
   });
 
   /// Gömülü dizilişte gizle/göster: kapalıyken yalnız başlık çubuğu.
   final bool collapsed;
   final VoidCallback? onToggleCollapsed;
+
+  /// Başlıkta "Tam ekran" (yatay hızlı giriş); null ise düğme yok.
+  final VoidCallback? onFullscreen;
 
   /// Kadro sekmesine gömülü: kaydırma ve kenar boşluğu dışarıda; ilk 11
   /// girilmemişse hiçbir şey çizilmez.
@@ -784,13 +795,21 @@ class _FormationTabState extends State<FormationTab>
 
                 final fold = widget.onToggleCollapsed;
                 if (widget.embedded && fold != null && widget.collapsed) {
-                  return LineupFoldHeader(open: false, onTap: fold);
+                  return LineupFoldHeader(
+                    open: false,
+                    onTap: fold,
+                    onFullscreen: widget.onFullscreen,
+                  );
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (widget.embedded && fold != null) ...[
-                      LineupFoldHeader(open: true, onTap: fold),
+                      LineupFoldHeader(
+                        open: true,
+                        onTap: fold,
+                        onFullscreen: widget.onFullscreen,
+                      ),
                       const SizedBox(height: 6),
                     ],
                     Row(
@@ -1907,11 +1926,15 @@ class VsFormationPitch extends StatelessWidget {
     this.onPlayerTap,
     this.collapsed = false,
     this.onToggleCollapsed,
+    this.onFullscreen,
   });
 
   final MatchModel match;
   final Color? homeColor;
   final Color? awayColor;
+
+  /// Başlıkta "Tam ekran" (yatay hızlı giriş); null ise düğme yok.
+  final VoidCallback? onFullscreen;
 
   /// Gizle/göster: kapalıyken yalnız başlık çubuğu.
   final bool collapsed;
@@ -1973,7 +1996,11 @@ class VsFormationPitch extends StatelessWidget {
           if (home == null && away == null) return const SizedBox.shrink();
           final fold = onToggleCollapsed;
           if (fold != null && collapsed) {
-            return LineupFoldHeader(open: false, onTap: fold);
+            return LineupFoldHeader(
+              open: false,
+              onTap: fold,
+              onFullscreen: onFullscreen,
+            );
           }
           final pitch = AspectRatio(
             aspectRatio: 0.55,
@@ -2000,7 +2027,11 @@ class VsFormationPitch extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LineupFoldHeader(open: true, onTap: fold),
+              LineupFoldHeader(
+                open: true,
+                onTap: fold,
+                onFullscreen: onFullscreen,
+              ),
               const SizedBox(height: 6),
               pitch,
             ],
@@ -2098,10 +2129,18 @@ class VsFormationPitch extends StatelessWidget {
 /// Kadro sekmesindeki dizilişin başlık çubuğu: solda "Diziliş", sağ üstte
 /// kalın aşağı/yukarı ok ile gizle/göster.
 class LineupFoldHeader extends StatelessWidget {
-  const LineupFoldHeader({super.key, required this.open, required this.onTap});
+  const LineupFoldHeader({
+    super.key,
+    required this.open,
+    required this.onTap,
+    this.onFullscreen,
+  });
 
   final bool open;
   final VoidCallback onTap;
+
+  /// Tam ekran yatay saha (hızlı olay girişi); null ise düğme yok.
+  final VoidCallback? onFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -2122,6 +2161,43 @@ class LineupFoldHeader extends StatelessWidget {
               ),
             ),
             const Spacer(),
+            if (onFullscreen != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Material(
+                  color: _accent.withValues(alpha: 0.16),
+                  shape: const StadiumBorder(),
+                  child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: onFullscreen,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.screen_rotation_rounded,
+                            size: 15,
+                            color: _accent,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Tam ekran',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             Tooltip(
               message: open ? 'Dizilişi gizle' : 'Dizilişi göster',
               child: Container(

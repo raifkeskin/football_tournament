@@ -37,6 +37,7 @@ class AppSettings {
   static const _kGoalClipMp4 = 'goal_clip_mp4_enabled';
   static const _kFollowList = 'follow_list_enabled';
   static const _kSearch = 'search_enabled';
+  static const _kLivePitch = 'live_pitch_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -155,6 +156,10 @@ class AppSettings {
   /// Ana sayfada takım / futbolcu araması (bantta büyüteç) herkese açık mı
   /// (admin her zaman görür).
   static final searchEnabled = ValueNotifier<bool>(false);
+
+  /// Kadro sekmesinde tam ekran yatay saha (hızlı olay girişi) olay
+  /// girebilen herkese açık mı (admin her zaman görür).
+  static final livePitchEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -243,6 +248,8 @@ class AppSettings {
           followListEnabled.value = r['value'] == true;
         } else if (r['key'] == _kSearch) {
           searchEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kLivePitch) {
+          livePitchEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

@@ -191,6 +191,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var assistantReferees = season?.assistantReferees ?? true;
     var requireVerifiedId = season?.requireVerifiedId ?? false;
     var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
+    var rollingSubs = season?.rollingSubs ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
     // görünmüyor).
     var formatSaved = false;
@@ -289,6 +290,7 @@ class SeasonManagementScreen extends StatelessWidget {
         assistantReferees: assistantReferees,
         requireVerifiedId: requireVerifiedId,
         goalkeeperAddAnytime: goalkeeperAddAnytime,
+        rollingSubs: rollingSubs,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -541,6 +543,17 @@ class SeasonManagementScreen extends StatelessWidget {
                               'Oyuncu Değişikliği Sınırı',
                               numberOfPlayerChangesController,
                               number: true,
+                            ),
+                            switchRow(
+                              Icons.sync_alt_rounded,
+                              'Tekrar Oyuna Giriş',
+                              rollingSubs
+                                  ? 'Oyundan çıkan oyuncu yeniden girebilir '
+                                        '(halısaha)'
+                                  : 'Kapalı: çıkan oyuncu yedeklerde '
+                                        'seçilemez',
+                              rollingSubs,
+                              (v) => setSheetState(() => rollingSubs = v),
                             ),
                             switchRow(
                               Icons.more_time_rounded,
