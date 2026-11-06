@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -27,21 +28,32 @@ class GuestMode {
   GuestMode._();
 
   static const _key = 'guest_mode_chosen';
+
+  /// Uygulamada misafir seçimi yalnız bu açılış için: her açılış giriş
+  /// ekranıyla başlar (eski sürümün kalıcı kaydı silinir). Web'de
+  /// hatırlanır (paylaşılan maç linkine gelen her seferinde girişe düşmesin).
   static bool chosen = false;
 
   static Future<void> load() async {
+    chosen = false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      chosen = prefs.getBool(_key) ?? false;
+      if (kIsWeb) {
+        chosen = prefs.getBool(_key) ?? false;
+      } else {
+        await prefs.remove(_key);
+      }
     } catch (_) {}
   }
 
   static Future<void> set(bool value) async {
     chosen = value;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_key, value);
-    } catch (_) {}
+    if (kIsWeb) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_key, value);
+      } catch (_) {}
+    }
     // Oturum değişince aktif turnuva teması yeniden belirlenir.
     await ActiveTournament.refresh();
   }
@@ -579,18 +591,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               showSubtitle: subtitles,
                               onTap: _loading ? null : _openRegistration,
                             ),
-                            // Giriş zorunlu değil: misafir her şeyi izler.
-                            if (widget.gate)
-                              TextButton(
-                                onPressed: _loading ? null : _continueAsGuest,
-                                child: const Text(
-                                  'Üye olmadan misafir olarak devam et  ›',
-                                  style: TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                            // Giriş zorunlu değil: misafir her şeyi izler
+                            // (menüden açılan giriş ekranında da).
+                            TextButton(
+                              onPressed: _loading ? null : _continueAsGuest,
+                              child: const Text(
+                                'Üye olmadan misafir olarak devam et  ›',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
+                            ),
                           ],
                         ),
                       ),
