@@ -126,7 +126,7 @@ class AppNameBand extends StatelessWidget {
                       ? null
                       : Positioned(
                           right: 4,
-                          bottom: 3,
+                          bottom: 6,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -789,14 +789,17 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    // Diğer turnuvalarda yıldızlananlar üstte (liste açılırken sıralanır).
+    // Yıldızlanan turnuvalar önce; her grup kendi içinde alfabetiktir.
     final all = ActiveTournament.myLeagues.value;
     final followed = Follows.leagues.value;
-    final leagues = [
-      ...all.where((l) => l.isOwn),
-      ...all.where((l) => !l.isOwn && followed.contains(l.id)),
-      ...all.where((l) => !l.isOwn && !followed.contains(l.id)),
-    ];
+    final leagues = [...all]
+      ..sort((a, b) {
+        final followedOrder = (followed.contains(b.id) ? 1 : 0).compareTo(
+          followed.contains(a.id) ? 1 : 0,
+        );
+        if (followedOrder != 0) return followedOrder;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
     final current = ActiveTournament.currentLeagueId.value;
     final accent =
         ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
@@ -829,8 +832,10 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   children: [
                     for (final (i, l) in leagues.indexed) ...[
-                      // Kendi turnuvalarının altında herkese açık olanlar.
-                      if (!l.isOwn && (i == 0 || leagues[i - 1].isOwn))
+                      if (followed.contains(l.id) && i == 0)
+                        const _LeagueGroupHeader('Yıldızlı turnuvalar'),
+                      if (!followed.contains(l.id) &&
+                          (i == 0 || followed.contains(leagues[i - 1].id)))
                         const _LeagueGroupHeader('Diğer turnuvalar'),
                       _LeagueRow(
                         league: l,
@@ -1004,7 +1009,11 @@ class _TournamentBand extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ?LeagueSwitchScope.tabAction.value,
+            if (LeagueSwitchScope.tabAction.value != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: LeagueSwitchScope.tabAction.value!,
+              ),
             const NotificationBell(),
             if (actions?.onLogout != null)
               actions!.logoutButton()

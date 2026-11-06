@@ -552,6 +552,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     String? teamId;
     String? playerId;
     String? photoUrl;
+    String? accountRole;
 
     final ownedLeagueIds = await _loadOwnedLeagues(user.id);
     final managedTeams = await _loadManagedTeams(user.id);
@@ -602,11 +603,12 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     try {
       final res = await _supabase
           .from('app_users')
-          .select('name, phone, team_id, photo_url')
+          .select('name, phone, team_id, photo_url, role')
           .eq('auth_uid', user.id)
           .limit(1);
       if (res.isNotEmpty) {
         final r = res.first;
+        accountRole = (r['role'] ?? '').toString().trim().toLowerCase();
         name = (r['name'] ?? '').toString().trim();
         teamId = r['team_id']?.toString();
         final ph = (r['photo_url'] ?? '').toString().trim();
@@ -662,6 +664,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         ? 'region'
         : managedTeams.isNotEmpty
         ? 'manager'
+        : accountRole == 'fan'
+        ? 'fan'
         : 'player';
 
     if (_supabase.auth.currentUser?.id != user.id) return; // bu arada çıkış

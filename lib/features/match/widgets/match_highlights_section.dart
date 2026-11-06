@@ -579,8 +579,7 @@ class GoalClipCard extends StatelessWidget {
   }
 }
 
-/// Yetkilinin YZ kesitlerini izleyip düzeltip onayladığı ekran. Üstte tek
-/// oynatıcı; karttaki "İzle" kesiti orada oynatır.
+/// Yetkilinin YZ kesitlerini izleyip düzeltip onayladığı ekran.
 class MatchHighlightReviewPage extends StatefulWidget {
   const MatchHighlightReviewPage({
     super.key,
@@ -599,13 +598,11 @@ class MatchHighlightReviewPage extends StatefulWidget {
 }
 
 class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
-  /// İlk "İzle"de oluşturulur (hazır olmayan oynatıcıya video yüklenmez).
-  YoutubePlayerController? _player;
-
   late List<MatchHighlight> _items =
       MatchHighlightService.cached(widget.match.id) ?? const [];
   MatchHighlightJob? _job;
   Map<String, HighlightScorer> _scorers = const {};
+  Map<String, String> _goalScores = const {};
   List<HighlightRosterPlayer>? _roster;
   bool _loading = true;
   String? _playingId;
@@ -646,7 +643,6 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     MatchHighlightService.changes.removeListener(_onServiceChanged);
     MatchHighlightService.offline.removeListener(_onOffline);
     resetPlayerOrientation();
-    _player?.close();
     super.dispose();
   }
 
@@ -655,11 +651,17 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       final results = await Future.wait([
         MatchHighlightService.fetch(widget.match.id),
         MatchHighlightService.job(widget.match.id),
+        MatchHighlightService.goalScores(
+          matchId: widget.match.id,
+          homeTeamId: widget.match.homeTeamId,
+          awayTeamId: widget.match.awayTeamId,
+        ),
       ]);
       if (!mounted) return;
       setState(() {
         _items = results[0] as List<MatchHighlight>;
         _job = results[1] as MatchHighlightJob?;
+        _goalScores = results[2] as Map<String, String>;
         _loading = false;
       });
       _loadScorers();
@@ -752,34 +754,18 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
 
   void _play(MatchHighlight h) {
     final (startSec, endSec) = _draft[h.id] ?? (h.startSec, h.endSec);
-    final player = _player;
-    if (player == null) {
-      final created = YoutubePlayerController.fromVideoId(
-        videoId: h.videoId,
-        autoPlay: true,
-        startSeconds: startSec.toDouble(),
-        endSeconds: endSec.toDouble(),
-        params: const YoutubePlayerParams(
-          // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
-          // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
-          showFullscreenButton: kIsWeb,
-          strictRelatedVideos: true,
-          origin: youtubePlayerOrigin,
-        ),
-      );
-      landscapeOnFullscreen(created);
-      setState(() {
-        _player = created;
-        _playingId = h.id;
-      });
-      return;
-    }
     setState(() => _playingId = h.id);
-    player.loadVideoById(
-      videoId: h.videoId,
-      startSeconds: startSec.toDouble(),
-      endSeconds: endSec.toDouble(),
-    );
+    showAdminPopup<void>(
+      context: context,
+      builder: (_) => _HighlightPlayerPopup(
+        title: _clipTitle(h, widget.match, widget.homeName, widget.awayName),
+        videoId: h.videoId,
+        startSec: startSec,
+        endSec: endSec,
+      ),
+    ).whenComplete(() {
+      if (mounted) setState(() => _playingId = null);
+    });
   }
 
   /// Taslak aralığı değiştirir ve yeni aralığı hemen oynatır.
@@ -1070,17 +1056,6 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            // Oynatıcı ilk "İzle"de açılır; öncesinde boş siyah alan yok.
-            if (_player != null) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: YoutubePlayer(controller: _player!),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
             _statusCard(running),
             const SizedBox(height: 18),
             if (_loading && _items.isEmpty)
@@ -1183,42 +1158,48 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                 ),
               ],
               if (job != null && !running) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    _startChip(
-                      'Başlangıç',
-                      job.kickoffSec,
-                      () => _typeStart(second: false),
+                    Expanded(
+                      child: _startChip(
+                        'MAÇ BAŞLANGICI',
+                        job.kickoffSec,
+                        () => _typeStart(second: false),
+                      ),
                     ),
-                    _startChip(
-                      '2. yarı',
-                      job.secondHalfSec,
-                      () => _typeStart(second: true),
-                    ),
-                    SizedBox(
-                      height: 30,
-                      child: FilledButton.icon(
-                        onPressed: job.kickoffSec == null ? null : _applyStarts,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kAdminAccent,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          minimumSize: const Size(0, 30),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        icon: const Icon(Icons.sync_rounded, size: 16),
-                        label: const Text(
-                          'Uygula',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _startChip(
+                        '2. YARI BAŞLANGICI',
+                        job.secondHalfSec,
+                        () => _typeStart(second: true),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: job.kickoffSec == null ? null : _applyStarts,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kAdminAccent,
+                      minimumSize: const Size(0, 42),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.sync_rounded, size: 18),
+                    label: const Text(
+                      'Kesitleri Uygula',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Başlangıçları değiştirince onay bekleyen kesitleri '
+                  'yeni dakikalara göre hizalayın.',
+                  style: TextStyle(color: kAdminMuted, fontSize: 11.5),
                 ),
               ],
             ],
@@ -1229,30 +1210,58 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   /// Videodaki devre başlangıcı: dokununca düzeltilir, kesitler kayar.
-  Widget _startChip(String label, int? sec, VoidCallback onTap) => SizedBox(
-    height: 30,
-    child: OutlinedButton.icon(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        minimumSize: const Size(0, 30),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-        visualDensity: VisualDensity.compact,
-      ),
-      icon: const Icon(Icons.edit_rounded, size: 14),
-      label: Text(
-        '$label ${sec == null ? '—' : _mmss(sec)}',
-        style: const TextStyle(fontSize: 12),
-      ),
-    ),
-  );
+  Widget _startChip(String label, int? sec, VoidCallback onTap) =>
+      OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          minimumSize: const Size(0, 64),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          visualDensity: VisualDensity.compact,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: kAdminMuted,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    sec == null ? '—' : _mmss(sec),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.edit_rounded, size: 16, color: kAdminAccent),
+              ],
+            ),
+          ],
+        ),
+      );
 
-  /// Maliyet ve analiz özeti (başlangıçlar düğmelerde).
+  /// Analiz özeti (başlangıçlar düğmelerde, maliyet gösterilmez).
   String _jobDetails(MatchHighlightJob job) => [
     if (job.needsReview) 'Kontrol önerilir',
     if ((job.missing ?? 0) > 0) '${job.missing} gol yayında bulunamadı',
-    if (job.costUsd != null) 'Maliyet ${job.costUsd!.toStringAsFixed(3)} \$',
   ].join(' · ');
 
   /// Kartta düzenlenebilir satır: ikon + metin + sağda düğme.
@@ -1303,6 +1312,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     final (start, end) = _draft[h.id] ?? (h.startSec, h.endSec);
     final dirty = _draft.containsKey(h.id);
     final team = _teamLabel(h, widget.match, widget.homeName, widget.awayName);
+    final score = h.matchEventId == null ? null : _goalScores[h.matchEventId];
     final conf = switch (h.confidence) {
       'high' => ('Yüksek', kAdminAccent),
       'medium' => ('Orta', kAdminAmber),
@@ -1356,6 +1366,26 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   ),
                 ),
               ),
+              if (score != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kAdminAccent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    score,
+                    style: const TextStyle(
+                      color: kAdminAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
               if (conf != null)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -1532,6 +1562,96 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                 ),
               ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HighlightPlayerPopup extends StatefulWidget {
+  const _HighlightPlayerPopup({
+    required this.title,
+    required this.videoId,
+    required this.startSec,
+    required this.endSec,
+  });
+
+  final String title;
+  final String videoId;
+  final int startSec;
+  final int endSec;
+
+  @override
+  State<_HighlightPlayerPopup> createState() => _HighlightPlayerPopupState();
+}
+
+class _HighlightPlayerPopupState extends State<_HighlightPlayerPopup> {
+  late final YoutubePlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = YoutubePlayerController.fromVideoId(
+      videoId: widget.videoId,
+      autoPlay: true,
+      startSeconds: widget.startSec.toDouble(),
+      endSeconds: widget.endSec.toDouble(),
+      params: const YoutubePlayerParams(
+        showFullscreenButton: kIsWeb,
+        strictRelatedVideos: true,
+        origin: youtubePlayerOrigin,
+      ),
+    );
+    landscapeOnFullscreen(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.close();
+    resetPlayerOrientation();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Kapat',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              ),
+            ],
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: YoutubePlayer(controller: _controller),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${_clock(widget.startSec)} – ${_clock(widget.endSec)}',
+            style: const TextStyle(color: kAdminMuted, fontSize: 12),
           ),
         ],
       ),

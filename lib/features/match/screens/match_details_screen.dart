@@ -2311,7 +2311,40 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   /// Akış adımını uygular; maç sonu için skor onayı ister.
   Future<void> _runPhaseAction(MatchModel m, String action) async {
     if (action == 'clock') return _setClock(m);
-    if (action == 'finish' || action == 'undo') {
+    if (action == 'undo') {
+      // Önce ne geri alınacağı: son olay (saat değişmez) ya da aşama.
+      Map<String, dynamic>? pv;
+      try {
+        pv = Map<String, dynamic>.from(
+          await Supabase.instance.client.rpc(
+                'match_undo_preview',
+                params: {'p_match_id': m.id},
+              )
+              as Map,
+        );
+      } catch (_) {}
+      if (!mounted) return;
+      final event = pv?['kind'] == 'event';
+      final resets = pv?['resets_clock'] == true;
+      final label = pv?['label']?.toString();
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: event
+            ? 'Son Olayı Geri Al'
+            : resets
+            ? 'Maç Saati Sıfırlanacak'
+            : 'Son Adımı Geri Al',
+        message: label == null
+            ? _undoMessage(m)
+            : event
+            ? '$label silinecek. Maç saati ve durumu değişmez.'
+            : '$label${resets ? '. Emin misiniz?' : '.'}',
+        confirmLabel: 'GERİ AL',
+        destructive: !event,
+        icon: Icons.undo_rounded,
+      );
+      if (!ok) return;
+    } else if (action == 'finish') {
       final ok = await showAdminConfirmDialog(
         context: context,
         title: action == 'finish' ? 'Maçı Bitir' : 'Son Adımı Geri Al',
@@ -4843,6 +4876,11 @@ class _LineupTabState extends State<_LineupTab>
         if (_view == null) ...[
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
+          if (top) ...[
+            const SizedBox(height: 10),
+            _rosterBand(title: 'KADROLAR'),
+            const SizedBox(height: 2),
+          ],
           _vsRow(m, head: false, only: 'xi'),
           // İki takımın da kadrosu yoksa yalnız "Kadro girilmemiş." kalır;
           // YEDEKLER bandı ve yedek satırı çizilmez.
@@ -4862,7 +4900,7 @@ class _LineupTabState extends State<_LineupTab>
                   children: [
                     if (top) ...[
                       const SizedBox(height: 10),
-                      _benchBand(),
+                      _rosterBand(title: 'YEDEKLER'),
                       const SizedBox(height: 2),
                     ] else
                       const SizedBox(height: 12),
@@ -4931,7 +4969,7 @@ class _LineupTabState extends State<_LineupTab>
 
   /// VS'de ilk 11 ile yedekler arasında tam genişlik bant: ortada
   /// YEDEKLER, iki yanda takım renginde çizgi.
-  Widget _benchBand() {
+  Widget _rosterBand({required String title}) {
     Widget line(Color c) => Expanded(
       child: Container(
         height: 3,
@@ -4951,10 +4989,10 @@ class _LineupTabState extends State<_LineupTab>
       child: Row(
         children: [
           line(widget.homeColor ?? _green),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 10),
             child: Text(
-              'YEDEKLER',
+              title,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 12.5,
@@ -5094,9 +5132,16 @@ class _LineupTabState extends State<_LineupTab>
   /// Canlı maçta alttaki takım butonlarında (OLAY).
   _SpeedDialAction? _momentsAction(MatchModel m) {
     final insights = _insights;
-    if (insights == null ||
-        !widget.isSuperAdmin ||
-        m.status != MatchStatus.finished) {
+    // Admin, kurucu başkan ve bölge sorumlusu (kayıt: can_manage_match).
+    final s = AppSession.of(context).value;
+    final staff =
+        s.isAdmin || s.canManageLeague(m.leagueId) || s.isRegionOwner;
+    // Maç sırasında da (puanlar anlık değişir) ve bittikten sonra.
+    final playing =
+        m.status == MatchStatus.live ||
+        m.status == MatchStatus.halftime ||
+        m.status == MatchStatus.finished;
+    if (insights == null || !staff || !playing) {
       return null;
     }
     return _SpeedDialAction(
@@ -5935,22 +5980,33 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             // tek oyuncu; her sütun kendi puanlarını maç panosuna bildirir.
             if (ins != null) _MotmBoard.report(match.id, teamId, ratings);
 
+            // Oyundan çıkan, kırmızı kart ya da iki sarı gören: soluk (bu
+            // oyunculara gol/kart/değişiklik girilmez).
+            bool gone(String id) {
+              final k = ins?.of(id);
+              return k != null &&
+                  (k.subbedOut || k.reds.isNotEmpty || k.yellows.length >= 2);
+            }
+
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
                 for (final r in list)
-                  _row(
-                    playerId: r.playerId,
-                    jersey: jerseyOf(r),
-                    name: byId[r.playerId]?.name ?? '-',
-                    // VS'de dar sütunda ismi kapatır; yalnız tek takımda.
-                    quotaYear: widget.only != null
-                        ? null
-                        : _quotaYear(byId[r.playerId]),
-                    // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
-                    line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
-                    isCaptain: r.isCaptain,
-                    rating: ratings[r.playerId],
-                    best: ins != null && motm == r.playerId,
+                  Opacity(
+                    opacity: gone(r.playerId) ? 0.45 : 1,
+                    child: _row(
+                      playerId: r.playerId,
+                      jersey: jerseyOf(r),
+                      name: byId[r.playerId]?.name ?? '-',
+                      // VS'de dar sütunda ismi kapatır; yalnız tek takımda.
+                      quotaYear: widget.only != null
+                          ? null
+                          : _quotaYear(byId[r.playerId]),
+                      // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
+                      line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
+                      isCaptain: r.isCaptain,
+                      rating: ratings[r.playerId],
+                      best: ins != null && motm == r.playerId,
+                    ),
                   ),
               ];
             }

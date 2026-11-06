@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../widgets/admin_form.dart';
 import '../widgets/admin_page.dart';
-import 'global_filter.dart';
+import 'active_tournament.dart';
 
 /// Gizli turnuvaları erişim koduyla takip etme.
 ///
@@ -142,7 +142,17 @@ Future<void> showLeagueCodeDialog(BuildContext context) async {
     return;
   }
 
-  GlobalFilter.setLeague(leagueId);
+  try {
+    await ActiveTournament.selectAfterAccessCode(leagueId);
+  } catch (e) {
+    if (!context.mounted) return;
+    await showAdminInfoDialog(
+      context: context,
+      title: 'Turnuva seçilemedi',
+      message: e.toString().replaceFirst('Exception: ', ''),
+    );
+    return;
+  }
   LeagueAccess.bump();
   if (!context.mounted) return;
   await showAdminInfoDialog(

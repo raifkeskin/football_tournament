@@ -430,8 +430,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // Futbolcu (ya da oyuncu kaydı olan herkes): kart, maçlar, talepler.
     // Oyuncu kaydı olmayan takım sorumlusu: bilgi kartı.
+    // Taraftar hesabı da futbolcu kartı değil bilgi kartı görür.
     final isStaffOnly =
-        sessionValue.playerId == null && state.role == 'manager';
+        sessionValue.playerId == null &&
+        (state.role == 'manager' || state.role == 'fan');
     if (!isStaffOnly) {
       return MyProfileView(
         playerId: sessionValue.playerId,
@@ -464,7 +466,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? 'Kurucu Başkan'
         : session.isRegionOwner
         ? 'Bölge Sorumlusu'
-        : (state.role == 'manager' ? 'Takım Sorumlusu' : 'Futbolcu');
+        : state.role == 'manager'
+        ? 'Takım Sorumlusu'
+        : state.role == 'fan'
+        ? 'Taraftar'
+        : 'Futbolcu';
     return _StaffHeaderCard(
       name:
           state.displayName ??
