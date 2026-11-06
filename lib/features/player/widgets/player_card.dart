@@ -204,6 +204,120 @@ class PlayerCard extends StatefulWidget {
 class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
 
+  /// Kalem: kimliği doğrulanmamış futbolcunun ad/soyad/doğum tarihi (admin,
+  /// kurucu başkan, bölge sorumlusu; kural veritabanında).
+  late final Future<bool> _canEditBasic = _loadCanEditBasic();
+
+  Future<bool> _loadCanEditBasic() async {
+    final id = _cardPlayerId;
+    final u = Supabase.instance.client.auth.currentUser;
+    if (id.isEmpty || u == null || u.isAnonymous) return false;
+    try {
+      return await Supabase.instance.client.rpc(
+            'can_edit_player_basic',
+            params: {'p_player': id},
+          ) ==
+          true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _editBasic() async {
+    final id = _cardPlayerId;
+    final messenger = ScaffoldMessenger.of(context);
+    Map<String, dynamic> row;
+    try {
+      row = await Supabase.instance.client
+          .from('players')
+          .select('name, surname, birth_date')
+          .eq('id', id)
+          .single();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Bilgi alınamadı: $e')));
+      return;
+    }
+    if (!mounted) return;
+    final name = TextEditingController(text: (row['name'] ?? '').toString());
+    final surname = TextEditingController(
+      text: (row['surname'] ?? '').toString(),
+    );
+    DateTime? birth = DateTime.tryParse((row['birth_date'] ?? '').toString());
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Futbolcu bilgileri'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Ad'),
+              ),
+              TextField(
+                controller: surname,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Soyad'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.cake_outlined),
+                label: Text(
+                  birth == null
+                      ? 'Doğum tarihi seç'
+                      : DateFormat('dd.MM.yyyy').format(birth!),
+                ),
+                onPressed: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: birth ?? DateTime(1985),
+                    firstDate: DateTime(1930),
+                    lastDate: DateTime.now(),
+                  );
+                  if (d != null) setD(() => birth = d);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+    try {
+      await Supabase.instance.client.rpc(
+        'player_edit_basic',
+        params: {
+          'p_player': id,
+          'p_name': name.text.trim(),
+          'p_surname': surname.text.trim(),
+          'p_birth': birth == null
+              ? null
+              : DateFormat('yyyy-MM-dd').format(birth!),
+        },
+      );
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Kaydedildi. Kartı yeniden açınca güncel görünür.'),
+        ),
+      );
+    } catch (e) {
+      final msg = e is PostgrestException ? e.message : '$e';
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
   late final Future<List<_GoalClip>> _goals = _loadGoals();
   late final Future<List<_GoalClip>> _assists = _loadGoals(assists: true);
 
@@ -1576,52 +1690,75 @@ class _PlayerCardState extends State<PlayerCard> {
               ],
             ),
           ),
-          // Başkası takip edebilir (kendi profilinde yıldız yok).
-          if (_cardPlayerId.isNotEmpty &&
-              _cardPlayerId != AppSession.of(context).value.playerId)
-            Positioned(
-              top: topInset + 52,
-              right: 12,
-              // Yalnız yıldız; eklendi/çıkarıldı bilgisi balonda.
-              child: FollowStar(
-                kind: FollowKind.player,
-                id: _cardPlayerId,
-                size: 28,
-                idleColor: Colors.white,
-              ),
-            ),
-          // Sezon afişi: futbolcu kendi profilinde, yöneticiler her profilde.
-          if (canShowPlayerPoster(context, _cardPlayerId))
-            Positioned(
-              top:
-                  topInset +
-                  (_cardPlayerId != AppSession.of(context).value.playerId
-                      ? 96
-                      : 52),
-              right: 8,
-              child: IconButton(
-                tooltip: 'Sezon afişini paylaş',
-                onPressed: _openSeasonPoster,
-                icon: const Icon(
-                  Icons.ios_share_rounded,
-                  color: Colors.white,
-                  size: 26,
-                ),
-              ),
-            ),
+          // Sağ üst: kapat, takip yıldızı, sezon afişi, düzenle — tek sütun,
+          // her biri aynı genişlikte ortalı.
           Positioned(
             top: topInset + 2,
             right: 8,
-            child: IconButton(
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.close_rounded, color: Colors.white70),
-              tooltip: 'Kapat',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _headBtn(
+                  IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white70,
+                    ),
+                    tooltip: 'Kapat',
+                  ),
+                ),
+                // Başkası takip edebilir (kendi profilinde yıldız yok).
+                if (_cardPlayerId.isNotEmpty &&
+                    _cardPlayerId != AppSession.of(context).value.playerId)
+                  _headBtn(
+                    FollowStar(
+                      kind: FollowKind.player,
+                      id: _cardPlayerId,
+                      size: 28,
+                      idleColor: Colors.white,
+                    ),
+                  ),
+                // Sezon afişi: futbolcu kendi profilinde, yöneticiler her
+                // profilde.
+                if (canShowPlayerPoster(context, _cardPlayerId))
+                  _headBtn(
+                    IconButton(
+                      tooltip: 'Sezon afişini paylaş',
+                      onPressed: _openSeasonPoster,
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                  ),
+                FutureBuilder<bool>(
+                  future: _canEditBasic,
+                  builder: (context, snap) => snap.data == true
+                      ? _headBtn(
+                          IconButton(
+                            tooltip: 'Bilgileri düzenle',
+                            onPressed: _editBasic,
+                            icon: const Icon(
+                              Icons.edit_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _headBtn(Widget child) =>
+      SizedBox(width: 48, height: 44, child: Center(child: child));
 
   /// Bu sezonun (en yeni turnuvanın) afişi; sayılar Özet'tekiyle aynı.
   Future<void> _openSeasonPoster() async {
