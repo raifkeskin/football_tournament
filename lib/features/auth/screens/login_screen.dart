@@ -21,7 +21,8 @@ import '../../tournament_request/tournament_request.dart';
 import '../../../core/services/app_settings.dart';
 import '../registration/register_choice_screen.dart';
 
-/// Eski misafir-kipi tercihini temizleyip giriş kapısını zorunlu tutar.
+/// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır). Giriş
+/// isteğe bağlıdır (Apple 5.1.1); hesap yalnız takip/yorum gibi işler için.
 class GuestMode {
   GuestMode._();
 
@@ -31,22 +32,15 @@ class GuestMode {
   static Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      chosen = false;
-      if (prefs.getBool(_key) == true) {
-        await prefs.setBool(_key, false);
-      }
+      chosen = prefs.getBool(_key) ?? false;
     } catch (_) {}
   }
 
   static Future<void> set(bool value) async {
-    chosen = false;
+    chosen = value;
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (value) {
-        await prefs.remove(_key);
-      } else {
-        await prefs.setBool(_key, false);
-      }
+      await prefs.setBool(_key, value);
     } catch (_) {}
     // Oturum değişince aktif turnuva teması yeniden belirlenir.
     await ActiveTournament.refresh();
@@ -394,6 +388,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Saha (futbolcu) mı Kulübe (sorumlu) mi seçili. Giriş yöntemi aynı;
+  Future<void> _continueAsGuest() async {
+    await GuestMode.set(true);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'MainNavigator'),
+        builder: (_) => const MainNavigator(),
+      ),
+      (Route<dynamic> route) => false,
+    );
+  }
+
   /// Taraftar seçeneği de aynı telefon/şifre girişini kullanır.
   bool _staff = false;
   bool _fan = false;
@@ -573,6 +579,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               showSubtitle: subtitles,
                               onTap: _loading ? null : _openRegistration,
                             ),
+                            // Giriş zorunlu değil: misafir her şeyi izler.
+                            if (widget.gate)
+                              TextButton(
+                                onPressed: _loading ? null : _continueAsGuest,
+                                child: const Text(
+                                  'Üye olmadan misafir olarak devam et  ›',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
