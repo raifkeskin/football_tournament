@@ -5134,8 +5134,7 @@ class _LineupTabState extends State<_LineupTab>
     final insights = _insights;
     // Admin, kurucu başkan ve bölge sorumlusu (kayıt: can_manage_match).
     final s = AppSession.of(context).value;
-    final staff =
-        s.isAdmin || s.canManageLeague(m.leagueId) || s.isRegionOwner;
+    final staff = s.isAdmin || s.canManageLeague(m.leagueId) || s.isRegionOwner;
     // Maç sırasında da (puanlar anlık değişir) ve bittikten sonra.
     final playing =
         m.status == MatchStatus.live ||
@@ -8369,10 +8368,47 @@ Future<void> openMatchMoments(
   final m = match;
   final messenger = ScaffoldMessenger.of(context);
   try {
-    final rows = await Supabase.instance.client
+    final client = Supabase.instance.client;
+    final rows = await client
         .from('match_rosters')
-        .select('player_id, team_id, jersey_number, players(name, surname)')
+        .select(
+          'player_id, team_id, jersey_number, is_starting, pos_x, '
+          'players(name, surname, main_position, sub_position)',
+        )
         .eq('match_id', m.id);
+    // O an sahadakiler (olay kuralıyla aynı veritabanı hesabı).
+    final pitch = <String>{};
+    for (final t in [m.homeTeamId, m.awayTeamId]) {
+      try {
+        final ids = await client.rpc(
+          'match_on_pitch_at',
+          params: {'p_match_id': m.id, 'p_team_id': t, 'p_minute': null},
+        );
+        if (ids is List) pitch.addAll(ids.map((e) => '$e'));
+      } catch (_) {}
+    }
+    int lineOf(Map r) {
+      final p = r['players'];
+      if (p is! Map) return -1;
+      final a = '${p['main_position'] ?? ''}'.trim();
+      final b = '${p['sub_position'] ?? ''}'.trim();
+      if (a.isEmpty && b.isEmpty) return -1;
+      return positionLineOf(a, b);
+    }
+
+    // Sahadaki kaleci: mevkisi kaleci olan; yoksa esamede kaleci olarak
+    // seçilen (pos_x = 0) ve hâlâ sahada olan.
+    final keepers = <String>{};
+    for (final t in [m.homeTeamId, m.awayTeamId]) {
+      final team = rows.where(
+        (r) => '${r['team_id']}' == t && pitch.contains('${r['player_id']}'),
+      );
+      final byPos = team.where((r) => lineOf(r) == 0).toList();
+      final pick = byPos.length == 1
+          ? byPos
+          : team.where((r) => r['pos_x'] == 0).toList();
+      if (pick.length == 1) keepers.add('${pick.first['player_id']}');
+    }
     String name(Map r) {
       final p = r['players'];
       if (p is! Map) return '-';
@@ -8390,6 +8426,9 @@ Future<void> openMatchMoments(
               teamName: shortTeamName(
                 r['team_id'] == m.homeTeamId ? homeName : awayName,
               ),
+              line: keepers.contains('${r['player_id']}') ? 0 : lineOf(r),
+              onPitch: pitch.isEmpty || pitch.contains('${r['player_id']}'),
+              keeper: keepers.contains('${r['player_id']}'),
             ),
         ]..sort((a, b) {
           final t = (a.teamId == m.homeTeamId ? 0 : 1).compareTo(

@@ -330,15 +330,6 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Zemin, takım rengi koyuysa (yeşil/lacivert) donuk görünüyor.
 - **Ne zaman:** Kapışma afişiyle birlikte, telefonda dekupe hazır olunca.
 
-## 31. Mobil olay girişi: Detay ve Kadro/Diziliş tek akış — CUMA 2026-11-06 AKŞAMI (limitler sıfırlanınca) (2026-11-05)
-- **Gol asisti:** Kadro/Diziliş'te oyuncuya dokunup gol girince asist sorulmuyor. Detay ekranındaki gibi asist (ya da asistsiz) sorulmalı.
-- **Tek iş kuralı:** Detay ekranındaki akış doğru; Kadro/Diziliş ona uyarlanacak. İki ekran aynı iş kodunu kullanmalı, kural değişince ikisi birlikte değişsin.
-  - Kırmızı kart gören oyuncuya gol, kart ve değişiklik girilemez; yalnız (puan) olay eklenebilir.
-  - Aynı oyuncuya ikinci sarıdan sonra ya da kırmızıdan sonra yeniden kart girilemez. Bugün dizilişten birden fazla sarı ve kırmızı girilebiliyor.
-- **"Olay ekle" (puan olayları, Detay sekmesi):**
-  - Olay seçilir. Sahada tek kaleci varsa ve mevkiler girilmişse kaleci olayı doğrudan o kaleciye yazılır, oyuncu sorulmaz.
-  - Defans, orta saha ya da forvet olayında ikinci ekranda yalnız o mevkideki oyuncular gelir. Seçilen olay üstte görünür; oyuncuya dokununca kendiliğinden kaydedilir, ayrıca "Kaydet" yok.
-  - Dakika sorulmaz; olay anının dakikası otomatik gelir.
-  - Popup'ta mevkiler sekme olur (Kaleci · Defans · Orta saha · Forvet · Herkes), olaylar sekmenin altında listelenir.
-- **Kadro/Diziliş'e de "Olay ekle":** Aynı akış oradan da çalışsın.
-- **Tam ekran canlı giriş (mobil + tablet):** Kadro sekmesinde tam ekran düğmesi olacak, basınca yatay saha açılacak. Web masasındaki saha akışı uygulanacak: dokun → menü, yedeği sürükle → değişiklik. Önizleme: https://claude.ai/artifact/3Wm5Ava1ZtTrFWunBsgJGe
+## 31. Tam ekran canlı giriş (mobil + tablet) — SIRADA (2026-11-05, güncelleme 2026-11-07)
+- Yapıldı ve nottan çıkarıldı: asist, Detay = diziliş tek kural (veritabanında), kırmızı/çift sarı engeli, Olay ekle mevki sekmeleri + kaleciye otomatik + dokununca kayıt + dakika otomatik, Olay ekle maç sırasında ve Kadro sekmesinde.
+- **Kalan:** Kadro sekmesinde tam ekran düğmesi → yatay saha (web masasındaki akış: dokun → menü, yedeği sürükle → değişiklik). Önizleme: https://claude.ai/artifact/3Wm5Ava1ZtTrFWunBsgJGe

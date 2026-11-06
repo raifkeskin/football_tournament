@@ -236,6 +236,9 @@ class MomentPlayer {
     required this.number,
     required this.teamId,
     required this.teamName,
+    this.line = -1,
+    this.onPitch = true,
+    this.keeper = false,
   });
 
   final String id;
@@ -243,7 +246,25 @@ class MomentPlayer {
   final String number;
   final String teamId;
   final String teamName;
+
+  /// Mevki hattı: 0 kaleci, 1 defans, 2 orta saha, 3 forvet, -1 bilinmiyor.
+  final int line;
+
+  /// O an sahada mı (kırmızı kart / çıkan oyuncu değil).
+  final bool onPitch;
+
+  /// Sahadaki kaleci (kaleci olayları doğrudan ona yazılır).
+  final bool keeper;
 }
+
+/// Sekmenin mevki hattı (HERKES: -1).
+int _groupLine(String g) => switch (g) {
+  'KALECİ' => 0,
+  'DEFANS' => 1,
+  'ORTA SAHA' => 2,
+  'FORVET' => 3,
+  _ => -1,
+};
 
 const _groupColors = {
   'KALECİ': Color(0xFF3B82F6),
@@ -253,8 +274,9 @@ const _groupColors = {
   'HERKES': Color(0xFF64748B),
 };
 
-/// "Olay ekle": olayı, sonra futbolcuyu seç; dakika ve kaydet. Altta maçın
-/// girilmiş olayları (silinebilir).
+/// "Olay ekle": mevki sekmesinden olayı seç; kaleci olayı sahadaki kaleciye
+/// hemen yazılır, diğerlerinde o mevkideki oyunculardan birine dokununca
+/// kaydedilir. Dakika maç saatinden gelir. Altta girilen olaylar.
 Future<void> showMomentSheet({
   required BuildContext context,
   required MatchModel match,
@@ -303,17 +325,35 @@ class _MomentSheet extends StatefulWidget {
 
 class _MomentSheetState extends State<_MomentSheet> {
   MomentKind? _kind;
-  MomentPlayer? _player;
-  late final _minute = TextEditingController(
-    text: widget.minute?.toString() ?? '',
-  );
+  String _tab = MomentKind.groups.first;
+
+  /// İkinci adımda mevkiye uymayanlar da listelensin mi.
+  bool _showAll = false;
   bool _saving = false;
   late List<MatchMoment> _list = [...widget.insights.moments];
 
-  @override
-  void dispose() {
-    _minute.dispose();
-    super.dispose();
+  List<MomentPlayer> get _teamPlayers {
+    final team = widget.teamId;
+    return team == null
+        ? widget.players
+        : widget.players.where((p) => p.teamId == team).toList();
+  }
+
+  /// Olay seçilince: kaleci olayında sahada tek kaleci varsa hemen kaydet;
+  /// yoksa futbolcu listesi (ikinci adım).
+  void _pickKind(MomentKind k) {
+    if (_saving) return;
+    if (k.group == 'KALECİ') {
+      final gks = _teamPlayers.where((p) => p.keeper && p.onPitch).toList();
+      if (gks.length == 1) {
+        _save(k, gks.first);
+        return;
+      }
+    }
+    setState(() {
+      _kind = k;
+      _showAll = false;
+    });
   }
 
   String _pts(MomentKind k) {
@@ -325,9 +365,7 @@ class _MomentSheetState extends State<_MomentSheet> {
         : ''}${v.abs().toStringAsFixed(1)}';
   }
 
-  Future<void> _save() async {
-    final k = _kind, p = _player;
-    if (k == null || p == null) return;
+  Future<void> _save(MomentKind k, MomentPlayer p) async {
     setState(() => _saving = true);
     try {
       await MatchMomentsRepo.add(
@@ -335,14 +373,13 @@ class _MomentSheetState extends State<_MomentSheet> {
         teamId: p.teamId,
         playerId: p.id,
         kind: k.key,
-        minute: int.tryParse(_minute.text.trim()),
+        minute: widget.minute,
       );
       final fresh = await MatchMomentsRepo.load(widget.match.id);
       if (!mounted) return;
       setState(() {
         _list = fresh;
         _kind = null;
-        _player = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${k.label} · ${p.name} kaydedildi.')),
@@ -386,7 +423,7 @@ class _MomentSheetState extends State<_MomentSheet> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() => _kind = k),
+        onTap: () => _pickKind(k),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           child: Row(
@@ -469,30 +506,43 @@ class _MomentSheetState extends State<_MomentSheet> {
                 'eden anlar var.',
                 style: TextStyle(color: _muted, fontSize: 12.5, height: 1.35),
               ),
-              for (final g in MomentKind.groups) ...[
-                const SizedBox(height: 14),
-                Row(
+              const SizedBox(height: 12),
+              // Mevki sekmeleri; olaylar sekmenin altında.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
-                    Container(
-                      width: 3,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: _groupColors[g],
-                        borderRadius: BorderRadius.circular(2),
+                    for (final g in MomentKind.groups)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(g),
+                          selected: _tab == g,
+                          showCheckmark: false,
+                          selectedColor: _groupColors[g]!.withValues(
+                            alpha: 0.3,
+                          ),
+                          side: BorderSide(
+                            color: _tab == g
+                                ? _groupColors[g]!
+                                : Colors.white.withValues(alpha: 0.12),
+                          ),
+                          labelStyle: TextStyle(
+                            color: _tab == g ? Colors.white : _muted,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                          onSelected: (_) => setState(() {
+                            _tab = g;
+                            _kind = null;
+                          }),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      g,
-                      style: TextStyle(
-                        color: _groupColors[g],
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
+              ),
+              const SizedBox(height: 10),
+              if (_kind == null)
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -501,107 +551,112 @@ class _MomentSheetState extends State<_MomentSheet> {
                   crossAxisSpacing: 8,
                   childAspectRatio: 3.4,
                   children: [
-                    for (final k in MomentKind.all.where((k) => k.group == g))
-                      _kindTile(k, _groupColors[g]!),
+                    for (final k in MomentKind.all.where(
+                      (k) => k.group == _tab,
+                    ))
+                      _kindTile(k, _groupColors[_tab]!),
                   ],
-                ),
-              ],
-              if (_kind != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  '${_kind!.label.toUpperCase()} · FUTBOLCU SEÇ',
-                  style: const TextStyle(
-                    color: _muted,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final p in pickable)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Material(
-                      color: _player == p
-                          ? kAdminAccent.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.04),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(
-                          color: _player == p
-                              ? kAdminAccent
-                              : Colors.white.withValues(alpha: 0.08),
-                        ),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() => _player = p),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 28,
-                                child: Text(
-                                  p.number,
-                                  style: const TextStyle(
-                                    color: kAdminAccent,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  p.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                p.teamName,
-                                style: const TextStyle(
-                                  color: _muted,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
+                )
+              else ...[
+                // İkinci adım: seçilen olay üstte, o mevkideki oyuncular.
                 Row(
                   children: [
-                    SizedBox(
-                      width: 110,
-                      child: TextField(
-                        controller: _minute,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: 'Dakika',
-                          isDense: true,
-                        ),
-                      ),
+                    IconButton(
+                      onPressed: _saving
+                          ? null
+                          : () => setState(() => _kind = null),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      tooltip: 'Olaylara dön',
                     ),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kAdminAccent,
-                          minimumSize: const Size.fromHeight(44),
+                      child: Text(
+                        '${_kind!.label} · ${_pts(_kind!)}',
+                        style: TextStyle(
+                          color: _groupColors[_kind!.group],
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
                         ),
-                        onPressed: _player == null || _saving ? null : _save,
-                        child: Text(_saving ? 'Kaydediliyor…' : 'Kaydet'),
                       ),
                     ),
                   ],
                 ),
+                const Text(
+                  'Futbolcuya dokununca kaydedilir.',
+                  style: TextStyle(color: _muted, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                ...() {
+                  final line = _groupLine(_kind!.group);
+                  final onPitch = _teamPlayers.where((p) => p.onPitch);
+                  final fit = line < 0
+                      ? onPitch.toList()
+                      : onPitch.where((p) => p.line == line).toList();
+                  final list = _showAll || fit.isEmpty ? _teamPlayers : fit;
+                  return [
+                    for (final p in list)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Material(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: _saving ? null : () => _save(_kind!, p),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 11,
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 28,
+                                    child: Text(
+                                      p.number,
+                                      style: const TextStyle(
+                                        color: kAdminAccent,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      p.name,
+                                      style: TextStyle(
+                                        color: p.onPitch
+                                            ? Colors.white
+                                            : Colors.white38,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    p.teamName,
+                                    style: const TextStyle(
+                                      color: _muted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (!_showAll &&
+                        fit.isNotEmpty &&
+                        fit.length < _teamPlayers.length)
+                      TextButton(
+                        onPressed: () => setState(() => _showAll = true),
+                        child: const Text('Tüm futbolcuları göster'),
+                      ),
+                  ];
+                }(),
               ],
               if (_list.isNotEmpty) ...[
                 const SizedBox(height: 18),
