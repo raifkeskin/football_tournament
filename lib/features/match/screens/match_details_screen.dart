@@ -6015,10 +6015,22 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
 
             // Oyundan çıkan, kırmızı kart ya da iki sarı gören: soluk (bu
             // oyunculara gol/kart/değişiklik girilmez).
+            // Halısahada çıkıp tekrar giren oyuncu sahada sayılır.
+            final onPitch = {
+              for (final r in rosters)
+                if (r.isStarting) r.playerId,
+            };
+            for (final (o, i) in ins?.subs ?? const <(String, String)>[]) {
+              onPitch
+                ..remove(o)
+                ..add(i);
+            }
             bool gone(String id) {
               final k = ins?.of(id);
               return k != null &&
-                  (k.subbedOut || k.reds.isNotEmpty || k.yellows.length >= 2);
+                  ((k.subbedOut && !onPitch.contains(id)) ||
+                      k.reds.isNotEmpty ||
+                      k.yellows.length >= 2);
             }
 
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
