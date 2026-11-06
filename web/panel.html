@@ -2414,6 +2414,8 @@ button.tile:hover { border-color: #33476e; }
     each('[data-roster-edit]', function (b) {
       // Maçı başkası yönetirken esame de değiştirilemez.
       if (locked) { b.disabled = true; b.title = 'Esame yalnız maçı yöneten kişide düzenlenebilir'; return; }
+      // Düdükten sonra esame kapanır; admin ve kurucu başkan yalnız yedek ekler.
+      if (d.kickoff_at && !d.owner) { b.disabled = true; b.title = 'Maç başladı; esame kapandı'; return; }
       b.onclick = function () { editRoster(b.getAttribute('data-team')); };
     });
     each('[data-pl]', function (b) { b.onclick = function () { pickPlayer(b.getAttribute('data-pl'), b.getAttribute('data-team')); }; });
