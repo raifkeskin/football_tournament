@@ -6075,6 +6075,9 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                       if (starterById[id] != null) starterById[id]!,
                   ];
             final gkId = formationIds.isEmpty ? null : formationIds.first;
+            // Kaleci her zaman İlk 11'in başında.
+            final gkAt = starters.indexWhere((r) => r.playerId == gkId);
+            if (gkAt > 0) starters.insert(0, starters.removeAt(gkAt));
             final subs = rosters.where((r) => !r.isStarting).toList()
               ..sort(hasOrder ? byList : order);
 
