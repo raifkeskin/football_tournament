@@ -97,8 +97,17 @@ class AppNameBand extends StatelessWidget {
                         bottom: 3,
                         child: _BandBackButton(onTap: page.onBack),
                       ),
+                      // Geri düğmesiyle (48) aynı yükseklikte ortalı: alt
+                      // çizgiye taşmaz.
                       if (page.trailing != null)
-                        Positioned(right: 4, bottom: 3, child: page.trailing!),
+                        Positioned(
+                          right: 4,
+                          bottom: 3,
+                          child: SizedBox(
+                            height: 48,
+                            child: Center(child: page.trailing!),
+                          ),
+                        ),
                     ],
                   );
                 }
@@ -1009,11 +1018,11 @@ class _TournamentBand extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (LeagueSwitchScope.tabAction.value != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: LeagueSwitchScope.tabAction.value!,
-              ),
+            // Zil ile aynı hizada (ortalı), arada küçük boşluk.
+            if (LeagueSwitchScope.tabAction.value != null) ...[
+              LeagueSwitchScope.tabAction.value!,
+              const SizedBox(width: 4),
+            ],
             const NotificationBell(),
             if (actions?.onLogout != null)
               actions!.logoutButton()

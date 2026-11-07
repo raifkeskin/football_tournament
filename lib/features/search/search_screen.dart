@@ -516,7 +516,7 @@ class _SearchScreenState extends State<SearchScreen> {
       subtitle: 'Ara',
       trailing: BandIconButton(
         icon: Icons.close_rounded,
-        size: 36,
+        size: 34,
         tooltip: 'Aramayı kapat',
         onTap: () => Navigator.of(context).maybePop(),
       ),
