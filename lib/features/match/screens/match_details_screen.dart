@@ -1649,6 +1649,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         final bool managesAway =
             session.managesTeam(m.seasonId, m.awayTeamId) ||
             session.teamId == m.awayTeamId;
+        // Dizilişte oyuna giren oyuncu yalnız canlı maçta ve yalnız
+        // yetkiliye (admin, kurucu, gözlemci, takım sorumlusu) sahada
+        // görünür; diğerleri ve maç bitince herkes ilk 11'i görür.
+        final bool showLiveSubs =
+            (isSuperAdmin || managesHome || managesAway) &&
+            (m.status == MatchStatus.live ||
+                m.status == MatchStatus.halftime);
         // Diziliş: maç başlamadan yetkililer ve takım sorumlusu; başladıktan
         // sonra yalnız admin ve kurucu başkan (diğerleri yalnız bakar).
         final bool canEditHome = _beforeKickoff(m)
@@ -2208,6 +2215,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           canControl &&
                                           (m.status == MatchStatus.live ||
                                               m.status == MatchStatus.halftime),
+                                      showLiveSubs: showLiveSubs,
                                     ),
 
                                     _HighlightsTab(
@@ -2241,6 +2249,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           teamId: teamId,
                                           kind: 'Diziliş',
                                         ),
+                                        showSubs: showLiveSubs,
                                         initialTeam:
                                             !isSuperAdmin &&
                                                 managesAway &&
@@ -4542,6 +4551,7 @@ class _LineupTab extends StatefulWidget {
     this.canShareHome = false,
     this.canShareAway = false,
     this.canAddEvents = false,
+    this.showLiveSubs = false,
     this.homeLogo = '',
     this.awayLogo = '',
   });
@@ -4562,6 +4572,9 @@ class _LineupTab extends StatefulWidget {
 
   /// Canlı maçta yöneten yetkili: sahadaki oyuncuya dokununca olay seçilir.
   final bool canAddEvents;
+
+  /// Canlı maçta admin / kurucu / takım sorumlusu: dizilişte giren oyuncu.
+  final bool showLiveSubs;
 
   @override
   State<_LineupTab> createState() => _LineupTabState();
@@ -4841,6 +4854,7 @@ class _LineupTabState extends State<_LineupTab>
               collapsed: !_pitchOpen,
               onToggleCollapsed: _togglePitch,
               onFullscreen: _fullscreen(m),
+              showSubs: widget.showLiveSubs,
             )
           else
             FormationTab(
@@ -4866,6 +4880,7 @@ class _LineupTabState extends State<_LineupTab>
               collapsed: !_pitchOpen,
               onToggleCollapsed: _togglePitch,
               onFullscreen: _fullscreen(m),
+              showSubs: widget.showLiveSubs,
               singleTeam: true,
               initialTeam: _view == m.homeTeamId ? 0 : 1,
               onPlayerTap: _pitchTap(

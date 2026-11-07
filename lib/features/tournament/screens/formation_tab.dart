@@ -341,9 +341,10 @@ _Layout? _withSubs(
   _Layout? l,
   MatchInsights? ins,
   List<MatchRosterModel> rosters,
-  Map<String, PlayerModel> players,
-) {
-  if (l == null || ins == null || ins.subs.isEmpty) return l;
+  Map<String, PlayerModel> players, {
+  bool enabled = true,
+}) {
+  if (!enabled || l == null || ins == null || ins.subs.isEmpty) return l;
   final byId = {for (final r in rosters) r.playerId: r};
   final lines = [
     for (final line in l.lines) [...line],
@@ -428,7 +429,12 @@ class FormationTab extends StatefulWidget {
     this.collapsed = false,
     this.onToggleCollapsed,
     this.onFullscreen,
+    this.showSubs = false,
   });
+
+  /// Canlı maçta yetkiliye: oyuna giren oyuncu sahada çıkanın yerinde.
+  /// Kapalıyken (diğerleri / maç bitti) saha ilk 11'i gösterir.
+  final bool showSubs;
 
   /// Gömülü dizilişte gizle/göster: kapalıyken yalnız başlık çubuğu.
   final bool collapsed;
@@ -768,6 +774,7 @@ class _FormationTabState extends State<FormationTab>
                   insights,
                   rosterSnap.data!,
                   players,
+                  enabled: widget.showSubs,
                 );
                 if (layout == null) {
                   if (widget.embedded) return const SizedBox.shrink();
@@ -1928,9 +1935,13 @@ class VsFormationPitch extends StatelessWidget {
     this.collapsed = false,
     this.onToggleCollapsed,
     this.onFullscreen,
+    this.showSubs = false,
   });
 
   final MatchModel match;
+
+  /// Canlı maçta yetkiliye: giren oyuncu sahada (bkz. FormationTab).
+  final bool showSubs;
   final Color? homeColor;
   final Color? awayColor;
 
@@ -1977,6 +1988,7 @@ class VsFormationPitch extends StatelessWidget {
               insights,
               rosterSnap.data ?? const [],
               players,
+              enabled: showSubs,
             ),
           );
         },
