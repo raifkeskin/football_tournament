@@ -247,7 +247,20 @@ class _LoginScreenState extends State<LoginScreen> {
     _adminTapTimer?.cancel();
     _adminTapCount = 0;
 
-    final pwd = await _showBackdoorPasswordDialog();
+    // Kayıtlı admin parmak izi / Face ID varsa önce o; vazgeçilirse şifre.
+    String? pwd;
+    var fromBio = false;
+    final bioAvailable = await BiometricLogin.available();
+    final saved = bioAvailable ? await BiometricLogin.readAdmin() : null;
+    if (saved != null) {
+      final label = await BiometricLogin.label();
+      if (await BiometricLogin.authenticate('$label ile admin girişi')) {
+        pwd = saved;
+        fromBio = true;
+      }
+    }
+    if (!mounted) return;
+    pwd ??= await _showBackdoorPasswordDialog();
     if (!mounted || pwd == null) return;
 
     setState(() => _loading = true);
@@ -255,10 +268,17 @@ class _LoginScreenState extends State<LoginScreen> {
       final ok = await session.signInSuperAdminBackdoor(password: pwd);
       if (!mounted) return;
       if (!ok) {
+        // Saklanan şifre artık geçmiyorsa kayıt silinir.
+        if (fromBio) await BiometricLogin.clearAdmin();
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Şifre hatalı.')));
         return;
+      }
+      if (!fromBio && bioAvailable && saved == null) {
+        await _offerAdminBiometric(pwd);
+        if (!mounted) return;
       }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
@@ -277,6 +297,34 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Şifreyle admin girişinden sonra: "Admin girişi parmak izi ile
+  /// yapılsın mı?" Evet denirse şifre telefonun güvenli kasasına yazılır.
+  Future<void> _offerAdminBiometric(String password) async {
+    final label = await BiometricLogin.label();
+    if (!mounted) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$label ile admin girişi'),
+        content: Text(
+          'Bir dahaki sefere uygulama adına 3 kez dokunup $label ile '
+          'admin girişi yapılsın mı? Futbolcu girişiniz bundan etkilenmez.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Şimdi değil'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Evet'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true) await BiometricLogin.saveAdmin(password);
   }
 
   /// Supabase giriş hatasını kullanıcının anlayacağı bir mesaja çevirir.
