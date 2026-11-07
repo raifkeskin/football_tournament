@@ -99,6 +99,32 @@ class BiometricLogin {
     } catch (_) {}
   }
 
+  // Gizli admin girişi (uygulama adına 3 dokunuş): futbolcu girişinden
+  // ayrı saklanır; aynı kişi hem futbolcu hem admin olarak girebilir.
+  static const _kAdminPassword = 'bio_admin_password';
+
+  static Future<String?> readAdmin() async {
+    if (!_platform) return null;
+    try {
+      final p = await _storage.read(key: _kAdminPassword);
+      return (p ?? '').isEmpty ? null : p;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveAdmin(String password) async {
+    try {
+      await _storage.write(key: _kAdminPassword, value: password);
+    } catch (_) {}
+  }
+
+  static Future<void> clearAdmin() async {
+    try {
+      await _storage.delete(key: _kAdminPassword);
+    } catch (_) {}
+  }
+
   /// Kullanıcı şifresini değiştirdi: kayıtlıysa yenisi saklanır.
   static Future<void> passwordChanged(String newPassword) async {
     if (await savedPhone() == null) return;
