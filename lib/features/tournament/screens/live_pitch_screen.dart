@@ -1000,6 +1000,15 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
             }
             final at = menuAt;
             if (at != null && _player != null && _team != null) {
+              // Menü dışına dokunmak menüyü kapatır.
+              children.add(
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _clear,
+                  ),
+                ),
+              );
               children.add(_menu(at, w, h, scale));
             }
             final hint = _hintBar();
