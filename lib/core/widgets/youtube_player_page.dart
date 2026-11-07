@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../utils/orientation_lock.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -47,7 +48,7 @@ void landscapeOnFullscreen(
 /// Tam ekrandan çıkışta ya da oynatıcı kapanınca yönlendirmeyi geri verir.
 void resetPlayerOrientation() {
   if (kIsWeb) return;
-  SystemChrome.setPreferredOrientations(const []);
+  OrientationLock.backToPortrait();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 }
 

@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../services/instagram_share.dart';
 import '../services/whatsapp_share.dart';
 import 'app_name_band.dart';
+import '../utils/orientation_lock.dart';
 import 'youtube_player_page.dart' show resetPlayerOrientation;
 
 /// Kendi depomuzdaki (yayıncının teslim ettiği) MP4 kesiti tam ekran
@@ -50,15 +51,15 @@ class _Mp4ClipPageState extends State<Mp4ClipPage> {
   void _setFull(bool full) {
     setState(() => _full = full);
     if (kIsWeb) return;
-    SystemChrome.setPreferredOrientations(
-      full
-          ? const [
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ]
-          // Yalnız serbest bırakmak ekranı yatayda bırakır: önce dikeye.
-          : const [DeviceOrientation.portraitUp],
-    );
+    if (full) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      // Yalnız serbest bırakmak ekranı yatayda bırakır: önce dikeye.
+      OrientationLock.backToPortrait();
+    }
   }
 
   /// Tam ekranda sistem çubukları ve uygulamanın turnuva bandı gizlenir.
