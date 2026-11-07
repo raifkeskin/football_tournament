@@ -1668,8 +1668,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         // görünür; diğerleri ve maç bitince herkes ilk 11'i görür.
         final bool showLiveSubs =
             (isSuperAdmin || managesHome || managesAway) &&
-            (m.status == MatchStatus.live ||
-                m.status == MatchStatus.halftime);
+            (m.status == MatchStatus.live || m.status == MatchStatus.halftime);
         // Yetkili ama maçı başkası yönetiyor: giriş denemesinde devir sorusu.
         final VoidCallback? lockedEdit =
             isSuperAdmin &&
@@ -2537,6 +2536,10 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
 
   /// Maçta "Maçın Adamı" fotoğrafı var mı (tek olur; varsa listede yok).
   bool _hasManOfMatch = false;
+
+  /// Takım Fotosu eklenebilecek taraflar (true = ev sahibi). Her takımın
+  /// maçta tek takım fotoğrafı olur; eklenen takım listeden çıkar.
+  List<bool> _freeSides = const [true, false];
   final _urlCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
 
@@ -2658,7 +2661,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
 
   /// Seçilebilen türler; yayın linki menüdeki ayrı düğmeden eklenir.
   List<String> get _types => [
-    'Takım Fotosu',
+    if (_freeSides.isNotEmpty) 'Takım Fotosu',
     'Önemli An',
     if (!_hasManOfMatch) 'Maçın Adamı',
     kMediaVideoLink,
@@ -2771,6 +2774,27 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
         final all = snap.data ?? const <MatchMediaModel>[];
         _photoCount = all.where((m) => m.isPhoto).length;
         _hasManOfMatch = all.any((m) => m.mediaType == 'Maçın Adamı');
+        final m = widget.match;
+        final done = {
+          for (final x in all)
+            if (x.mediaType == 'Takım Fotosu') x.teamId,
+        };
+        _freeSides = [
+          if (!done.contains(m.homeTeamId)) true,
+          if (!done.contains(m.awayTeamId)) false,
+        ];
+        if (!_isUploading) {
+          // İki takımın da fotoğrafı var: tür Önemli An'a geçer.
+          if (_selectedType == 'Takım Fotosu' && _freeSides.isEmpty) {
+            _selectedType = 'Önemli An';
+          }
+          // Tek takım kaldı: o seçili gelir; eklenmiş takım seçili kalmaz.
+          if (_freeSides.length == 1) {
+            _isHomeTeam = _freeSides.single;
+          } else if (_isHomeTeam != null && !_freeSides.contains(_isHomeTeam)) {
+            _isHomeTeam = null;
+          }
+        }
         return _buildDialog(context);
       },
     );
@@ -2863,8 +2887,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                                     : limit - _photoCount;
                                 if (room <= 0) return;
                                 final messenger = ScaffoldMessenger.of(context);
-                                // Maçın Adamı tek fotoğraf.
-                                if (_selectedType == 'Maçın Adamı') {
+                                // Maçın Adamı ve Takım Fotosu tek fotoğraf.
+                                if (_selectedType == 'Maçın Adamı' ||
+                                    _selectedType == 'Takım Fotosu') {
                                   final one = await ImagePicker().pickImage(
                                     source: ImageSource.gallery,
                                     imageQuality: 85,
@@ -2903,7 +2928,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         ),
                         child: Text(
                           _pickedFiles.isEmpty
-                              ? (_selectedType == 'Maçın Adamı'
+                              ? (_selectedType == 'Maçın Adamı' ||
+                                        _selectedType == 'Takım Fotosu'
                                     ? 'Galeriden bir fotoğraf seçin'
                                     : 'Galeriden seçin (birden çok seçilebilir)')
                               : '${_pickedFiles.length} fotoğraf seçildi',
@@ -2924,13 +2950,15 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                             ? null
                             : (_isHomeTeam! ? _homeName : _awayName),
                         placeholder: 'Seçin',
-                        onTap: _isUploading
+                        // Diğer takımın fotoğrafı eklendiyse seçim kilitli.
+                        locked: _freeSides.length == 1,
+                        onTap: _isUploading || _freeSides.length < 2
                             ? null
                             : () async {
                                 final v = await showAdminOptionPicker<bool>(
                                   context: context,
                                   title: 'Takım',
-                                  items: const [true, false],
+                                  items: _freeSides,
                                   labelBuilder: (h) =>
                                       h ? _homeName : _awayName,
                                   selected: _isHomeTeam,
@@ -3027,7 +3055,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   Future<void> _save() async {
     final m = widget.match;
     final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
-    if (_selectedType == 'Takım Fotosu' && _isHomeTeam == null) {
+    if (_selectedType == 'Takım Fotosu' &&
+        (_isHomeTeam == null || !_freeSides.contains(_isHomeTeam))) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Takımı seçin.')));
