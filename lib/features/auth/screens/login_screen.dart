@@ -346,6 +346,8 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
         rememberMe: rememberMe,
       );
+      // Parmak izi / Face ID girişi arka planda kapanmaya karşı korunur.
+      await AppSessionController.setBiometricSession(biometric);
       if (session.mustChangePassword) {
         nav.push(
           MaterialPageRoute<void>(
