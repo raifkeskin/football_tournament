@@ -166,10 +166,8 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
     _tick?.cancel();
     _lastTimer?.cancel();
     if (!kIsWeb) {
-      // Dikeye döndürüp serbest bırak (iOS yatayda kalmasın).
-      SystemChrome.setPreferredOrientations(const [
-        DeviceOrientation.portraitUp,
-      ]).then((_) => SystemChrome.setPreferredOrientations(const []));
+      // Dikeye döndür; telefonda dik kalır, tablette serbest.
+      OrientationLock.backToPortrait();
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     super.dispose();

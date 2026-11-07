@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/utils/orientation_lock.dart';
 import '../../../core/services/photo_cutouts.dart';
 
 import '../../../core/widgets/app_name_band.dart';
