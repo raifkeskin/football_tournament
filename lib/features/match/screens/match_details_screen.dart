@@ -1456,8 +1456,22 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           ],
         );
       }
-      // Maçı başka sorumlu yönetirken giriş menüsü yok (şeritten devral).
-      if (!canControl) return null;
+      // Maçı başka sorumlu yönetirken giriş menüsü yerine kilitli düğme:
+      // dokununca "Maçı X yönetiyor, devralmak ister misiniz?".
+      if (!canControl) {
+        if (beforeWindow ||
+            !(match.status == MatchStatus.live ||
+                match.status == MatchStatus.halftime)) {
+          return null;
+        }
+        return FloatingActionButton(
+          heroTag: 'fab_locked_${match.id}',
+          backgroundColor: const Color(0xFF334155),
+          foregroundColor: Colors.white,
+          onPressed: () => askMatchTakeover(context, match.id),
+          child: const Icon(Icons.lock_outline_rounded),
+        );
+      }
       // Skor ve olay girişi "Maçı yönet" şeridiyle birlikte (maçtan 1 saat
       // önce) açılır; öncesinde yalnız tarih girişi.
       return _SpeedDialFab(
@@ -1656,6 +1670,16 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             (isSuperAdmin || managesHome || managesAway) &&
             (m.status == MatchStatus.live ||
                 m.status == MatchStatus.halftime);
+        // Yetkili ama maçı başkası yönetiyor: giriş denemesinde devir sorusu.
+        final VoidCallback? lockedEdit =
+            isSuperAdmin &&
+                needsControl &&
+                !canControl &&
+                !beforeWindow &&
+                (m.status == MatchStatus.live ||
+                    m.status == MatchStatus.halftime)
+            ? () => askMatchTakeover(context, m.id)
+            : null;
         // Diziliş: maç başlamadan yetkililer ve takım sorumlusu; başladıktan
         // sonra yalnız admin ve kurucu başkan (diğerleri yalnız bakar).
         final bool canEditHome = _beforeKickoff(m)
@@ -2216,6 +2240,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           (m.status == MatchStatus.live ||
                                               m.status == MatchStatus.halftime),
                                       showLiveSubs: showLiveSubs,
+                                      onLockedEdit: lockedEdit,
                                     ),
 
                                     _HighlightsTab(
@@ -4552,6 +4577,7 @@ class _LineupTab extends StatefulWidget {
     this.canShareAway = false,
     this.canAddEvents = false,
     this.showLiveSubs = false,
+    this.onLockedEdit,
     this.homeLogo = '',
     this.awayLogo = '',
   });
@@ -4575,6 +4601,10 @@ class _LineupTab extends StatefulWidget {
 
   /// Canlı maçta admin / kurucu / takım sorumlusu: dizilişte giren oyuncu.
   final bool showLiveSubs;
+
+  /// Canlı maçta yetkili ama yönetim başkasında: sahaya dokunma / Tam ekran
+  /// "Maçı X yönetiyor, devralmak ister misiniz?" sorar.
+  final VoidCallback? onLockedEdit;
 
   @override
   State<_LineupTab> createState() => _LineupTabState();
@@ -4965,11 +4995,12 @@ class _LineupTabState extends State<_LineupTab>
   /// Tam ekran yatay saha (hızlı olay girişi): olay girebilen yetkiliye;
   /// yeni özellik, admin dışında ayar açıksa.
   VoidCallback? _fullscreen(MatchModel m) {
-    if (!widget.canAddEvents) return null;
+    if (!widget.canAddEvents && widget.onLockedEdit == null) return null;
     if (!AppSession.of(context).value.isAdmin &&
         !AppSettings.livePitchEnabled.value) {
       return null;
     }
+    if (!widget.canAddEvents) return widget.onLockedEdit;
     return () => openLivePitch(
       context,
       match: m,
@@ -5016,6 +5047,8 @@ class _LineupTabState extends State<_LineupTab>
         teamColor: teamId == m.homeTeamId ? widget.homeColor : widget.awayColor,
       );
     }
+    final locked = widget.onLockedEdit;
+    if (locked != null) return (_, _, _, _) => locked();
     if (editing && _beforeKickoff(m)) return null;
     return (teamId, playerId, name, number) =>
         showPlayerCard(context, playerKey: playerId, number: number);
