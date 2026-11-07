@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/services/photo_cutouts.dart';
 
+import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/match_event_icons.dart';
 import '../../match/insights/insight_widgets.dart';
 import '../../match/insights/match_insights.dart';

@@ -409,6 +409,27 @@ class _MomentSheetState extends State<_MomentSheet> {
     }
   }
 
+  /// Genişliğe göre sütunlu, alçak kutular (yatay ekranda kaydırmadan
+  /// hepsi görünsün).
+  Widget _compactGrid(
+    BuildContext context,
+    List<Widget> children, {
+    required double height,
+  }) => LayoutBuilder(
+    builder: (context, c) => GridView(
+      shrinkWrap: true,
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: (c.maxWidth / 230).floor().clamp(2, 6),
+        mainAxisExtent: height,
+        mainAxisSpacing: 6,
+        crossAxisSpacing: 6,
+      ),
+      children: children,
+    ),
+  );
+
   Widget _kindTile(MomentKind k, Color color) {
     final sel = _kind == k;
     final v = widget.insights.rules.v('m_${k.key}');
@@ -425,7 +446,7 @@ class _MomentSheetState extends State<_MomentSheet> {
         borderRadius: BorderRadius.circular(12),
         onTap: () => _pickKind(k),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
               Expanded(
@@ -543,20 +564,10 @@ class _MomentSheetState extends State<_MomentSheet> {
               ),
               const SizedBox(height: 10),
               if (_kind == null)
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 3.4,
-                  children: [
-                    for (final k in MomentKind.all.where(
-                      (k) => k.group == _tab,
-                    ))
-                      _kindTile(k, _groupColors[_tab]!),
-                  ],
-                )
+                _compactGrid(context, height: 46, [
+                  for (final k in MomentKind.all.where((k) => k.group == _tab))
+                    _kindTile(k, _groupColors[_tab]!),
+                ])
               else ...[
                 // İkinci adım: seçilen olay üstte, o mevkideki oyuncular.
                 Row(
@@ -593,10 +604,9 @@ class _MomentSheetState extends State<_MomentSheet> {
                       : onPitch.where((p) => p.line == line).toList();
                   final list = _showAll || fit.isEmpty ? _teamPlayers : fit;
                   return [
-                    for (final p in list)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Material(
+                    _compactGrid(context, height: 44, [
+                      for (final p in list)
+                        Material(
                           color: Colors.white.withValues(alpha: 0.04),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -610,7 +620,6 @@ class _MomentSheetState extends State<_MomentSheet> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
-                                vertical: 11,
                               ),
                               child: Row(
                                 children: [
@@ -627,6 +636,8 @@ class _MomentSheetState extends State<_MomentSheet> {
                                   Expanded(
                                     child: Text(
                                       p.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         color: p.onPitch
                                             ? Colors.white
@@ -635,19 +646,12 @@ class _MomentSheetState extends State<_MomentSheet> {
                                       ),
                                     ),
                                   ),
-                                  Text(
-                                    p.teamName,
-                                    style: const TextStyle(
-                                      color: _muted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
                           ),
                         ),
-                      ),
+                    ]),
                     if (!_showAll &&
                         fit.isNotEmpty &&
                         fit.length < _teamPlayers.length)

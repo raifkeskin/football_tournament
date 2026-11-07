@@ -1810,7 +1810,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                         match: m,
                         homeName: homeName,
                         awayName: awayName,
-                        onMoment: insights == null
+                        homeColor: sides.home,
+                        awayColor: sides.away,
+                        onMoment: insights == null || !insights.rules.enabled
                             ? null
                             : (teamId) => openMatchMoments(
                                 context,
@@ -4994,6 +4996,7 @@ class _LineupTabState extends State<_LineupTab>
         number: number,
         homeName: widget.homeName,
         awayName: widget.awayName,
+        teamColor: teamId == m.homeTeamId ? widget.homeColor : widget.awayColor,
       );
     }
     if (editing && _beforeKickoff(m)) return null;
@@ -5174,7 +5177,8 @@ class _LineupTabState extends State<_LineupTab>
         m.status == MatchStatus.live ||
         m.status == MatchStatus.halftime ||
         m.status == MatchStatus.finished;
-    if (insights == null || !staff || !playing) {
+    // Sezonda futbolcu puanı kapalıysa olay girişi yok.
+    if (insights == null || !insights.rules.enabled || !staff || !playing) {
       return null;
     }
     return _SpeedDialAction(

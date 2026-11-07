@@ -21,11 +21,17 @@ class QuickEventBar extends StatelessWidget {
     required this.homeName,
     required this.awayName,
     this.onMoment,
+    this.homeColor,
+    this.awayColor,
   });
 
   final MatchModel match;
   final String homeName;
   final String awayName;
+
+  /// Takım renkleri: olay penceresi o takımın rengiyle açılır.
+  final Color? homeColor;
+  final Color? awayColor;
 
   /// Verilirse KART / DEĞ. yanında OLAY: puana etki eden an (takıma göre).
   final void Function(String teamId)? onMoment;
@@ -166,6 +172,7 @@ class QuickEventBar extends StatelessWidget {
         teamName: teamId == match.homeTeamId ? homeName : awayName,
         rivalName: teamId == match.homeTeamId ? awayName : homeName,
         kind: kind,
+        color: teamId == match.homeTeamId ? homeColor : awayColor,
       ),
     );
     if (saved == null) return;
@@ -359,7 +366,11 @@ class _QuickEventSheet extends StatefulWidget {
     required this.rivalName,
     required this.kind,
     this.preset,
+    this.color,
   });
+
+  /// Takım rengi (başlık şeridi, adım çubuğu, oyuncu kutuları).
+  final Color? color;
 
   final MatchModel match;
   final String teamId;
@@ -376,6 +387,14 @@ class _QuickEventSheet extends StatefulWidget {
 }
 
 class _QuickEventSheetState extends State<_QuickEventSheet> {
+  /// Çok koyu/açık renkler okunaklı kalsın diye yumuşatılır.
+  late final Color _team = () {
+    final c = widget.color ?? kAdminAccent;
+    final l = c.computeLuminance();
+    if (l < 0.04) return Color.lerp(c, Colors.white, 0.35)!;
+    if (l > 0.8) return const Color(0xFFCBD5E1);
+    return c;
+  }();
   late final Future<Map<String, _Squad>> _squads = _loadSquads(widget.match);
 
   /// Kart rengi: 'yellow_card' / 'red_card'.
@@ -519,9 +538,21 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
     final height = MediaQuery.of(context).size.height;
     return Container(
       constraints: BoxConstraints(maxHeight: height * 0.88),
-      decoration: const BoxDecoration(
-        color: Color(0xFF111A2E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        // Üstte takım renginde şerit, aşağı doğru koyu zemine iner.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: const Alignment(0, -0.4),
+          colors: [
+            Color.alphaBlend(
+              _team.withValues(alpha: 0.30),
+              const Color(0xFF111A2E),
+            ),
+            const Color(0xFF111A2E),
+          ],
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -616,9 +647,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
             child: Container(
               height: 4,
               decoration: BoxDecoration(
-                color: i < _step
-                    ? kAdminAccent
-                    : Colors.white.withValues(alpha: 0.12),
+                color: i < _step ? _team : Colors.white.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -629,26 +658,12 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
   );
 
   Widget _crumbs() {
-    final kind = switch (widget.kind) {
-      _Kind.goal => switch (_goalMode) {
-        'own' => 'Kendi kalesine',
-        'pen' => 'Penaltı golü',
-        'miss' => 'Penaltı kaçtı',
-        _ => 'Gol',
-      },
-      _Kind.card =>
-        _card == null
-            ? 'Kart'
-            : _card == 'red_card'
-            ? 'Kırmızı'
-            : 'Sarı',
-      _Kind.sub => 'Değişiklik',
-    };
+    // Takım ve olay başlıkta yazılı; yalnız seçilen oyuncu gösterilir.
     final items = [
-      '${shortTeamName(widget.teamName)} · $kind',
       if (_player != null)
         '${widget.kind == _Kind.sub ? '↓ ' : ''}${_player!.name}',
     ];
+    if (items.isEmpty) return const SizedBox(height: 2);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
       child: Wrap(
@@ -906,63 +921,86 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
         ),
       );
     }
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 1.25,
-      children: [
-        for (final p in [...list, ...locked])
-          Opacity(
-            opacity: locked.contains(p) ? 0.35 : 1,
-            child: Material(
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: _saving || locked.contains(p) ? null : () => _onPick(p),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        p.number.isEmpty ? '-' : p.number,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          height: 1.1,
+    final onTeam = _team.computeLuminance() > 0.5
+        ? const Color(0xFF0F172A)
+        : Colors.white;
+    // Alçak kutular, isim tam (iki satıra kadar); takım renginde numara.
+    return LayoutBuilder(
+      builder: (context, c) => GridView(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: (c.maxWidth / 120).floor().clamp(3, 7),
+          mainAxisExtent: 72,
+          mainAxisSpacing: 7,
+          crossAxisSpacing: 7,
+        ),
+        children: [
+          for (final p in [...list, ...locked])
+            Opacity(
+              opacity: locked.contains(p) ? 0.3 : 1,
+              child: Material(
+                color: Color.alphaBlend(
+                  _team.withValues(alpha: 0.10),
+                  const Color(0xFF1E293B),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: _team.withValues(alpha: 0.35)),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _saving || locked.contains(p)
+                      ? null
+                      : () => _onPick(p),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _team,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            p.number.isEmpty ? '-' : p.number,
+                            style: TextStyle(
+                              color: onTeam,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              height: 1,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        p.name,
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFFCBD5E1),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          height: 1.15,
+                        const SizedBox(height: 4),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              p.name,
+                              maxLines: 2,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -979,6 +1017,7 @@ Future<void> showPlayerQuickEvent(
   required String number,
   required String homeName,
   required String awayName,
+  Color? teamColor,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final live = MatchClock.liveMinuteParts(match);
@@ -1039,6 +1078,7 @@ Future<void> showPlayerQuickEvent(
         rivalName: teamId == match.homeTeamId ? awayName : homeName,
         kind: kind == 'goal' ? _Kind.goal : _Kind.sub,
         preset: _Pick(playerId, playerName, number),
+        color: teamColor,
       ),
     );
     if (saved != null) _showSaved(messenger, saved);

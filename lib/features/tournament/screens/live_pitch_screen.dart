@@ -60,6 +60,10 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
       .matchService
       .watchInlineMatchEvents(widget.match.id);
   late MatchModel _m = widget.match;
+  Route<dynamic>? _route;
+
+  /// Son okunan olaylar (Maç özeti için).
+  List<Map<String, dynamic>> _eventRows = const [];
 
   /// Akışlar bir kez açılır (her olayda yeniden abone olunmasın).
   late final Map<String, Stream<List<PlayerModel>>> _players = {
@@ -94,6 +98,13 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
   @override
   void initState() {
     super.initState();
+    // Turnuva bandı gizlenir: saha tüm ekranı kullanır.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _route = ModalRoute.of(context);
+        LeagueSwitchScope.setBandHidden(_route, true);
+      }
+    });
     if (!kIsWeb) {
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.landscapeLeft,
@@ -116,6 +127,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
 
   @override
   void dispose() {
+    LeagueSwitchScope.setBandHidden(_route, false);
     _tick?.cancel();
     _lastTimer?.cancel();
     if (!kIsWeb) {
@@ -259,6 +271,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           return StreamBuilder<List<Map<String, dynamic>>>(
             stream: _events,
             builder: (context, es) {
+              _eventRows = es.data ?? const [];
               final ins = MatchInsights.build(
                 match: _m,
                 events: es.data ?? const [],
@@ -385,10 +398,33 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
       height: 44,
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Kapat',
+          TextButton.icon(
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.close_rounded, color: Colors.white),
+            label: const Text(
+              'Tam ekranı kapat',
+              style: TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _showSummary,
+            icon: const Icon(
+              Icons.receipt_long_rounded,
+              color: _accent,
+              size: 18,
+            ),
+            label: const Text(
+              'Maç özeti',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 12.5,
+              ),
+            ),
           ),
           Expanded(
             child: Row(
@@ -901,7 +937,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
     final teamId = _team!;
     final p = _findOnPitch(teamId, _player!);
     if (p == null) return const SizedBox.shrink();
-    const bw = 132.0;
+    const bw = 252.0;
     final buttons = <(String, IconData?, Widget?, Color, VoidCallback)>[
       (
         'GOL',
@@ -953,7 +989,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           },
         ),
     ];
-    final menuH = 34.0 + buttons.length * 48.0;
+    final menuH = 40.0 + (buttons.length / 2).ceil() * 50.0;
     final toRight = at.dx < w / 2;
     final left = toRight
         ? (at.dx + 40 * scale).clamp(6.0, w - bw - 6)
@@ -990,12 +1026,20 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
                   ),
                 ),
               ),
-              for (final (label, icon, iconW, color, onTap) in buttons)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: SizedBox(
-                    height: 44,
-                    child: Material(
+              // İki sütun: düğmeler ekrana sığsın (alttaki kesilmesin).
+              GridView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisExtent: 46,
+                  mainAxisSpacing: 4,
+                  crossAxisSpacing: 4,
+                ),
+                children: [
+                  for (final (label, icon, iconW, color, onTap) in buttons)
+                    Material(
                       color: color.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
@@ -1003,7 +1047,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
                         onTap: _saving ? null : onTap,
                         child: Row(
                           children: [
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 8),
                             SizedBox(
                               width: 20,
                               child: Center(
@@ -1011,21 +1055,26 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
                                     iconW ?? Icon(icon, size: 20, color: color),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              label,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1125,6 +1174,158 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
             ],
             btn('İptal', _clear),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Maç özeti: olaylar dakika sırasıyla; ev sahibi solda, deplasman sağda.
+  void _showSummary() {
+    String icon(Map<String, dynamic> e) => switch ('${e['event_type']}') {
+      'goal' => e['is_own_goal'] == true ? '🔄' : '⚽',
+      'penalty_missed' => '✖️',
+      'yellow_card' => '🟨',
+      'red_card' => '🟥',
+      'substitution' => '🔁',
+      'man_of_the_match' => '⭐',
+      _ => '•',
+    };
+    String text(Map<String, dynamic> e) {
+      final p = shortPlayerName('${e['player_name'] ?? ''}');
+      switch ('${e['event_type']}') {
+        case 'goal':
+          final a = '${e['assist_player_name'] ?? ''}'.trim();
+          final tag = e['is_own_goal'] == true
+              ? ' (k.k.)'
+              : e['is_penalty'] == true
+              ? ' (p)'
+              : '';
+          return a.isEmpty ? '$p$tag' : '$p$tag · ${shortPlayerName(a)}';
+        case 'substitution':
+          return '${shortPlayerName('${e['sub_in_player_name'] ?? ''}')}'
+              ' ↔ $p';
+        default:
+          return p;
+      }
+    }
+
+    final rows = [
+      for (final e in _eventRows)
+        if (const {
+          'goal',
+          'penalty_missed',
+          'yellow_card',
+          'red_card',
+          'substitution',
+          'man_of_the_match',
+        }.contains('${e['event_type']}'))
+          e,
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF111A2E),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 60, vertical: 20),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${shortTeamName(widget.homeName)}  '
+                        '${_m.homeScore} - ${_m.awayScore}  '
+                        '${shortTeamName(widget.awayName)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Kapat',
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white12, height: 8),
+                Flexible(
+                  child: rows.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            'Henüz olay yok.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white54),
+                          ),
+                        )
+                      : ListView(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.only(right: 8),
+                          children: [
+                            for (final e in rows)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 44,
+                                      child: Text(
+                                        e['minute'] == null
+                                            ? ''
+                                            : "${e['minute']}"
+                                                  "${e['added_minute'] == null ? '' : '+${e['added_minute']}'}'",
+                                        style: const TextStyle(
+                                          color: _midText,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: '${e['team_id']}' == _m.homeTeamId
+                                          ? Text(
+                                              '${icon(e)}  ${text(e)}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                    Expanded(
+                                      child: '${e['team_id']}' == _m.awayTeamId
+                                          ? Text(
+                                              '${text(e)}  ${icon(e)}',
+                                              textAlign: TextAlign.right,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
