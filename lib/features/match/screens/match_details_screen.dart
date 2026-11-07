@@ -4962,9 +4962,10 @@ class _LineupTabState extends State<_LineupTab>
       awayName: widget.awayName,
       homeColor: widget.homeColor,
       awayColor: widget.awayColor,
+      onSummary: (ctx) => showMatchDetailPopup(ctx, m),
       onMoments: _momentsAction(m) == null
           ? null
-          : (ctx, teamId) async {
+          : (ctx, teamId, playerId) async {
               final ins = _insights;
               if (ins == null) return;
               await openMatchMoments(
@@ -4974,6 +4975,7 @@ class _LineupTabState extends State<_LineupTab>
                 homeName: widget.homeName,
                 awayName: widget.awayName,
                 teamId: teamId,
+                playerId: playerId,
               );
             },
     );
@@ -6391,6 +6393,38 @@ class _QuotaYearTag extends StatelessWidget {
 // -----------------------------------------------------------------------------
 // DETAY TABI (MAÇ AKIŞI)
 // -----------------------------------------------------------------------------
+
+/// Detay sekmesinin olay akışı açılır pencerede (tam ekran sahadan).
+Future<void> showMatchDetailPopup(BuildContext context, MatchModel match) {
+  final size = MediaQuery.sizeOf(context);
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: const Color(0xFF0F172A),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 620,
+        height: size.height * 0.9,
+        child: Stack(
+          children: [
+            Positioned.fill(child: _DetailTab(match: match)),
+            Positioned(
+              right: 6,
+              top: 6,
+              child: IconButton.filledTonal(
+                tooltip: 'Kapat',
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
 class _DetailTab extends StatefulWidget {
   final MatchModel match;
@@ -8414,6 +8448,7 @@ Future<void> openMatchMoments(
   required String homeName,
   required String awayName,
   String? teamId,
+  String? playerId,
 }) async {
   final m = match;
   final messenger = ScaffoldMessenger.of(context);
@@ -8503,6 +8538,7 @@ Future<void> openMatchMoments(
       players: players,
       minute: live?.minute,
       teamId: teamId,
+      playerId: playerId,
     );
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Kadro okunamadı: $e')));

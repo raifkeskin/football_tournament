@@ -149,10 +149,7 @@ class Season {
         v('goalkeeperAddAnytime', 'goalkeeper_add_anytime'),
         fallback: false,
       ),
-      rollingSubs: boolFrom(
-        v('rollingSubs', 'rolling_subs'),
-        fallback: false,
-      ),
+      rollingSubs: boolFrom(v('rollingSubs', 'rolling_subs'), fallback: false),
       transferStartDate: _readDate(
         v('transferStartDate', 'transfer_start_date'),
       ),

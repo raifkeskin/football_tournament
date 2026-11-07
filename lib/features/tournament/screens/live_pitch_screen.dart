@@ -14,7 +14,9 @@ Future<void> openLivePitch(
   required String awayName,
   Color? homeColor,
   Color? awayColor,
-  Future<void> Function(BuildContext context, String teamId)? onMoments,
+  void Function(BuildContext context)? onSummary,
+  Future<void> Function(BuildContext context, String teamId, String playerId)?
+  onMoments,
 }) => Navigator.of(context).push(
   MaterialPageRoute<void>(
     fullscreenDialog: true,
@@ -25,6 +27,7 @@ Future<void> openLivePitch(
       homeColor: homeColor ?? _accent,
       awayColor: awayColor ?? const Color(0xFF3B82F6),
       onMoments: onMoments,
+      onSummary: onSummary,
     ),
   ),
 );
@@ -37,14 +40,23 @@ class _LivePitchScreen extends StatefulWidget {
     required this.homeColor,
     required this.awayColor,
     this.onMoments,
+    this.onSummary,
   });
+
+  /// Maç özeti: Detay sekmesiyle aynı görünüm (verilmezse sade liste).
+  final void Function(BuildContext context)? onSummary;
 
   final MatchModel match;
   final String homeName;
   final String awayName;
   final Color homeColor;
   final Color awayColor;
-  final Future<void> Function(BuildContext context, String teamId)? onMoments;
+  final Future<void> Function(
+    BuildContext context,
+    String teamId,
+    String playerId,
+  )?
+  onMoments;
 
   @override
   State<_LivePitchScreen> createState() => _LivePitchScreenState();
@@ -411,7 +423,9 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
             ),
           ),
           TextButton.icon(
-            onPressed: _showSummary,
+            onPressed: () => widget.onSummary == null
+                ? _showSummary()
+                : widget.onSummary!(context),
             icon: const Icon(
               Icons.receipt_long_rounded,
               color: _accent,
@@ -958,6 +972,14 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           label: 'Sarı kart · ${shortPlayerName(p.name)}',
         ),
       ),
+      // Sol sütun gol, değişiklik, olay; sağda kartlar alt alta.
+      (
+        'DEĞİŞİKLİK',
+        Icons.swap_horiz_rounded,
+        null,
+        const Color(0xFF38BDF8),
+        () => setState(() => _step = _LiveStep.subIn),
+      ),
       (
         'KIRMIZI',
         null,
@@ -970,13 +992,6 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           label: 'Kırmızı kart · ${shortPlayerName(p.name)}',
         ),
       ),
-      (
-        'DEĞİŞİKLİK',
-        Icons.swap_horiz_rounded,
-        null,
-        const Color(0xFF38BDF8),
-        () => setState(() => _step = _LiveStep.subIn),
-      ),
       if (widget.onMoments != null)
         (
           'OLAY',
@@ -985,7 +1000,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           const Color(0xFFA78BFA),
           () async {
             _clear();
-            await widget.onMoments!(context, teamId);
+            await widget.onMoments!(context, teamId, p.id);
           },
         ),
     ];

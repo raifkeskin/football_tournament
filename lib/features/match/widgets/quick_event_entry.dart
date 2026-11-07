@@ -173,6 +173,7 @@ class QuickEventBar extends StatelessWidget {
         rivalName: teamId == match.homeTeamId ? awayName : homeName,
         kind: kind,
         color: teamId == match.homeTeamId ? homeColor : awayColor,
+        rivalColor: teamId == match.homeTeamId ? awayColor : homeColor,
       ),
     );
     if (saved == null) return;
@@ -367,10 +368,14 @@ class _QuickEventSheet extends StatefulWidget {
     required this.kind,
     this.preset,
     this.color,
+    this.rivalColor,
   });
 
   /// Takım rengi (başlık şeridi, adım çubuğu, oyuncu kutuları).
   final Color? color;
+
+  /// Rakibin rengi: kendi kalesine golde oyuncu rakipten seçilir.
+  final Color? rivalColor;
 
   final MatchModel match;
   final String teamId;
@@ -388,13 +393,14 @@ class _QuickEventSheet extends StatefulWidget {
 
 class _QuickEventSheetState extends State<_QuickEventSheet> {
   /// Çok koyu/açık renkler okunaklı kalsın diye yumuşatılır.
-  late final Color _team = () {
-    final c = widget.color ?? kAdminAccent;
+  Color get _team {
+    final c = (_ownGoal ? widget.rivalColor : widget.color) ?? kAdminAccent;
     final l = c.computeLuminance();
     if (l < 0.04) return Color.lerp(c, Colors.white, 0.35)!;
     if (l > 0.8) return const Color(0xFFCBD5E1);
     return c;
-  }();
+  }
+
   late final Future<Map<String, _Squad>> _squads = _loadSquads(widget.match);
 
   /// Kart rengi: 'yellow_card' / 'red_card'.

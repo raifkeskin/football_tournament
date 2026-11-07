@@ -272,7 +272,11 @@ const _groupColors = {
   'ORTA SAHA': Color(0xFFA855F7),
   'FORVET': Color(0xFFF97316),
   'HERKES': Color(0xFF64748B),
+  'TÜMÜ': Color(0xFF0EA5E9),
 };
+
+/// Sekmeler: tüm olaylar + mevki grupları.
+const _tabs = ['TÜMÜ', ...MomentKind.groups];
 
 /// "Olay ekle": mevki sekmesinden olayı seç; kaleci olayı sahadaki kaleciye
 /// hemen yazılır, diğerlerinde o mevkideki oyunculardan birine dokununca
@@ -284,6 +288,7 @@ Future<void> showMomentSheet({
   required List<MomentPlayer> players,
   int? minute,
   String? teamId,
+  String? playerId,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -298,6 +303,7 @@ Future<void> showMomentSheet({
       players: players,
       minute: minute,
       teamId: teamId,
+      playerId: playerId,
     ),
   );
 }
@@ -309,12 +315,17 @@ class _MomentSheet extends StatefulWidget {
     required this.players,
     this.minute,
     this.teamId,
+    this.playerId,
   });
 
   final MatchModel match;
   final MatchInsights insights;
   final List<MomentPlayer> players;
   final int? minute;
+
+  /// Sahada dokunulan futbolcu: onun mevki sekmesi açılır, olaya dokununca
+  /// doğrudan ona kaydedilir.
+  final String? playerId;
 
   /// Verilirse futbolcu listesi yalnız bu takımdan (alttaki takım butonu).
   final String? teamId;
@@ -325,7 +336,14 @@ class _MomentSheet extends StatefulWidget {
 
 class _MomentSheetState extends State<_MomentSheet> {
   MomentKind? _kind;
-  String _tab = MomentKind.groups.first;
+  late final MomentPlayer? _preset = widget.players
+      .where((p) => p.id == widget.playerId)
+      .firstOrNull;
+  late String _tab = () {
+    final p = _preset;
+    if (p == null || p.line < 0 || p.line > 3) return _tabs.first;
+    return MomentKind.groups[p.line];
+  }();
 
   /// İkinci adımda mevkiye uymayanlar da listelensin mi.
   bool _showAll = false;
@@ -343,6 +361,11 @@ class _MomentSheetState extends State<_MomentSheet> {
   /// yoksa futbolcu listesi (ikinci adım).
   void _pickKind(MomentKind k) {
     if (_saving) return;
+    final preset = _preset;
+    if (preset != null) {
+      _save(k, preset);
+      return;
+    }
     if (k.group == 'KALECİ') {
       final gks = _teamPlayers.where((p) => p.keeper && p.onPitch).toList();
       if (gks.length == 1) {
@@ -513,7 +536,11 @@ class _MomentSheetState extends State<_MomentSheet> {
               ),
               const SizedBox(height: 14),
               Text(
-                teamName == null ? 'Olay ekle' : 'Olay ekle · $teamName',
+                _preset != null
+                    ? 'Olay ekle · ${_preset.name}'
+                    : teamName == null
+                    ? 'Olay ekle'
+                    : 'Olay ekle · $teamName',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
@@ -521,10 +548,12 @@ class _MomentSheetState extends State<_MomentSheet> {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Olayı seç, sonra futbolcuyu seç. Kartlar, goller ve '
-                'değişiklikler zaten ayrı giriliyor; burada yalnız puana etki '
-                'eden anlar var.',
+              Text(
+                _preset != null
+                    ? 'Olaya dokununca bu futbolcuya kaydedilir.'
+                    : 'Olayı seç, sonra futbolcuyu seç. Kartlar, goller ve '
+                          'değişiklikler ayrı giriliyor; burada yalnız puana '
+                          'etki eden anlar var.',
                 style: TextStyle(color: _muted, fontSize: 12.5, height: 1.35),
               ),
               const SizedBox(height: 12),
@@ -533,7 +562,7 @@ class _MomentSheetState extends State<_MomentSheet> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    for (final g in MomentKind.groups)
+                    for (final g in _tabs)
                       Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
@@ -565,8 +594,10 @@ class _MomentSheetState extends State<_MomentSheet> {
               const SizedBox(height: 10),
               if (_kind == null)
                 _compactGrid(context, height: 46, [
-                  for (final k in MomentKind.all.where((k) => k.group == _tab))
-                    _kindTile(k, _groupColors[_tab]!),
+                  for (final k in MomentKind.all.where(
+                    (k) => _tab == 'TÜMÜ' || k.group == _tab,
+                  ))
+                    _kindTile(k, _groupColors[k.group]!),
                 ])
               else ...[
                 // İkinci adım: seçilen olay üstte, o mevkideki oyuncular.

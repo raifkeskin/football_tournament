@@ -322,7 +322,9 @@ extension on MatchScoreLine {
       );
     }
 
-    // Skorun üstü: oynanmadıysa saat, canlıda dakika / İY, bitince MS.
+    // Başlamamış maçta saat skor kutusunda yazar (üstte tekrar edilmez).
+    final notYet = !unplayed && !showScore && time.isNotEmpty;
+    // Skorun üstü: canlıda dakika / İY, bitince MS.
     final top = match.status == MatchStatus.finished
         ? (text: 'MS', color: accent)
         : (status != null && !unplayed)
@@ -339,27 +341,29 @@ extension on MatchScoreLine {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        top.text,
-                        maxLines: 1,
-                        style: TextStyle(
-                          color: top.color,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+              if (!notYet) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          top.text,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: top.color,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
+                  ],
+                ),
+                const SizedBox(height: 5),
+              ],
               Container(
                 width: 66,
                 height: 32,
@@ -378,6 +382,8 @@ extension on MatchScoreLine {
                   child: Text(
                     unplayed
                         ? (status?.text ?? '-')
+                        : notYet
+                        ? time
                         : (showScore ? '$hs - $as' : '-'),
                     style: TextStyle(
                       color: isLive
