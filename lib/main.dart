@@ -279,6 +279,18 @@ class _MyAppState extends State<MyApp> {
       ];
       return roles.isEmpty ? s.role : roles.join('+');
     };
+    // Oturum kendiliğinden kapandı (arka plandan dönüşte yenilenemedi):
+    // açık ekran misafir yetkisiyle kalmasın, giriş ekranı açılır.
+    AppSessionController.onSessionLost = () async {
+      await GuestMode.set(false);
+      appNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'LoginScreen'),
+          builder: (_) => const LoginScreen(gate: true),
+        ),
+        (_) => false,
+      );
+    };
     // Yenile: tüm sayfalar kapanır; oturum varsa ana sayfa, yoksa giriş.
     ErrorReporter.restartHandler = () {
       appNavigatorKey.currentState?.pushAndRemoveUntil(

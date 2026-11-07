@@ -636,7 +636,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           const SizedBox(width: 5),
           Expanded(
             child: Text(
-              shortPlayerName(p.name),
+              _fullName(p.name),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -707,7 +707,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           teamId: teamId,
           player: out,
           subInId: p.id,
-          label: '${shortPlayerName(p.name)} ↔ ${shortPlayerName(out.name)}',
+          label: '${_fullName(p.name)} ↔ ${_fullName(out.name)}',
         );
       }
       return;
@@ -756,8 +756,8 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
         player: scorer,
         assistId: p.id,
         label:
-            'Gol · ${shortPlayerName(scorer.name)} '
-            '(asist ${shortPlayerName(p.name)})',
+            'Gol · ${_fullName(scorer.name)} '
+            '(asist ${_fullName(p.name)})',
       );
       return;
     }
@@ -770,7 +770,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
         teamId: teamId,
         player: p,
         subInId: inn.id,
-        label: '${shortPlayerName(inn.name)} ↔ ${shortPlayerName(p.name)}',
+        label: '${_fullName(inn.name)} ↔ ${_fullName(p.name)}',
       );
       return;
     }
@@ -871,8 +871,8 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
                         player: p,
                         subInId: inn.id,
                         label:
-                            '${shortPlayerName(inn.name)} ↔ '
-                            '${shortPlayerName(p.name)}',
+                            '${_fullName(inn.name)} ↔ '
+                            '${_fullName(p.name)}',
                       );
                     },
                     builder: (context, cand, _) => Transform.scale(
@@ -969,7 +969,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           type: 'yellow_card',
           teamId: teamId,
           player: p,
-          label: 'Sarı kart · ${shortPlayerName(p.name)}',
+          label: 'Sarı kart · ${_fullName(p.name)}',
         ),
       ),
       // Sol sütun gol, değişiklik, olay; sağda kartlar alt alta.
@@ -989,7 +989,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
           type: 'red_card',
           teamId: teamId,
           player: p,
-          label: 'Kırmızı kart · ${shortPlayerName(p.name)}',
+          label: 'Kırmızı kart · ${_fullName(p.name)}',
         ),
       ),
       if (widget.onMoments != null)
@@ -1031,7 +1031,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
                 padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
                 child: Text(
                   '${p.number.isEmpty ? '' : '${p.number} · '}'
-                  '${shortPlayerName(p.name)}',
+                  '${_fullName(p.name)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -1108,7 +1108,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
         ? _findBench(teamId, sel)
         : _findOnPitch(teamId, sel);
     if (p == null) return null;
-    final name = shortPlayerName(p.name);
+    final name = _fullName(p.name);
     final text = switch (step) {
       _LiveStep.assist => 'Gol $name · asisti yapana dokunun',
       _LiveStep.subIn => '$name çıkıyor · girecek yedeğe dokunun',
@@ -1206,7 +1206,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
       _ => '•',
     };
     String text(Map<String, dynamic> e) {
-      final p = shortPlayerName('${e['player_name'] ?? ''}');
+      final p = _fullName('${e['player_name'] ?? ''}');
       switch ('${e['event_type']}') {
         case 'goal':
           final a = '${e['assist_player_name'] ?? ''}'.trim();
@@ -1215,9 +1215,9 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
               : e['is_penalty'] == true
               ? ' (p)'
               : '';
-          return a.isEmpty ? '$p$tag' : '$p$tag · ${shortPlayerName(a)}';
+          return a.isEmpty ? '$p$tag' : '$p$tag · ${_fullName(a)}';
         case 'substitution':
-          return '${shortPlayerName('${e['sub_in_player_name'] ?? ''}')}'
+          return '${_fullName('${e['sub_in_player_name'] ?? ''}')}'
               ' ↔ $p';
         default:
           return p;
@@ -1399,3 +1399,6 @@ class _LiveSide {
   final _Layout? layout;
   final List<_PitchPlayer> bench;
 }
+
+/// Tam ekranda yer yeterli: oyuncu adları kısaltılmadan yazılır.
+String _fullName(String n) => n.trim().replaceAll(RegExp(r'\s+'), ' ');
