@@ -77,6 +77,21 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
   /// Son okunan olaylar (Maç özeti için).
   List<Map<String, dynamic>> _eventRows = const [];
 
+  /// Ad boyu kademesi (A− / A+): -2..+3, cihazda saklanır. Telefonda
+  /// varsayılan ad 10 punto; her kademe 1 punto.
+  int _nameLevel = 0;
+  static const _kNameLevel = 'live_pitch_name_level';
+  static const _minLevel = -2, _maxLevel = 3;
+
+  void _setNameLevel(int v) {
+    final n = v.clamp(_minLevel, _maxLevel);
+    if (n == _nameLevel) return;
+    setState(() => _nameLevel = n);
+    SharedPreferences.getInstance()
+        .then((p) => p.setInt(_kNameLevel, n))
+        .catchError((_) => true);
+  }
+
   /// Akışlar bir kez açılır (her olayda yeniden abone olunmasın).
   late final Map<String, Stream<List<PlayerModel>>> _players = {
     for (final t in [widget.match.homeTeamId, widget.match.awayTeamId])
@@ -110,6 +125,14 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
   @override
   void initState() {
     super.initState();
+    SharedPreferences.getInstance()
+        .then((p) {
+          final v = p.getInt(_kNameLevel);
+          if (v != null && mounted) {
+            setState(() => _nameLevel = v.clamp(_minLevel, _maxLevel));
+          }
+        })
+        .catchError((_) {});
     // Turnuva bandı gizlenir: saha tüm ekranı kullanır.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -402,6 +425,81 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
     );
   }
 
+  /// Ad boyu: A− / A+ (yalnız bu tam ekran; seçim cihazda kalır).
+  Widget _nameSizeButtons() {
+    Widget btn(String t, int d) {
+      final next = _nameLevel + d;
+      final on = next >= _minLevel && next <= _maxLevel;
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: on ? () => _setNameLevel(next) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            t,
+            style: TextStyle(
+              color: on ? Colors.white : Colors.white24,
+              fontWeight: FontWeight.w900,
+              fontSize: d > 0 ? 15 : 12.5,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [btn('A−', -1), btn('A+', 1)],
+      ),
+    );
+  }
+
+  /// Yedekte ad büyük ve kalın, soyad altında küçük; uzun olan satır
+  /// sütuna sığacak kadar küçülür.
+  Widget _benchName(String full) {
+    final parts = _fullName(full).split(' ');
+    final last = parts.length > 1 ? parts.removeLast() : '';
+    final first = parts.join(' ');
+    final size = 12.5 + _nameLevel;
+    Widget line(String t, TextStyle st) => FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Text(t, maxLines: 1, style: st),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        line(
+          first,
+          TextStyle(
+            color: Colors.white,
+            fontSize: size,
+            fontWeight: FontWeight.w800,
+            height: 1.1,
+          ),
+        ),
+        if (last.isNotEmpty)
+          line(
+            last,
+            TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: size * 0.82,
+              fontWeight: FontWeight.w500,
+              height: 1.1,
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _topBar() {
     final mn = _minute;
     final live = _m.status == MatchStatus.live;
@@ -440,6 +538,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
               ),
             ),
           ),
+          _nameSizeButtons(),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -634,19 +733,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
             ),
           ),
           const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              _fullName(p.name),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
-              ),
-            ),
-          ),
+          Expanded(child: _benchName(p.name)),
           if (k.subbedOut)
             const Icon(
               Icons.arrow_downward_rounded,
@@ -794,7 +881,12 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
             final w = c.maxWidth, h = c.maxHeight;
             // Telefonda dar, tablette büyük oyuncu.
             final scale = (h / 420).clamp(0.72, 1.35);
-            final tokenW = 78.0 * scale;
+            // Ad boyu: telefonda (küçültülmüş sahada) görünen boy 10 + kademe
+            // punto; tablette saha ile büyür. Oyuncu kutusu ad boyuna göre
+            // genişler, uzun ad kutuya sığacak kadar küçülür (komşuya binmez).
+            final shown = (10.0 + _nameLevel) * math.max(1.0, scale);
+            final nameSize = shown / scale;
+            final tokenW = math.max(78.0 * scale, shown * 5.6 / scale);
             final children = <Widget>[
               Positioned.fill(
                 child: RotatedBox(
@@ -841,6 +933,7 @@ class _LivePitchScreenState extends State<_LivePitchScreen> {
                     color: li == 0 ? const Color(0xFFF59E0B) : color,
                     marks: k,
                     compact: true,
+                    nameSize: nameSize,
                   );
                   if (chosen) {
                     token = DecoratedBox(

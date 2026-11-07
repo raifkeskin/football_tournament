@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/photo_cutouts.dart';
 
 import '../../../core/widgets/app_name_band.dart';
@@ -1457,9 +1459,14 @@ class _PlayerToken extends StatelessWidget {
     this.cutoutUrl,
     this.cutoutH = 52,
     this.compact = false,
+    this.nameSize,
   });
 
   final _PitchPlayer player;
+
+  /// Tam ekran sahada ayarlanan ad boyu (soyad bundan küçük); verilmezse
+  /// [compact]'a göre varsayılan.
+  final double? nameSize;
 
   /// Dekupe boyu: hatlar sıkışınca küçülür (bkz. [_fitTokens]).
   final double cutoutH;
@@ -1633,7 +1640,7 @@ class _PlayerToken extends StatelessWidget {
 
   TextStyle get _firstStyle => TextStyle(
     color: Colors.white,
-    fontSize: compact ? 10 : 12,
+    fontSize: nameSize ?? (compact ? 10 : 12),
     fontWeight: FontWeight.w800,
     height: 1.1,
     shadows: _shadow,
@@ -1641,7 +1648,7 @@ class _PlayerToken extends StatelessWidget {
 
   TextStyle get _lastStyle => TextStyle(
     color: Colors.white.withValues(alpha: 0.92),
-    fontSize: compact ? 10.5 : 12.5,
+    fontSize: nameSize != null ? nameSize! * 0.82 : (compact ? 10.5 : 12.5),
     fontWeight: FontWeight.w400,
     height: 1.1,
     letterSpacing: 0.2,
