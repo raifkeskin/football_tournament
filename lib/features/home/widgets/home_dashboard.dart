@@ -2186,17 +2186,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
       );
     }
 
-    // Logoya dokununca takım sayfası; satırın kalanı maç detayı.
-    Widget badge(_TeamInfo? t) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: t == null
-          ? null
-          : () => _openTeam(m.seasonId, t.id, t.name, t.logoUrl),
-      child: TeamBadge(
-        name: t?.name ?? '?',
-        logoUrl: t?.logoUrl ?? '',
-        color: t?.color,
-      ),
+    // Satırın tamamı (logolar dahil) maç detayını açar.
+    Widget badge(_TeamInfo? t) => TeamBadge(
+      name: t?.name ?? '?',
+      logoUrl: t?.logoUrl ?? '',
+      color: t?.color,
     );
 
     Widget name(_TeamInfo? t, {required bool end}) => Expanded(
