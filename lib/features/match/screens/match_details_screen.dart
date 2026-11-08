@@ -777,7 +777,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   /// Golleri afiş için takım tarafına göre toplar: "Kaya 12' 58'",
   /// dakikasız sezonda "Kaya ×2". Kendi kalesine gol rakip tarafa yazılır.
 
-
   /// Tek maç afişi. Maç bittiyse Maç Sonucu (skor, gol atanlar), değilse
   /// Maç Afişi (saha, tarih, saat). Gönderi ve hikâye boyutunda.
   Future<void> _shareMatchPoster({
@@ -1958,7 +1957,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   controller: _tabController,
                                   children: [
                                     _infoTab(m),
-                                    _DetailTab(match: m),
+                                    _DetailTab(
+                                      match: m,
+                                      homeColor: sides.home,
+                                      awayColor: sides.away,
+                                    ),
 
                                     _LineupTab(
                                       match: m,
@@ -6265,7 +6268,11 @@ Future<void> showMatchDetailPopup(BuildContext context, MatchModel match) {
 
 class _DetailTab extends StatefulWidget {
   final MatchModel match;
-  const _DetailTab({required this.match});
+
+  /// Gol satırındaki mini skorda golü atan takımın rengi.
+  final Color? homeColor;
+  final Color? awayColor;
+  const _DetailTab({required this.match, this.homeColor, this.awayColor});
 
   @override
   State<_DetailTab> createState() => _DetailTabState();
@@ -6356,6 +6363,8 @@ class _DetailTabState extends State<_DetailTab>
       settingsFuture: _settingsFuture,
       clips: _clips,
       regionOwner: _regionOwner,
+      homeColor: widget.homeColor,
+      awayColor: widget.awayColor,
     );
   }
 }
@@ -6366,12 +6375,16 @@ class _DetailTabView extends StatelessWidget {
   final Future<SeasonMatchSettings> settingsFuture;
   final Map<String, MatchHighlight> clips;
   final bool regionOwner;
+  final Color? homeColor;
+  final Color? awayColor;
   const _DetailTabView({
     required this.match,
     required this.eventsStream,
     required this.settingsFuture,
     this.clips = const {},
     this.regionOwner = false,
+    this.homeColor,
+    this.awayColor,
   });
 
   String _friendlyLoadError(Object? error) {
@@ -6601,6 +6614,21 @@ class _DetailTabView extends StatelessWidget {
           return at.compareTo(bt);
         });
 
+        // Her golden sonra oluşan skor (gol satırında dakikanın altında).
+        final goalScores = Map<Map<String, dynamic>, (int, int)>.identity();
+        var runHome = 0;
+        var runAway = 0;
+        for (final e in normalized) {
+          if (isSystem(e) || pickType(e) != 'goal') continue;
+          final own = e['is_own_goal'] == true || e['isOwnGoal'] == true;
+          if ((pickTeamId(e) == match.homeTeamId) != own) {
+            runHome++;
+          } else {
+            runAway++;
+          }
+          goalScores[e] = (runHome, runAway);
+        }
+
         String pickPlayerId(Map<String, dynamic> e) {
           final a = _readString(e['player_id']);
           if (a.isNotEmpty) return a;
@@ -6685,6 +6713,9 @@ class _DetailTabView extends StatelessWidget {
 
             return _DetailEventTile(
               eventId: eventId,
+              score: type == 'goal' ? goalScores[e] : null,
+              homeColor: homeColor,
+              awayColor: awayColor,
               // Uzun basınca açılan düzenleme formu için olayın ham hali.
               event: eventId.isEmpty
                   ? null
@@ -7254,8 +7285,16 @@ class _DetailEventTile extends StatelessWidget {
 
   /// Maçın bölge sorumlusu (turnuva sorumlusu) da olayı düzenler/siler.
   final bool regionOwner;
+
+  /// Golden sonra oluşan skor (ev, deplasman); yalnız gol satırında.
+  final (int, int)? score;
+  final Color? homeColor;
+  final Color? awayColor;
   const _DetailEventTile({
     required this.eventId,
+    this.score,
+    this.homeColor,
+    this.awayColor,
     this.event,
     this.clip,
     this.regionOwner = false,
@@ -7565,7 +7604,27 @@ class _DetailEventTile extends StatelessWidget {
                   ),
                   // Rozetle iki yandaki yazı arasında az boşluk; dar tutulur
                   // ki oyuncu adlarına yer kalsın.
-                  SizedBox(width: 44, child: Center(child: _minuteBadge(min))),
+                  SizedBox(
+                    width: 44,
+                    child: Center(
+                      child: score == null
+                          ? _minuteBadge(min)
+                          // Skor dakikanın altında; satır boyu (34) değişmez.
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _minuteBadge(min),
+                                _GoalScoreChip(
+                                  home: score!.$1,
+                                  away: score!.$2,
+                                  homeScored: isHome,
+                                  homeColor: homeColor,
+                                  awayColor: awayColor,
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
                   Expanded(
                     child: isHome
                         ? const SizedBox.shrink()
@@ -8564,9 +8623,7 @@ Future<void> shareMatchPoster(
     );
     return;
   }
-  final dayName = date == null
-      ? ''
-      : DateFormat('EEEE', 'tr_TR').format(date);
+  final dayName = date == null ? '' : DateFormat('EEEE', 'tr_TR').format(date);
   final dateText = date == null
       ? ''
       : DateFormat('dd.MM.yyyy', 'tr_TR').format(date);
@@ -8676,3 +8733,81 @@ Future<void> showMatchMediaAdder(
     initialType: initialType,
   ),
 );
+
+/// Gol satırında dakikanın altındaki mini skorbord: tek belirgin çerçeve,
+/// ortada soluk "-"; golü atan takımın sayısı beyaz ve altı takım renginde.
+class _GoalScoreChip extends StatelessWidget {
+  const _GoalScoreChip({
+    required this.home,
+    required this.away,
+    required this.homeScored,
+    this.homeColor,
+    this.awayColor,
+  });
+
+  final int home;
+  final int away;
+  final bool homeScored;
+  final Color? homeColor;
+  final Color? awayColor;
+
+  Widget _cell(int v, bool on, Color? color) => Container(
+    constraints: const BoxConstraints(minWidth: 13),
+    height: 10,
+    padding: const EdgeInsets.symmetric(horizontal: 2),
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: on ? const Color(0xFF273449) : null,
+      border: Border(
+        bottom: BorderSide(
+          color: on ? (color ?? const Color(0xFF10B981)) : Colors.transparent,
+          width: 2,
+        ),
+      ),
+    ),
+    child: Text(
+      '$v',
+      style: TextStyle(
+        fontSize: 9.5,
+        height: 1,
+        fontWeight: FontWeight.w900,
+        color: on ? Colors.white : const Color(0xFF94A3B8),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 12,
+      decoration: BoxDecoration(
+        color: const Color(0xFF162033),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: const Color(0xFF94A3B8)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _cell(home, homeScored, homeColor),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 1),
+              child: Text(
+                '-',
+                style: TextStyle(
+                  fontSize: 9,
+                  height: 1,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF475569),
+                ),
+              ),
+            ),
+            _cell(away, !homeScored, awayColor),
+          ],
+        ),
+      ),
+    );
+  }
+}
