@@ -1916,6 +1916,26 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
+          const SizedBox(width: 10),
+          // iOS sayı klavyesinde "Tamam" tuşu yok; klavyeyi buradan kapat.
+          GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: _gold,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Tamam',
+                style: TextStyle(
+                  color: Color(0xFF1F1300),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
