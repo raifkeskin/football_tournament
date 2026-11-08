@@ -292,11 +292,20 @@ class MatchHighlightService {
   /// yeniden denenecek; null yok.
   static Future<String?> autoStatus(String matchId) async {
     try {
-      final v = await _db.rpc(
-        'highlights_auto_status',
-        params: {'p_match_id': matchId},
-      );
-      return v?.toString();
+      // running / pending / retry / failed (v2); v2 yoksa eski sorgu.
+      try {
+        final v = await _db.rpc(
+          'highlights_auto_status_v2',
+          params: {'p_match_id': matchId},
+        );
+        return v?.toString();
+      } on PostgrestException {
+        final v = await _db.rpc(
+          'highlights_auto_status',
+          params: {'p_match_id': matchId},
+        );
+        return v?.toString();
+      }
     } catch (_) {
       return null;
     }

@@ -281,6 +281,86 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     }
   }
 
+  /// Gol videosu durumu: dönen ikon yalnız tarama sürerken.
+  Widget _statusCard(String status) {
+    final failed = status == 'failed';
+    final retry = status == 'retry';
+    final busy = !failed && !retry;
+    final color = busy
+        ? const Color(0xFF10B981)
+        : failed
+        ? const Color(0xFFF87171)
+        : const Color(0xFFFBBF24);
+    final (title, body) = switch (status) {
+      'running' => (
+        'Maç taranıyor',
+        'Maç özeti gol videoları hazırlanıyor; hazır olunca burada görünür.',
+      ),
+      'retry' => (
+        'Tarama tamamlanamadı',
+        'Gol videoları şu an hazırlanamadı; tarama bir süre sonra '
+            'kendiliğinden yeniden denenecek.',
+      ),
+      'failed' => (
+        'Gol videoları hazırlanamadı',
+        'Bu maçın yayını taranamadı. Yetkililer Gol Kesitleri '
+            'ekranından yeniden deneyebilir.',
+      ),
+      _ => (
+        'Tarama sırada',
+        'Yayın kaydı hazır olunca maç taranacak; gol videoları burada '
+            'görünecek.',
+      ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: status == 'running'
+                ? CircularProgressIndicator(strokeWidth: 2, color: color)
+                : Icon(
+                    failed
+                        ? Icons.error_outline_rounded
+                        : retry
+                        ? Icons.schedule_rounded
+                        : Icons.hourglass_empty_rounded,
+                    size: 18,
+                    color: color,
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final approved = [
@@ -320,49 +400,7 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (preparing) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
-                ),
-              ),
-              child: const Row(
-                children: [
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Maç taranıyor',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Maç özeti gol videoları hazırlanıyor; hazır '
-                          'olunca burada görünür.',
-                          style: TextStyle(color: kAdminMuted, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _statusCard(_autoStatus!),
             const SizedBox(height: 10),
           ],
           if (showReview) ...[
@@ -1157,7 +1195,12 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   style: const TextStyle(color: kAdminMuted, fontSize: 11.5),
                 ),
               ],
-              if (job != null && !running) ...[
+              // Devre başlangıçları yalnız admine (yetkilileri
+              // karıştırmasın); hata alan taramada anlamsız.
+              if (job != null &&
+                  !running &&
+                  job.status != 'error' &&
+                  AppSession.of(context).value.isAdmin) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [
