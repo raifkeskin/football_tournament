@@ -2266,7 +2266,11 @@ class _MediaAdderDialog extends StatefulWidget {
     required this.match,
     required this.onSuccess,
     this.liveLinkOnly = false,
+    this.initialType,
   });
+
+  /// Açılışta seçili medya türü (ör. panelden "Önemli An").
+  final String? initialType;
 
   @override
   State<_MediaAdderDialog> createState() => _MediaAdderDialogState();
@@ -2275,7 +2279,7 @@ class _MediaAdderDialog extends StatefulWidget {
 class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   late String _selectedType = widget.liveLinkOnly
       ? kMediaLiveLink
-      : 'Takım Fotosu';
+      : (widget.initialType ?? 'Takım Fotosu');
 
   /// Maçta "Maçın Adamı" fotoğrafı var mı (tek olur; varsa listede yok).
   bool _hasManOfMatch = false;
@@ -8661,6 +8665,7 @@ Future<void> showMatchMediaAdder(
   required MatchModel match,
   required VoidCallback onSuccess,
   bool liveLinkOnly = false,
+  String? initialType,
 }) => showDialog<void>(
   context: context,
   barrierDismissible: false,
@@ -8668,5 +8673,6 @@ Future<void> showMatchMediaAdder(
     match: match,
     onSuccess: onSuccess,
     liveLinkOnly: liveLinkOnly,
+    initialType: initialType,
   ),
 );

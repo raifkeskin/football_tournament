@@ -1052,7 +1052,10 @@ class _TournamentBand extends StatelessWidget {
         );
     // İki yan eşit genişlikte: turnuva kimliği tam ortada kalır. Yan
     // genişlik sağdaki içeriğe göre (zil tek başına daha dar).
-    final side = trailing != null || actions?.onLogout != null
+    // Sağda tek simge düğmesi (ör. panelde turnuva seçici) zil kadar yer
+    // kaplar; ad kesilmesin.
+    final iconOnly = trailing is IconButton || trailing is BandIconButton;
+    final side = (trailing != null && !iconOnly) || actions?.onLogout != null
         ? 104.0
         : LeagueSwitchScope.tabAction.value != null
         ? 88.0
@@ -1100,14 +1103,17 @@ class _TournamentBand extends StatelessWidget {
                           : Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  _trUpper(theme.name),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: _BandTitle._style.copyWith(
-                                    fontSize: 14,
-                                    letterSpacing: 0.8,
-                                    height: 1.1,
+                                // Uzun ad kesilmez, sığana kadar küçülür.
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _trUpper(theme.name),
+                                    maxLines: 1,
+                                    style: _BandTitle._style.copyWith(
+                                      fontSize: 14,
+                                      letterSpacing: 0.8,
+                                      height: 1.1,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 2),
