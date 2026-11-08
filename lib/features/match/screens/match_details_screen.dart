@@ -776,92 +776,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   /// Golleri afiş için takım tarafına göre toplar: "Kaya 12' 58'",
   /// dakikasız sezonda "Kaya ×2". Kendi kalesine gol rakip tarafa yazılır.
-  Future<(List<PosterScorer>, List<PosterScorer>)> _posterScorers(
-    MatchModel m,
-  ) async {
-    final db = Supabase.instance.client;
-    final rows = await db
-        .from('match_events')
-        .select(
-          'team_id, minute, added_minute, player_id, is_own_goal, is_penalty',
-        )
-        .eq('match_id', m.id)
-        .eq('event_type', 'goal');
-    // Maç süresini aşan dakika maç detayındaki gibi uzatma yazılır (70+1').
-    await MatchClock.ensureLoaded();
-    final fullTime = MatchClock.periodOf(m.seasonId) * 2;
-    // match_events'te ad yok: adlar (soyad değil) oyunculardan okunur.
-    final ids = {
-      for (final r in rows)
-        if ((r['player_id'] ?? '').toString().isNotEmpty) '${r['player_id']}',
-    };
-    final firstNames = <String, String>{};
-    if (ids.isNotEmpty) {
-      for (final p
-          in await db
-              .from('players')
-              .select('id, name, surname')
-              .inFilter('id', ids.toList())) {
-        final name = (p['name'] ?? '').toString().trim();
-        final sn = (p['surname'] ?? '').toString().trim();
-        // Soyad ayrı sütunda değilse ad alanı "Ad Soyad" olabilir: son
-        // kelime soyad sayılır.
-        final parts = name.split(RegExp(r'\s+'));
-        firstNames['${p['id']}'] = sn.isEmpty && parts.length > 1
-            ? parts.sublist(0, parts.length - 1).join(' ')
-            : name;
-      }
-    }
-    // taraf → oyuncu → dakikalar (null: dakikasız); aynı adlı iki oyuncu
-    // karışmasın diye oyuncu kimliğiyle tutulur.
-    final sides = [<String, List<String?>>{}, <String, List<String?>>{}];
-    final labels = <String, String>{};
-    final firstMinute = <String, int>{};
-    for (final r in rows) {
-      final own = r['is_own_goal'] == true;
-      final team = (r['team_id'] ?? '').toString();
-      var home = team == m.homeTeamId;
-      if (own) home = !home;
-      final pid = (r['player_id'] ?? '').toString();
-      final fn = firstNames[pid] ?? '';
-      final label = fn.isEmpty ? 'Gol' : fn;
-      final key = '$pid|$own';
-      labels[key] = own ? '$label (K.K.)' : label;
-      final minute = r['minute'] is num ? (r['minute'] as num).toInt() : null;
-      final pen = r['is_penalty'] == true && !own;
-      (sides[home ? 0 : 1][key] ??= []).add(
-        minute == null
-            ? (pen ? '(P)' : null)
-            : '${minuteLabel(minute, readAddedMinute(r), fullTime: fullTime)}'
-                  '${pen ? ' (P)' : ''}',
-      );
-      if (minute != null) {
-        firstMinute[key] = minute < (firstMinute[key] ?? 999)
-            ? minute
-            : firstMinute[key]!;
-      }
-    }
-    List<PosterScorer> build(Map<String, List<String?>> side) {
-      final names = side.keys.toList()
-        ..sort(
-          (a, b) => (firstMinute[a] ?? 999).compareTo(firstMinute[b] ?? 999),
-        );
-      return [
-        for (final n in names)
-          (
-            name: labels[n]!,
-            detail: side[n]!.any((x) => x != null && x.contains("'"))
-                ? side[n]!.whereType<String>().join(' ')
-                : [
-                    if (side[n]!.length > 1) '×${side[n]!.length}',
-                    if (side[n]!.contains('(P)')) '(P)',
-                  ].join(' '),
-          ),
-      ];
-    }
 
-    return (build(sides[0]), build(sides[1]));
-  }
 
   /// Tek maç afişi. Maç bittiyse Maç Sonucu (skor, gol atanlar), değilse
   /// Maç Afişi (saha, tarih, saat). Gönderi ve hikâye boyutunda.
@@ -871,186 +786,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     required String awayName,
     required String homeLogo,
     required String awayLogo,
-  }) async {
-    final messenger = ScaffoldMessenger.of(context);
-    String leagueName = '', leagueLogo = '', groupName = '', seasonName = '';
-    var homeScorers = <PosterScorer>[], awayScorers = <PosterScorer>[];
-    var pitchName = (m.pitchName ?? '').trim();
-    try {
-      final db = Supabase.instance.client;
-      final league = await db
-          .from('leagues')
-          .select('name, logo_url')
-          .eq('id', m.leagueId)
-          .maybeSingle();
-      leagueName = (league?['name'] ?? '').toString().trim();
-      leagueLogo = (league?['logo_url'] ?? '').toString().trim();
-      final season = await db
-          .from('seasons')
-          .select('name')
-          .eq('id', m.seasonId)
-          .maybeSingle();
-      seasonName = (season?['name'] ?? '').toString().trim();
-      if (m.status == MatchStatus.finished) {
-        (homeScorers, awayScorers) = await _posterScorers(m);
-      }
-      final gid = (m.groupId ?? '').trim();
-      if (gid.isNotEmpty) {
-        // Tek gruplu sezonda grup adı turnuva adıyla aynı; başlıkta tekrar
-        // etmesin.
-        final groups = await db
-            .from('groups')
-            .select('id, name')
-            .eq('season_id', m.seasonId);
-        if (groups.length > 1) {
-          for (final g in groups) {
-            if (g['id'] == gid) groupName = (g['name'] ?? '').toString().trim();
-          }
-        }
-      }
-      final pid = (m.pitchId ?? '').trim();
-      if (pitchName.isEmpty && pid.isNotEmpty) {
-        final pitch = await db
-            .from('pitches')
-            .select('name')
-            .eq('id', pid)
-            .maybeSingle();
-        pitchName = (pitch?['name'] ?? '').toString().trim();
-      }
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Maç bilgisi okunamadı: $e')),
-      );
-      return;
-    }
-    if (!mounted) return;
-
-    final date = DateTime.tryParse((m.matchDate ?? '').trim());
-    final rawTime = (m.matchTime ?? '').trim();
-    final slug = '${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_');
-    if (m.status == MatchStatus.finished) {
-      await showPosterPreview(
-        context: context,
-        title: 'Maç Sonucunu Paylaş',
-        fileName: 'mac_sonucu_$slug',
-        imageUrls: [leagueLogo, homeLogo, awayLogo],
-        leagueId: m.leagueId,
-        kind: PosterKind.match,
-        formats: const [PosterFormat.post, PosterFormat.story],
-        scorersOption: true,
-        poster: MatchResultPoster(
-          leagueName: leagueName,
-          leagueLogo: leagueLogo,
-          subtitle: [
-            groupName,
-            seasonName,
-          ].where((e) => e.isNotEmpty).join(' · '),
-          week: m.week,
-          homeName: homeName,
-          homeLogo: homeLogo,
-          awayName: awayName,
-          awayLogo: awayLogo,
-          homeScore: m.homeScore,
-          awayScore: m.awayScore,
-          homeScorers: homeScorers,
-          awayScorers: awayScorers,
-        ),
-      );
-      return;
-    }
-    final dayName = date == null
-        ? ''
-        : DateFormat('EEEE', 'tr_TR').format(date);
-    final dateText = date == null
-        ? ''
-        : DateFormat('dd.MM.yyyy', 'tr_TR').format(date);
-    final timeText = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
-    final session = AppSession.of(context).value;
-    final designs =
-        session.isAdmin || AppSettings.matchPosterDesignsEnabled.value;
-    // Takım afişleri için renkler ve forma deseni.
-    final kits = <String, Map<String, dynamic>>{};
-    if (designs) {
-      try {
-        final rows = await Supabase.instance.client
-            .from('teams')
-            .select('id, first_color, second_color, jersey_style')
-            .inFilter('id', [m.homeTeamId, m.awayTeamId]);
-        for (final r in rows) {
-          kits[r['id'].toString()] = Map<String, dynamic>.from(r);
-        }
-      } catch (_) {
-        // Renkler okunamazsa varsayılan renklerle çizilir.
-      }
-      if (!mounted) return;
-    }
-    // Sorumlular afişi (yeni; şimdilik yalnız admin): iki takımın sorumlusu.
-    final managersOn = session.isAdmin;
-    final managers = <String, PosterManager>{};
-    if (managersOn) {
-      try {
-        final rows = await Supabase.instance.client.rpc(
-          'match_poster_managers',
-          params: {
-            'p_season_id': m.seasonId,
-            'p_team_ids': [m.homeTeamId, m.awayTeamId],
-          },
-        );
-        for (final r in rows as List) {
-          managers[r['team_id'].toString()] = PosterManager(
-            name: (r['name'] ?? '').toString(),
-            photo: (r['photo_url'] ?? '').toString(),
-          );
-        }
-      } catch (_) {
-        // Okunamazsa afiş armalarla çizilir.
-      }
-      if (!mounted) return;
-    }
-    PosterSide side(String id, String name, String logo) => PosterSide.of(
-      id: id,
-      name: name,
-      logo: logo,
-      firstHex: kits[id]?['first_color']?.toString(),
-      secondHex: kits[id]?['second_color']?.toString(),
-      jerseyStyle: kits[id]?['jersey_style']?.toString(),
-    );
-    await showMatchPosterShare(
-      context: context,
-      fileSlug: slug,
-      leagueId: m.leagueId,
-      imageUrls: const [],
-      designsEnabled: designs,
-      managersEnabled: managersOn,
-      info: MatchPosterInfo(
-        leagueName: leagueName,
-        leagueLogo: leagueLogo,
-        week: m.week,
-        home: side(m.homeTeamId, homeName, homeLogo),
-        away: side(m.awayTeamId, awayName, awayLogo),
-        pitchName: pitchName,
-        dayName: dayName,
-        dateText: dateText,
-        timeText: timeText,
-        homeManager: managers[m.homeTeamId],
-        awayManager: managers[m.awayTeamId],
-      ),
-      classic: MatchPoster(
-        leagueName: leagueName,
-        leagueLogo: leagueLogo,
-        groupName: groupName,
-        week: m.week,
-        homeName: homeName,
-        homeLogo: homeLogo,
-        awayName: awayName,
-        awayLogo: awayLogo,
-        pitchName: pitchName,
-        dayName: dayName,
-        dateText: dateText,
-        timeText: timeText,
-      ),
-    );
-  }
+  }) => shareMatchPoster(
+    context,
+    m: m,
+    homeName: homeName,
+    awayName: awayName,
+    homeLogo: homeLogo,
+    awayLogo: awayLogo,
+  );
 
   void _triggerRefresh() {
     if (mounted) {
@@ -8634,3 +8377,296 @@ Future<void> openMatchMoments(
     messenger.showSnackBar(SnackBar(content: Text('Kadro okunamadı: $e')));
   }
 }
+
+Future<(List<PosterScorer>, List<PosterScorer>)> _posterScorers(
+  MatchModel m,
+) async {
+  final db = Supabase.instance.client;
+  final rows = await db
+      .from('match_events')
+      .select(
+        'team_id, minute, added_minute, player_id, is_own_goal, is_penalty',
+      )
+      .eq('match_id', m.id)
+      .eq('event_type', 'goal');
+  // Maç süresini aşan dakika maç detayındaki gibi uzatma yazılır (70+1').
+  await MatchClock.ensureLoaded();
+  final fullTime = MatchClock.periodOf(m.seasonId) * 2;
+  // match_events'te ad yok: adlar (soyad değil) oyunculardan okunur.
+  final ids = {
+    for (final r in rows)
+      if ((r['player_id'] ?? '').toString().isNotEmpty) '${r['player_id']}',
+  };
+  final firstNames = <String, String>{};
+  if (ids.isNotEmpty) {
+    for (final p
+        in await db
+            .from('players')
+            .select('id, name, surname')
+            .inFilter('id', ids.toList())) {
+      final name = (p['name'] ?? '').toString().trim();
+      final sn = (p['surname'] ?? '').toString().trim();
+      // Soyad ayrı sütunda değilse ad alanı "Ad Soyad" olabilir: son
+      // kelime soyad sayılır.
+      final parts = name.split(RegExp(r'\s+'));
+      firstNames['${p['id']}'] = sn.isEmpty && parts.length > 1
+          ? parts.sublist(0, parts.length - 1).join(' ')
+          : name;
+    }
+  }
+  // taraf → oyuncu → dakikalar (null: dakikasız); aynı adlı iki oyuncu
+  // karışmasın diye oyuncu kimliğiyle tutulur.
+  final sides = [<String, List<String?>>{}, <String, List<String?>>{}];
+  final labels = <String, String>{};
+  final firstMinute = <String, int>{};
+  for (final r in rows) {
+    final own = r['is_own_goal'] == true;
+    final team = (r['team_id'] ?? '').toString();
+    var home = team == m.homeTeamId;
+    if (own) home = !home;
+    final pid = (r['player_id'] ?? '').toString();
+    final fn = firstNames[pid] ?? '';
+    final label = fn.isEmpty ? 'Gol' : fn;
+    final key = '$pid|$own';
+    labels[key] = own ? '$label (K.K.)' : label;
+    final minute = r['minute'] is num ? (r['minute'] as num).toInt() : null;
+    final pen = r['is_penalty'] == true && !own;
+    (sides[home ? 0 : 1][key] ??= []).add(
+      minute == null
+          ? (pen ? '(P)' : null)
+          : '${minuteLabel(minute, readAddedMinute(r), fullTime: fullTime)}'
+                '${pen ? ' (P)' : ''}',
+    );
+    if (minute != null) {
+      firstMinute[key] = minute < (firstMinute[key] ?? 999)
+          ? minute
+          : firstMinute[key]!;
+    }
+  }
+  List<PosterScorer> build(Map<String, List<String?>> side) {
+    final names = side.keys.toList()
+      ..sort(
+        (a, b) => (firstMinute[a] ?? 999).compareTo(firstMinute[b] ?? 999),
+      );
+    return [
+      for (final n in names)
+        (
+          name: labels[n]!,
+          detail: side[n]!.any((x) => x != null && x.contains("'"))
+              ? side[n]!.whereType<String>().join(' ')
+              : [
+                  if (side[n]!.length > 1) '×${side[n]!.length}',
+                  if (side[n]!.contains('(P)')) '(P)',
+                ].join(' '),
+        ),
+    ];
+  }
+
+  return (build(sides[0]), build(sides[1]));
+}
+
+/// Maç afişi / sonuç afişi paylaşımı (maç detayı ve Yönetim Paneli).
+Future<void> shareMatchPoster(
+  BuildContext context, {
+  required MatchModel m,
+  required String homeName,
+  required String awayName,
+  required String homeLogo,
+  required String awayLogo,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  String leagueName = '', leagueLogo = '', groupName = '', seasonName = '';
+  var homeScorers = <PosterScorer>[], awayScorers = <PosterScorer>[];
+  var pitchName = (m.pitchName ?? '').trim();
+  try {
+    final db = Supabase.instance.client;
+    final league = await db
+        .from('leagues')
+        .select('name, logo_url')
+        .eq('id', m.leagueId)
+        .maybeSingle();
+    leagueName = (league?['name'] ?? '').toString().trim();
+    leagueLogo = (league?['logo_url'] ?? '').toString().trim();
+    final season = await db
+        .from('seasons')
+        .select('name')
+        .eq('id', m.seasonId)
+        .maybeSingle();
+    seasonName = (season?['name'] ?? '').toString().trim();
+    if (m.status == MatchStatus.finished) {
+      (homeScorers, awayScorers) = await _posterScorers(m);
+    }
+    final gid = (m.groupId ?? '').trim();
+    if (gid.isNotEmpty) {
+      // Tek gruplu sezonda grup adı turnuva adıyla aynı; başlıkta tekrar
+      // etmesin.
+      final groups = await db
+          .from('groups')
+          .select('id, name')
+          .eq('season_id', m.seasonId);
+      if (groups.length > 1) {
+        for (final g in groups) {
+          if (g['id'] == gid) groupName = (g['name'] ?? '').toString().trim();
+        }
+      }
+    }
+    final pid = (m.pitchId ?? '').trim();
+    if (pitchName.isEmpty && pid.isNotEmpty) {
+      final pitch = await db
+          .from('pitches')
+          .select('name')
+          .eq('id', pid)
+          .maybeSingle();
+      pitchName = (pitch?['name'] ?? '').toString().trim();
+    }
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Maç bilgisi okunamadı: $e')),
+    );
+    return;
+  }
+  if (!context.mounted) return;
+
+  final date = DateTime.tryParse((m.matchDate ?? '').trim());
+  final rawTime = (m.matchTime ?? '').trim();
+  final slug = '${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_');
+  if (m.status == MatchStatus.finished) {
+    await showPosterPreview(
+      context: context,
+      title: 'Maç Sonucunu Paylaş',
+      fileName: 'mac_sonucu_$slug',
+      imageUrls: [leagueLogo, homeLogo, awayLogo],
+      leagueId: m.leagueId,
+      kind: PosterKind.match,
+      formats: const [PosterFormat.post, PosterFormat.story],
+      scorersOption: true,
+      poster: MatchResultPoster(
+        leagueName: leagueName,
+        leagueLogo: leagueLogo,
+        subtitle: [
+          groupName,
+          seasonName,
+        ].where((e) => e.isNotEmpty).join(' · '),
+        week: m.week,
+        homeName: homeName,
+        homeLogo: homeLogo,
+        awayName: awayName,
+        awayLogo: awayLogo,
+        homeScore: m.homeScore,
+        awayScore: m.awayScore,
+        homeScorers: homeScorers,
+        awayScorers: awayScorers,
+      ),
+    );
+    return;
+  }
+  final dayName = date == null
+      ? ''
+      : DateFormat('EEEE', 'tr_TR').format(date);
+  final dateText = date == null
+      ? ''
+      : DateFormat('dd.MM.yyyy', 'tr_TR').format(date);
+  final timeText = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
+  final session = AppSession.of(context).value;
+  final designs =
+      session.isAdmin || AppSettings.matchPosterDesignsEnabled.value;
+  // Takım afişleri için renkler ve forma deseni.
+  final kits = <String, Map<String, dynamic>>{};
+  if (designs) {
+    try {
+      final rows = await Supabase.instance.client
+          .from('teams')
+          .select('id, first_color, second_color, jersey_style')
+          .inFilter('id', [m.homeTeamId, m.awayTeamId]);
+      for (final r in rows) {
+        kits[r['id'].toString()] = Map<String, dynamic>.from(r);
+      }
+    } catch (_) {
+      // Renkler okunamazsa varsayılan renklerle çizilir.
+    }
+    if (!context.mounted) return;
+  }
+  // Sorumlular afişi (yeni; şimdilik yalnız admin): iki takımın sorumlusu.
+  final managersOn = session.isAdmin;
+  final managers = <String, PosterManager>{};
+  if (managersOn) {
+    try {
+      final rows = await Supabase.instance.client.rpc(
+        'match_poster_managers',
+        params: {
+          'p_season_id': m.seasonId,
+          'p_team_ids': [m.homeTeamId, m.awayTeamId],
+        },
+      );
+      for (final r in rows as List) {
+        managers[r['team_id'].toString()] = PosterManager(
+          name: (r['name'] ?? '').toString(),
+          photo: (r['photo_url'] ?? '').toString(),
+        );
+      }
+    } catch (_) {
+      // Okunamazsa afiş armalarla çizilir.
+    }
+    if (!context.mounted) return;
+  }
+  PosterSide side(String id, String name, String logo) => PosterSide.of(
+    id: id,
+    name: name,
+    logo: logo,
+    firstHex: kits[id]?['first_color']?.toString(),
+    secondHex: kits[id]?['second_color']?.toString(),
+    jerseyStyle: kits[id]?['jersey_style']?.toString(),
+  );
+  await showMatchPosterShare(
+    context: context,
+    fileSlug: slug,
+    leagueId: m.leagueId,
+    imageUrls: const [],
+    designsEnabled: designs,
+    managersEnabled: managersOn,
+    info: MatchPosterInfo(
+      leagueName: leagueName,
+      leagueLogo: leagueLogo,
+      week: m.week,
+      home: side(m.homeTeamId, homeName, homeLogo),
+      away: side(m.awayTeamId, awayName, awayLogo),
+      pitchName: pitchName,
+      dayName: dayName,
+      dateText: dateText,
+      timeText: timeText,
+      homeManager: managers[m.homeTeamId],
+      awayManager: managers[m.awayTeamId],
+    ),
+    classic: MatchPoster(
+      leagueName: leagueName,
+      leagueLogo: leagueLogo,
+      groupName: groupName,
+      week: m.week,
+      homeName: homeName,
+      homeLogo: homeLogo,
+      awayName: awayName,
+      awayLogo: awayLogo,
+      pitchName: pitchName,
+      dayName: dayName,
+      dateText: dateText,
+      timeText: timeText,
+    ),
+  );
+}
+
+/// Maç medyası ekleme penceresi (Yönetim Paneli için): takım fotosu,
+/// önemli an, yayın linki ([liveLinkOnly]).
+Future<void> showMatchMediaAdder(
+  BuildContext context, {
+  required MatchModel match,
+  required VoidCallback onSuccess,
+  bool liveLinkOnly = false,
+}) => showDialog<void>(
+  context: context,
+  barrierDismissible: false,
+  builder: (_) => _MediaAdderDialog(
+    match: match,
+    onSuccess: onSuccess,
+    liveLinkOnly: liveLinkOnly,
+  ),
+);

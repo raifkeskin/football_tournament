@@ -92,6 +92,7 @@ as $function$
       'away_id', ms.away_team_id,
       'home', h.name, 'home_logo', h.logo_url,
       'away', a.name, 'away_logo', a.logo_url,
+      'home_color', h.first_color, 'away_color', a.first_color,
       'home_score', ms.home_score,
       'away_score', ms.away_score,
       'kickoff_at', ms.kickoff_at,

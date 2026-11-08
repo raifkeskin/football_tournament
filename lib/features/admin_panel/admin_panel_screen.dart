@@ -7,7 +7,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/app_session.dart';
 import '../../core/services/app_settings.dart';
 import '../../core/services/service_locator.dart';
-import '../../core/widgets/admin_page.dart';
+import '../../core/services/active_tournament.dart';
+import '../../core/widgets/admin_form.dart';
+import '../../core/utils/team_name.dart';
+import '../../core/widgets/app_name_band.dart';
+import '../match/widgets/match_highlights_section.dart';
+import '../match/widgets/match_schedule_dialog.dart';
+import '../referees/match_referee_picker.dart';
+import '../share/pre_match_video.dart';
+import '../videos/videos.dart';
 import '../match/models/match.dart';
 import '../match/screens/esame_edit_screen.dart';
 import '../match/screens/match_details_screen.dart';
@@ -68,6 +76,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   List<_Scope> _scopes = const [];
   _Scope? _scope;
+  TournamentTheme? _theme;
   String? _regionId;
   List<Map<String, dynamic>> _matches = const [];
   bool _loading = true;
@@ -145,10 +154,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             ? s.regions.first.$1
             : null;
       });
+      _loadTheme();
       await _loadMatches();
     } catch (_) {
       _failed();
     }
+  }
+
+  /// Bantta seçili turnuvanın logosu ve adı (ana sayfadaki gibi).
+  Future<void> _loadTheme() async {
+    final s = _scope;
+    if (s == null) return;
+    try {
+      final r = await _sb
+          .from('leagues')
+          .select(
+            'id, name, short_name, logo_url, theme_primary, theme_secondary',
+          )
+          .eq('id', s.leagueId)
+          .maybeSingle();
+      if (r != null && mounted && _scope == s) {
+        setState(() => _theme = TournamentTheme.fromRow(r));
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadMatches() async {
@@ -259,6 +287,95 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     _loadMatches();
   }
 
+  // ------------------------------------------- panel içi işlemler
+
+  Future<void> _referee(String id) async {
+    final m = await _model(id);
+    if (m == null || !mounted) return;
+    await showMatchRefereePicker(context, m);
+    _loadMatches();
+  }
+
+  Future<void> _schedule(String id) async {
+    final m = await _model(id);
+    if (m == null || !mounted) return;
+    await showMatchScheduleDialog(
+      context,
+      match: m,
+      onDataChanged: _loadMatches,
+    );
+  }
+
+  Future<void> _media(String id, {bool liveLink = false}) async {
+    final m = await _model(id);
+    if (m == null || !mounted) return;
+    await showMatchMediaAdder(
+      context,
+      match: m,
+      liveLinkOnly: liveLink,
+      onSuccess: _loadMatches,
+    );
+  }
+
+  Future<void> _interview(Map row) async {
+    final ok = await showAddVideoDialog(
+      context,
+      match: VideoMatchRef(
+        id: '${row['id']}',
+        homeId: '${row['home_id']}',
+        homeName: '${row['home'] ?? ''}',
+        awayId: '${row['away_id']}',
+        awayName: '${row['away'] ?? ''}',
+      ),
+    );
+    if (ok) _loadMatches();
+  }
+
+  Future<void> _clips(Map row) async {
+    final m = await _model('${row['id']}');
+    if (m == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MatchHighlightReviewPage(
+          match: m,
+          homeName: '${row['home'] ?? ''}',
+          awayName: '${row['away'] ?? ''}',
+        ),
+      ),
+    );
+    _loadMatches();
+  }
+
+  Future<void> _poster(Map row) async {
+    final m = await _model('${row['id']}');
+    if (m == null || !mounted) return;
+    await shareMatchPoster(
+      context,
+      m: m,
+      homeName: '${row['home'] ?? ''}',
+      awayName: '${row['away'] ?? ''}',
+      homeLogo: '${row['home_logo'] ?? ''}',
+      awayLogo: '${row['away_logo'] ?? ''}',
+    );
+  }
+
+  /// Maç öncesi Paylaş: maç önü videosu (admin) ya da maç afişi.
+  Future<void> _share(Map row) async {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) return _poster(row);
+    final pick = await showAdminOptionPicker<String>(
+      context: context,
+      title: 'Paylaş',
+      items: const ['video', 'poster'],
+      labelBuilder: (v) => v == 'video' ? 'Maç önü videosu' : 'Maç afişi',
+    );
+    if (pick == 'video') {
+      await openMatchPreviewVideo('${row['id']}');
+    } else if (pick == 'poster') {
+      await _poster(row);
+    }
+  }
+
   void _embedInfo(_Embed e) {
     final (title, body) = switch (e) {
       _Embed.disabled => (
@@ -305,45 +422,59 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       1 => live,
       _ => post,
     };
-    return AdminPageScaffold(
-      title: 'Yönetim Paneli',
-      body: ColoredBox(
-        color: _bg,
-        child: RefreshIndicator(
-          onRefresh: _loadMatches,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
-            children: [
-              _scopeBar(),
-              const SizedBox(height: 10),
-              _tabs(pre.length, live.length, post.length),
-              const SizedBox(height: 12),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.all(40),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                _empty(_error!)
-              else if (_scope == null)
-                _empty('Yönettiğin aktif bir turnuva yok.')
-              else if (shown.isEmpty)
-                _empty(switch (_tab) {
-                  0 => 'Önümüzdeki 7 günde maç yok.',
-                  1 => 'Şu an canlı maç yok.',
-                  _ => 'Son 3 günde biten maç yok.',
-                })
-              else
-                for (final m in shown)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: switch (_tab) {
-                      0 => _preCard(m),
-                      1 => _liveCard(m),
-                      _ => _postCard(m),
-                    },
-                  ),
-            ],
+    return BandBackPage(
+      theme: _theme,
+      subtitle: 'Yönetim Paneli',
+      trailing: _scopes.length > 1
+          ? IconButton(
+              tooltip: 'Turnuva seç',
+              onPressed: _pickLeague,
+              icon: const Icon(Icons.expand_more_rounded, color: Colors.white),
+            )
+          : null,
+      child: Scaffold(
+        backgroundColor: _bg,
+        body: SafeArea(
+          top: false,
+          child: ColoredBox(
+            color: _bg,
+            child: RefreshIndicator(
+              onRefresh: _loadMatches,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                children: [
+                  _scopeBar(),
+                  const SizedBox(height: 10),
+                  _tabs(pre.length, live.length, post.length),
+                  const SizedBox(height: 12),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_error != null)
+                    _empty(_error!)
+                  else if (_scope == null)
+                    _empty('Yönettiğin aktif bir turnuva yok.')
+                  else if (shown.isEmpty)
+                    _empty(switch (_tab) {
+                      0 => 'Önümüzdeki 7 günde maç yok.',
+                      1 => 'Şu an canlı maç yok.',
+                      _ => 'Son 3 günde biten maç yok.',
+                    })
+                  else
+                    for (final m in shown)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: switch (_tab) {
+                          0 => _preCard(m),
+                          1 => _liveCard(m),
+                          _ => _postCard(m),
+                        },
+                      ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -370,38 +501,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Material(
-          color: _card,
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: _scopes.length < 2 ? null : _pickLeague,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      s.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  if (_scopes.length > 1) ...[
-                    const SizedBox(width: 4),
-                    const Icon(Icons.expand_more_rounded, color: _mid),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
         if (chips.length > 1) ...[
-          const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -421,7 +521,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             ],
           ),
         ] else if (!s.canAll && s.regions.length == 1) ...[
-          const SizedBox(height: 6),
           Text(
             s.regions.first.$2,
             style: const TextStyle(color: _mid, fontWeight: FontWeight.w700),
@@ -432,28 +531,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   Future<void> _pickLeague() async {
-    final picked = await showModalBottomSheet<_Scope>(
+    final picked = await showAdminOptionPicker<_Scope>(
       context: context,
-      backgroundColor: _card,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final s in _scopes)
-              ListTile(
-                title: Text(
-                  s.name,
-                  style: const TextStyle(color: Colors.white),
-                ),
-                trailing: s == _scope
-                    ? const Icon(Icons.check_rounded, color: _green)
-                    : null,
-                onTap: () => Navigator.of(ctx).pop(s),
-              ),
-          ],
-        ),
-      ),
+      title: 'Turnuva',
+      items: _scopes,
+      labelBuilder: (s) => s.name,
+      selected: _scope,
     );
     if (picked == null || picked == _scope) return;
     setState(() {
@@ -462,16 +545,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           ? picked.regions.first.$1
           : null;
       _loading = true;
+      _theme = null;
     });
+    _loadTheme();
     _loadMatches();
   }
 
   Widget _tabs(int pre, int live, int post) {
-    final labels = [
-      'Maç öncesi · $pre',
-      'Canlı · $live',
-      'Maç sonu · $post',
-    ];
+    final labels = ['Maç öncesi · $pre', 'Canlı · $live', 'Maç sonu · $post'];
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -509,95 +590,238 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     );
   }
 
-  Widget _shell({required List<Widget> children, Color? border}) => Container(
-    padding: const EdgeInsets.all(14),
+  Widget _shell({
+    required Widget head,
+    required List<Widget> children,
+    Color? border,
+  }) => Container(
+    clipBehavior: Clip.antiAlias,
     decoration: BoxDecoration(
       color: _card,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(20),
       border: Border.all(color: border ?? _line),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+      children: [
+        head,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      ],
     ),
   );
 
-  Widget _head(Map m, {String? right, Color? rightColor}) {
+  static Color? _hex(Object? v) {
+    final t = '${v ?? ''}'.trim().replaceFirst('#', '');
+    if (t.length != 6) return null;
+    final n = int.tryParse(t, radix: 16);
+    return n == null ? null : Color(0xFF000000 | n);
+  }
+
+  Widget _logo(String? url, String name, Color? color) {
+    final initials = name
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0])
+        .join()
+        .toUpperCase();
+    final u = (url ?? '').trim();
+    final fallback = Text(
+      initials,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+    );
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black26,
+        border: Border.all(color: color ?? Colors.white24, width: 2),
+      ),
+      clipBehavior: Clip.antiAlias,
+      alignment: Alignment.center,
+      child: u.isEmpty
+          ? fallback
+          : Image.network(
+              u,
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => fallback,
+            ),
+    );
+  }
+
+  /// Maç detayı gibi başlık: takım renkleri geçişi, logolar, ortada saat
+  /// (canlıda / maç sonunda skor).
+  Widget _head(Map m, {String? right, Color? rightColor, bool score = false}) {
     final region = (m['region'] as String?) ?? '';
-    final date = '${m['date'] ?? ''}';
-    final d = DateTime.tryParse(date);
-    const days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-    final when = [
-      if (d != null) '${d.day}.${d.month} ${days[d.weekday - 1]}',
-      if ((m['time'] ?? '').toString().isNotEmpty)
-        '${m['time']}'.substring(0, 5.clamp(0, '${m['time']}'.length)),
-    ].join(' · ');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    final d = DateTime.tryParse('${m['date'] ?? ''}');
+    const days = [
+      'Pazartesi',
+      'Salı',
+      'Çarşamba',
+      'Perşembe',
+      'Cuma',
+      'Cumartesi',
+      'Pazar',
+    ];
+    const months = [
+      'Ocak',
+      'Şubat',
+      'Mart',
+      'Nisan',
+      'Mayıs',
+      'Haziran',
+      'Temmuz',
+      'Ağustos',
+      'Eylül',
+      'Ekim',
+      'Kasım',
+      'Aralık',
+    ];
+    final rawTime = '${m['time'] ?? ''}';
+    final time = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
+    final dateText = d == null
+        ? 'Tarih yok'
+        : '${d.day} ${months[d.month - 1]} · ${days[d.weekday - 1]}';
+    final hc = _hex(m['home_color']) ?? const Color(0xFF334155);
+    final ac = _hex(m['away_color']) ?? const Color(0xFF334155);
+    final week = m['week'];
+    final tag = [
+      if (region.isNotEmpty) region,
+      if (week != null) '$week. Hafta',
+    ].join(' · ').toUpperCase();
+    Widget side(bool home) {
+      final name = shortTeamName('${m[home ? 'home' : 'away'] ?? '-'}');
+      return Expanded(
+        child: Column(
           children: [
+            _logo(
+              m[home ? 'home_logo' : 'away_logo'] as String?,
+              name,
+              home ? hc : ac,
+            ),
+            const SizedBox(height: 6),
             Text(
-              when,
+              name,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: FontWeight.w800,
               ),
             ),
-            if (region.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF172554),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  region,
-                  style: const TextStyle(
-                    color: Color(0xFF93C5FD),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-            const Spacer(),
-            if (right != null)
-              Text(
-                right,
-                style: TextStyle(
-                  color: rightColor ?? _mid,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          '${m['home'] ?? '-'} – ${m['away'] ?? '-'}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color.lerp(hc, _card, 0.55)!,
+            _card,
+            Color.lerp(ac, _card, 0.55)!,
+          ],
         ),
-        const SizedBox(height: 8),
-        Container(height: 1, color: _line),
-        const SizedBox(height: 4),
-      ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              if (tag.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC172554),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    tag,
+                    style: const TextStyle(
+                      color: Color(0xFF93C5FD),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              const Spacer(),
+              if (right != null)
+                Text(
+                  right,
+                  style: TextStyle(
+                    color: rightColor ?? _mid,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              side(true),
+              SizedBox(
+                width: 104,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 6),
+                    Text(
+                      score
+                          ? '${m['home_score'] ?? 0} – ${m['away_score'] ?? 0}'
+                          : (time.isEmpty ? '–' : time),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      dateText,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFE2E8F0),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              side(false),
+            ],
+          ),
+          if ((m['pitch'] ?? '').toString().trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${m['pitch']}',
+              style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   /// Kontrol satırı: durum işareti, metin, sağda eylem.
-  Widget _row(
-    String state,
-    String text, {
-    String? sub,
-    Widget? trailing,
-  }) {
+  Widget _row(String state, String text, {String? sub, Widget? trailing}) {
     final (mark, color) = switch (state) {
       'ok' => ('✓', _greenText),
       'warn' => ('!', _amber),
@@ -735,7 +959,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       return _row(
         'warn',
         'Yayın linki yok',
-        trailing: _link('Ekle', () => _openMatch(id, tab: 2)),
+        trailing: _link('Ekle', () => _media(id, liveLink: true)),
       );
     }
     final e = _embedCache[url];
@@ -751,7 +975,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               onPressed: () => _embedInfo(e!),
               icon: const Icon(Icons.info_outline_rounded, color: _red),
             ),
-            _link('Değiştir', () => _openMatch(id, tab: 2), color: _red),
+            _link('Değiştir', () => _media(id, liveLink: true), color: _red),
           ],
         ),
       );
@@ -787,12 +1011,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final pitch = ((m['pitch'] as String?) ?? '').trim();
     final postponed = m['status'] == 'postponed';
     return _shell(
+      head: _head(m, right: postponed ? 'ERTELENDİ' : null, rightColor: _amber),
       children: [
-        _head(
-          m,
-          right: postponed ? 'ERTELENDİ' : null,
-          rightColor: _amber,
-        ),
         _esameRows(m),
         _row(
           referee.isEmpty ? 'warn' : 'ok',
@@ -800,7 +1020,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           sub: referee.isEmpty ? null : referee,
           trailing: _link(
             referee.isEmpty ? 'Ata' : 'Değiştir',
-            () => _openMatch(id),
+            () => _referee(id),
           ),
         ),
         _streamRow(m, okText: 'Yayın linki eklendi'),
@@ -810,24 +1030,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           sub: (m['time'] ?? '').toString().isEmpty
               ? 'belirlenmedi'
               : '${m['time']}',
-          trailing: _link('Değiştir', () => _openMatch(id)),
+          trailing: _link('Değiştir', () => _schedule(id)),
         ),
         _row(
           pitch.isEmpty ? 'warn' : 'ok',
           'Saha',
           sub: pitch.isEmpty ? 'belirlenmedi' : pitch,
-          trailing: _link('Değiştir', () => _openMatch(id)),
+          trailing: _link('Değiştir', () => _schedule(id)),
         ),
         _row(
           m['preview_news'] == true ? 'ok' : 'none',
           'Maç önü haberi',
           sub: m['preview_news'] == true ? 'yayında' : 'henüz yok',
         ),
-        _row(
-          'none',
-          'Maç afişi',
-          trailing: _link('Paylaş', () => _openMatch(id, tab: 1)),
-        ),
+        _row('none', 'Maç afişi', trailing: _link('Paylaş', () => _share(m))),
         _primary('Maçı Yönet', Icons.sports_rounded, () => _openMatch(id)),
       ],
     );
@@ -840,22 +1056,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final half = m['status'] == 'halftime';
     return _shell(
       border: _green,
+      head: _head(
+        m,
+        right: half ? 'DEVRE ARASI' : '● CANLI',
+        rightColor: half ? _amber : _red,
+        score: true,
+      ),
       children: [
-        _head(
-          m,
-          right: half ? 'DEVRE ARASI' : '● CANLI',
-          rightColor: half ? _amber : _red,
-        ),
-        Center(
-          child: Text(
-            '${m['home_score'] ?? 0} – ${m['away_score'] ?? 0}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
         _row(
           mine ? 'ok' : (who.isEmpty ? 'warn' : 'none'),
           mine
@@ -925,14 +1132,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       );
     }
 
-    void media() => _openMatch(id, tab: 2);
+    void media() => _media(id);
     return _shell(
+      head: _head(m, right: 'MAÇ SONU', rightColor: Colors.white, score: true),
       children: [
-        _head(
-          m,
-          right: '${m['home_score'] ?? 0} – ${m['away_score'] ?? 0}  MS',
-          rightColor: Colors.white,
-        ),
         const SizedBox(height: 6),
         GridView.count(
           crossAxisCount: 2,
@@ -960,7 +1163,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               'Röportajlar',
               videos == 0 ? 'Yok · Instagram linki' : '$videos video',
               videos == 0 ? 'warn' : 'ok',
-              media,
+              () => _interview(m),
             ),
             tile(
               'Gol kesitleri',
@@ -980,7 +1183,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   : clip == 'failed'
                   ? 'bad'
                   : 'warn',
-              media,
+              () => _clips(m),
             ),
           ],
         ),
@@ -1009,7 +1212,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         _row(
           'none',
           'Sonuç afişi',
-          trailing: _link('Paylaş', () => _openMatch(id, tab: 1)),
+          trailing: _link('Paylaş', () => _poster(m)),
         ),
       ],
     );
