@@ -592,6 +592,26 @@ class _BandBackPageState extends State<BandBackPage> {
     );
   }
 
+  /// Tema / başlık değişirse bant da güncellenir (ör. panelde turnuva
+  /// seçimi).
+  @override
+  void didUpdateWidget(covariant BandBackPage old) {
+    super.didUpdateWidget(old);
+    if (old.theme?.leagueId != widget.theme?.leagueId ||
+        old.subtitle != widget.subtitle ||
+        (old.trailing == null) != (widget.trailing == null)) {
+      LeagueSwitchScope.setPageBand(
+        _route,
+        PageBand(
+          theme: widget.theme,
+          subtitle: widget.subtitle,
+          trailing: widget.trailing,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     LeagueSwitchScope.setPageBand(_route, null);
