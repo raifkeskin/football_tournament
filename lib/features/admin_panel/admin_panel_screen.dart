@@ -61,7 +61,8 @@ class AdminPanelScreen extends StatefulWidget {
   State<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
-class _AdminPanelScreenState extends State<AdminPanelScreen> {
+class _AdminPanelScreenState extends State<AdminPanelScreen>
+    with WidgetsBindingObserver {
   final _sb = Supabase.instance.client;
   static final Map<String, _Embed> _embedCache = {};
 
@@ -77,6 +78,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadScope();
     // Canlı skor ve durumlar için ara ara yenilenir.
     _timer = Timer.periodic(const Duration(seconds: 45), (_) => _loadMatches());
@@ -85,7 +87,36 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _retry?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Arka plandan dönünce bağlantı hazır olana kadar birkaç kez denenir.
+  Timer? _retry;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _retry?.cancel();
+      _retry = Timer(const Duration(milliseconds: 800), _reload);
+    }
+  }
+
+  void _reload() => _scope == null ? _loadScope() : _loadMatches();
+
+  /// Bağlantı hatası: eldeki liste korunur, ham hata gösterilmez; kısa
+  /// süre sonra yeniden denenir.
+  void _failed() {
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _matches.isEmpty
+          ? 'Bağlantı kurulamadı, yeniden deneniyor…'
+          : null;
+    });
+    _retry?.cancel();
+    _retry = Timer(const Duration(seconds: 4), _reload);
   }
 
   Future<void> _loadScope() async {
@@ -115,13 +146,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             : null;
       });
       await _loadMatches();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = '$e';
-        });
-      }
+    } catch (_) {
+      _failed();
     }
   }
 
@@ -149,13 +175,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       for (final m in list) {
         _checkEmbed(m['youtube_url'] as String?);
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = '$e';
-        });
-      }
+    } catch (_) {
+      _failed();
     }
   }
 
@@ -303,7 +324,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (_error != null)
-                _empty('Panel yüklenemedi: $_error')
+                _empty(_error!)
               else if (_scope == null)
                 _empty('Yönettiğin aktif bir turnuva yok.')
               else if (shown.isEmpty)
