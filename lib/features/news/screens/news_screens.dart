@@ -1460,6 +1460,7 @@ class _Clipping extends StatelessWidget {
               _ScoreBox(
                 article: a,
                 time: (item.autoData?['time'] ?? '').toString(),
+                seed: item.id,
               ),
             ],
             // Maç sonucunda skor kutusu zaten var; skor satırı tekrar yazılmaz.
@@ -1549,88 +1550,157 @@ class _Clipping extends StatelessWidget {
 }
 
 /// Küpürdeki skor kutusu: armalar ve skor (maç gününde saat).
+/// Küpürdeki maç kutusu. Takım adları tam görünsün diye iki düzen; hangisi
+/// olduğu habere göre sabit (aynı haber hep aynı düzen, haberler arası
+/// karışık): A = logo üstte ad altında, saat ortada; B = takımlar alt alta,
+/// saat sağ bölmede.
 class _ScoreBox extends StatelessWidget {
-  const _ScoreBox({required this.article, required this.time});
+  const _ScoreBox({
+    required this.article,
+    required this.time,
+    required this.seed,
+  });
 
   final NewsArticle article;
   final String time;
+  final String seed;
+
+  bool get _stacked =>
+      seed.codeUnits.fold<int>(0, (a, c) => (a + c) & 0x7fffffff).isOdd;
+
+  String get _center {
+    final a = article;
+    if (a.hs != null) return '${a.hs}–${a.as}';
+    return time.length >= 5 ? time.substring(0, 5) : time;
+  }
+
+  /// En uzun kelime satıra sığana kadar küçülen takım adı (iki satıra
+  /// kadar; kelime ortadan bölünmez).
+  Widget _name(ArticleTeam t, TextAlign align, double size) => LayoutBuilder(
+    builder: (context, box) {
+      final name = t.name.trUpper;
+      var style = _cond(size, color: _ink).copyWith(letterSpacing: 0.3);
+      final longest = name
+          .split(RegExp(r'\s+'))
+          .fold('', (a, w) => w.length > a.length ? w : a);
+      final width = (TextPainter(
+        text: TextSpan(text: longest, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout()).width;
+      if (width > box.maxWidth && box.maxWidth > 0) {
+        style = style.copyWith(
+          fontSize: (size * box.maxWidth / width).clamp(9.0, size),
+        );
+      }
+      return Text(
+        name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: align,
+        style: style.copyWith(height: 1.05),
+      );
+    },
+  );
+
+  static const _big = TextStyle(
+    fontFamily: 'PlayfairDisplay',
+    fontWeight: FontWeight.w900,
+    color: _ink,
+    fontSize: 26,
+    height: 1,
+  );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      _stacked ? _rows(context) : _columns(context);
+
+  /// A: logo üstte, ad altında; saat / skor ortada.
+  Widget _columns(BuildContext context) {
     final a = article;
-    Widget team(ArticleTeam t, {required bool end}) => Expanded(
-      child: Row(
-        mainAxisAlignment: end
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+    Widget team(ArticleTeam t) => Expanded(
+      child: Column(
         children: [
-          if (!end) _crest(t),
-          if (!end) const SizedBox(width: 8),
-          Flexible(
-            // Uzun tek kelime (GAZİOSMANPAŞA) satırda bölünmesin: en uzun
-            // kelime sığana kadar yazı küçülür.
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final name = t.name.trUpper;
-                var style = _cond(14, color: _ink).copyWith(letterSpacing: 0.3);
-                final longest = name
-                    .split(RegExp(r'\s+'))
-                    .fold('', (a, w) => w.length > a.length ? w : a);
-                final width = (TextPainter(
-                  text: TextSpan(text: longest, style: style),
-                  textDirection: TextDirection.ltr,
-                  textScaler: MediaQuery.textScalerOf(context),
-                )..layout()).width;
-                if (width > box.maxWidth && box.maxWidth > 0) {
-                  style = style.copyWith(
-                    fontSize: (14 * box.maxWidth / width).clamp(9.0, 14.0),
-                  );
-                }
-                return Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: end ? TextAlign.right : TextAlign.left,
-                  style: style,
-                );
-              },
-            ),
-          ),
-          if (end) const SizedBox(width: 8),
-          if (end) _crest(t),
+          _crest(t, 36),
+          const SizedBox(height: 6),
+          _name(t, TextAlign.center, 15),
         ],
       ),
     );
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(border: Border.all(color: _ink, width: 1.5)),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          team(a.home!, end: false),
+          team(a.home!),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              a.hs != null ? '${a.hs}–${a.as}' : time,
-              style: const TextStyle(
-                fontFamily: 'PlayfairDisplay',
-                fontWeight: FontWeight.w900,
-                color: _ink,
-                fontSize: 26,
-                height: 1,
-              ),
-            ),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+            child: Text(_center, style: _big),
           ),
-          team(a.away!, end: true),
+          team(a.away!),
         ],
       ),
     );
   }
 
-  Widget _crest(ArticleTeam t) => SizedBox(
-    width: 30,
-    height: 30,
+  /// B: iki takım alt alta tam adla; saat / skor sağ bölmede.
+  Widget _rows(BuildContext context) {
+    final a = article;
+    Widget team(ArticleTeam t) => Row(
+      children: [
+        _crest(t, 28),
+        const SizedBox(width: 10),
+        Expanded(child: _name(t, TextAlign.left, 15)),
+      ],
+    );
+    return Container(
+      decoration: BoxDecoration(border: Border.all(color: _ink, width: 1.5)),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    team(a.home!),
+                    const SizedBox(height: 8),
+                    team(a.away!),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              width: 86,
+              decoration: const BoxDecoration(
+                border: Border(left: BorderSide(color: _ink, width: 1.5)),
+              ),
+              alignment: Alignment.center,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(_center, style: _big),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _crest(ArticleTeam t, double size) => SizedBox(
+    width: size,
+    height: size,
     child: t.logo.isEmpty
-        ? const Icon(Icons.shield_rounded, size: 24, color: _ink2)
+        ? Icon(Icons.shield_rounded, size: size * 0.8, color: _ink2)
         : WebSafeImage(url: t.logo, fit: BoxFit.contain),
   );
 }
