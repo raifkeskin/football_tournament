@@ -35,6 +35,63 @@ class AdminPanelAccess {
   }
 }
 
+/// Ana sayfada sponsor şeridinin altındaki ince geçiş şeridi.
+class AdminPanelStrip extends StatelessWidget {
+  const AdminPanelStrip({super.key});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xFF0F2E25),
+    child: InkWell(
+      onTap: () => AdminPanelScreen.open(context),
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Color(0x5510B981))),
+        ),
+        child: const Row(
+          children: [
+            Icon(
+              Icons.dashboard_customize_rounded,
+              size: 16,
+              color: _greenText,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Yönetim Panelini aç',
+                style: TextStyle(
+                  color: _greenText,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: _greenText),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Panel yetkisi olana uygulama açılışında panel bir kez kendiliğinden
+/// açılır.
+class AdminPanelAutoOpen {
+  AdminPanelAutoOpen._();
+
+  static bool _done = false;
+
+  static void maybeOpen(BuildContext context, AppSessionState s) {
+    if (_done || !AdminPanelAccess.visible(s)) return;
+    _done = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) AdminPanelScreen.open(context);
+    });
+  }
+}
+
 const _bg = Color(0xFF0E1626);
 const _card = Color(0xFF1A2436);
 const _line = Color(0xFF2B3A57);
@@ -429,6 +486,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     return BandBackPage(
       theme: _theme,
       subtitle: 'Yönetim Paneli',
+      home: true,
       trailing: _scopes.length > 1
           ? IconButton(
               tooltip: 'Turnuva seç',
