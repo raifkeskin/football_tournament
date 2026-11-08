@@ -34,6 +34,7 @@ import '../../search/search_screen.dart';
 import '../../tournament/regulations/regulations_screen.dart';
 import '../../videos/video_sections.dart';
 import '../../videos/videos.dart';
+import '../../admin_panel/admin_panel_screen.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -673,6 +674,7 @@ class _MenuDrawer extends StatelessWidget {
         AppSettings.tournamentRequestsEnabled,
         IdentityAccess.changes,
         RosterAddAccess.changes,
+        AdminPanelAccess.changes,
       ]),
       builder: (context, _) {
         final theme = ActiveTournament.theme.value;
@@ -726,6 +728,27 @@ class _MenuDrawer extends StatelessWidget {
                       child: ListView(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         children: [
+                          // Yönetim Paneli: menünün en üstünde.
+                          if (AdminPanelAccess.visible(session))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _tile(
+                                icon: Icons.dashboard_customize_rounded,
+                                label: 'Yönetim Paneli',
+                                colors: const [
+                                  Color(0xFF34D399),
+                                  Color(0xFF059669),
+                                ],
+                                accent: accent,
+                                selected: false,
+                                onTap: () {
+                                  final nav = Navigator.of(context);
+                                  final ctx = nav.context;
+                                  nav.pop(); // çekmeceyi kapat
+                                  AdminPanelScreen.open(ctx);
+                                },
+                              ),
+                            ),
                           for (var i = 0; i < _items.length; i++)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
