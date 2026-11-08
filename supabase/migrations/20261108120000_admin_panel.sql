@@ -46,7 +46,7 @@ as $function$
   where auth.uid() is not null
 $function$;
 
--- Panel maçları: maç öncesi (bugünden 7 gün), canlı, maç sonu (son 3 gün).
+-- Panel maçları: maç öncesi (yalnız bugün), canlı, maç sonu (son 3 gün).
 create or replace function public.admin_panel_matches(
   p_league_id uuid,
   p_region_id uuid default null
@@ -77,7 +77,7 @@ as $function$
        and (
          m.status in ('live', 'halftime')
          or (m.status in ('notStarted', 'postponed')
-             and m.match_date between t.d and t.d + 6)
+             and m.match_date = t.d)
          or (m.status = 'finished' and m.match_date between t.d - 3 and t.d)
        )
   )

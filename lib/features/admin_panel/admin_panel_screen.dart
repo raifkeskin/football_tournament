@@ -82,6 +82,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   bool _loading = true;
   String? _error;
   int _tab = 0;
+
+  /// Bütün girişleri tamam olan maçlar özet görünür; dokununca açılır.
+  final Set<String> _expanded = {};
   Timer? _timer;
 
   @override
@@ -306,13 +309,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     );
   }
 
-  Future<void> _media(String id, {bool liveLink = false}) async {
+  Future<void> _media(String id, {bool liveLink = false, String? type}) async {
     final m = await _model(id);
     if (m == null || !mounted) return;
     await showMatchMediaAdder(
       context,
       match: m,
       liveLinkOnly: liveLink,
+      initialType: type,
       onSuccess: _loadMatches,
     );
   }
@@ -458,7 +462,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                     _empty('Yönettiğin aktif bir turnuva yok.')
                   else if (shown.isEmpty)
                     _empty(switch (_tab) {
-                      0 => 'Önümüzdeki 7 günde maç yok.',
+                      0 => 'Bugün maç yok.',
                       1 => 'Şu an canlı maç yok.',
                       _ => 'Son 3 günde biten maç yok.',
                     })
@@ -1005,11 +1009,48 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     ),
   );
 
+  /// Tamamlanmış maç: başlık + tek satır özet; "Ayrıntı" ile açılır.
+  Widget _summary(Map m, Widget head, String text) {
+    final id = '${m['id']}';
+    return _shell(
+      head: head,
+      children: [
+        _row(
+          'ok',
+          text,
+          trailing: _link('Ayrıntı', () => setState(() => _expanded.add(id))),
+        ),
+      ],
+    );
+  }
+
+  bool _streamOk(Map m) {
+    final url = ((m['youtube_url'] as String?) ?? '').trim();
+    if (url.isEmpty) return false;
+    final e = _embedCache[url];
+    return e != _Embed.disabled && e != _Embed.missing;
+  }
+
   Widget _preCard(Map m) {
     final id = '${m['id']}';
     final referee = ((m['referee'] as String?) ?? '').trim();
     final pitch = ((m['pitch'] as String?) ?? '').trim();
     final postponed = m['status'] == 'postponed';
+    final need = _n(m, 'need_xi');
+    final ready =
+        _n(m, 'xi_home') >= need &&
+        _n(m, 'xi_away') >= need &&
+        referee.isNotEmpty &&
+        pitch.isNotEmpty &&
+        '${m['time'] ?? ''}'.isNotEmpty &&
+        _streamOk(m);
+    if (ready && !_expanded.contains(id)) {
+      return _summary(
+        m,
+        _head(m, right: 'HAZIR ✓', rightColor: _greenText),
+        'Esame, hakem, yayın, saat ve saha tamam',
+      );
+    }
     return _shell(
       head: _head(m, right: postponed ? 'ERTELENDİ' : null, rightColor: _amber),
       children: [
@@ -1092,10 +1133,25 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final news = m['result_news'] as String?;
     final motm = m['motm'] == true;
     final hasStream = ((m['youtube_url'] as String?) ?? '').trim().isNotEmpty;
+    final done =
+        ph &&
+        pa &&
+        moments > 0 &&
+        (clips > 0 || !hasStream) &&
+        news == 'published' &&
+        motm;
+    if (done && !_expanded.contains(id)) {
+      return _summary(
+        m,
+        _head(m, right: 'TAMAM ✓', rightColor: _greenText, score: true),
+        'Fotoğraflar, kesitler, haber ve maçın oyuncusu tamam',
+      );
+    }
     Widget tile(String title, String sub, String state, VoidCallback onTap) {
       final (bg, fg) = switch (state) {
         'ok' => (const Color(0xFF0F2E25), const Color(0xFF6EE7B7)),
         'bad' => (const Color(0xFF2A1416), const Color(0xFFFCA5A5)),
+        'none' => (const Color(0xFF243044), _mid),
         _ => (const Color(0xFF2A1D0B), _amber),
       };
       return Material(
@@ -1132,7 +1188,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       );
     }
 
-    void media() => _media(id);
     return _shell(
       head: _head(m, right: 'MAÇ SONU', rightColor: Colors.white, score: true),
       children: [
@@ -1151,18 +1206,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   ? 'İki takım ✓'
                   : '${ph ? '✓' : '✗'} ev · ${pa ? '✓' : '✗'} dep',
               ph && pa ? 'ok' : 'warn',
-              media,
+              () => _media(id, type: 'Takım Fotosu'),
             ),
             tile(
               'Maçtan fotoğraflar',
               moments == 0 ? 'Yok · Ekle' : '$moments fotoğraf',
               moments == 0 ? 'warn' : 'ok',
-              media,
+              () => _media(id, type: 'Önemli An'),
             ),
             tile(
               'Röportajlar',
               videos == 0 ? 'Yok · Instagram linki' : '$videos video',
-              videos == 0 ? 'warn' : 'ok',
+              videos == 0 ? 'none' : 'ok',
               () => _interview(m),
             ),
             tile(
