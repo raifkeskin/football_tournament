@@ -33,6 +33,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
 import 'notif_invite_banner.dart';
+import '../../admin_panel/admin_panel_screen.dart';
 import '../../match/screens/esame_edit_screen.dart';
 import '../../match/widgets/attendance_card.dart';
 import 'my_week_card.dart';
@@ -1102,6 +1103,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
           padding: EdgeInsets.only(top: top),
           // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
           child: SponsorStrip(leagueId: widget.league.id),
+        ),
+        // Yönetim Paneli'ne geçiş: sponsor şeridinin altında ince şerit.
+        ListenableBuilder(
+          listenable: AdminPanelAccess.changes,
+          builder: (context, _) {
+            final session = AppSession.of(context).value;
+            if (!AdminPanelAccess.visible(session)) {
+              return const SizedBox.shrink();
+            }
+            // Açılışta panel bir kez kendiliğinden açılır.
+            AdminPanelAutoOpen.maybeOpen(context, session);
+            return const AdminPanelStrip();
+          },
         ),
         Expanded(
           child: RefreshIndicator(

@@ -95,7 +95,10 @@ class AppNameBand extends StatelessWidget {
                       Positioned(
                         left: 4,
                         bottom: 3,
-                        child: _BandBackButton(onTap: page.onBack),
+                        child: _BandBackButton(
+                          onTap: page.onBack,
+                          home: page.home,
+                        ),
                       ),
                       // Geri düğmesiyle (48) aynı yükseklikte ortalı: alt
                       // çizgiye taşmaz.
@@ -115,7 +118,10 @@ class AppNameBand extends StatelessWidget {
                   return _TournamentBand(
                     theme: pageTheme!,
                     top: top,
-                    leading: _BandBackButton(onTap: page.onBack),
+                    leading: _BandBackButton(
+                      onTap: page.onBack,
+                      home: page.home,
+                    ),
                     trailing: page.trailing,
                     subtitle: page.subtitle,
                   );
@@ -534,7 +540,11 @@ class PageBand {
     required this.onBack,
     this.trailing,
     this.subtitle,
+    this.home = false,
   });
+
+  /// true: soldaki düğme geri oku yerine ev (Ana Sayfa).
+  final bool home;
 
   /// null: kişinin aktif turnuvasının bandı (yoksa uygulama bandı).
   final TournamentTheme? theme;
@@ -555,9 +565,13 @@ class BandBackPage extends StatefulWidget {
     this.subtitle,
     this.theme,
     this.trailing,
+    this.home = false,
   });
 
   final Widget child;
+
+  /// Soldaki düğme ev simgesi (Ana Sayfa'ya döner).
+  final bool home;
 
   /// Bantta sağda (ör. arama ekranında kapat).
   final Widget? trailing;
@@ -587,6 +601,7 @@ class _BandBackPageState extends State<BandBackPage> {
         theme: widget.theme,
         subtitle: widget.subtitle,
         trailing: widget.trailing,
+        home: widget.home,
         onBack: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -606,6 +621,7 @@ class _BandBackPageState extends State<BandBackPage> {
           theme: widget.theme,
           subtitle: widget.subtitle,
           trailing: widget.trailing,
+          home: widget.home,
           onBack: () => Navigator.of(context).maybePop(),
         ),
       );
@@ -637,9 +653,10 @@ Rect? bandRectInOverlay() {
 
 /// Bantta geri düğmesi (en solda).
 class _BandBackButton extends StatelessWidget {
-  const _BandBackButton({required this.onTap});
+  const _BandBackButton({required this.onTap, this.home = false});
 
   final VoidCallback onTap;
+  final bool home;
 
   @override
   Widget build(BuildContext context) {
@@ -647,11 +664,12 @@ class _BandBackButton extends StatelessWidget {
       type: MaterialType.transparency,
       child: IconButton(
         onPressed: onTap,
-        icon: const Icon(
-          Icons.arrow_back_ios_new_rounded,
+        tooltip: home ? 'Ana Sayfa' : null,
+        icon: Icon(
+          home ? Icons.home_rounded : Icons.arrow_back_ios_new_rounded,
           color: Colors.white,
-          size: 22,
-          semanticLabel: 'Geri',
+          size: home ? 26 : 22,
+          semanticLabel: home ? 'Ana Sayfa' : 'Geri',
         ),
       ),
     );
