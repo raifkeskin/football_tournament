@@ -32,6 +32,8 @@ import '../../tournament/models/league_extras.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
+import '../../match/screens/esame_edit_screen.dart';
+import '../../match/widgets/attendance_card.dart';
 import 'my_week_card.dart';
 import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
@@ -862,6 +864,144 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ),
       ),
     );
+  }
+
+  /// Takım sorumlusu: esameyi kağıttan okut ya da elle gir.
+  Future<void> _esameChoice(
+    MatchModel m,
+    String teamId,
+    String teamName,
+  ) async {
+    Widget option({
+      required IconData icon,
+      required String title,
+      required String sub,
+      required bool scan,
+      required BuildContext ctx,
+    }) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: scan
+            ? DashColors.accent().withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.of(ctx).pop(scan),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, color: scan ? DashColors.accent() : Colors.white70),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: _barlow(size: 16, weight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        sub,
+                        style: _barlow(size: 12.5, color: DashColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final scan = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: DashColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Esameyi nasıl gireceksin?',
+                style: _barlow(size: 18, weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                [teamName, ?m.matchTime].join(' · '),
+                style: _barlow(size: 13, color: DashColors.muted),
+              ),
+              const SizedBox(height: 14),
+              option(
+                icon: Icons.document_scanner_outlined,
+                title: 'Kağıttan okut',
+                sub:
+                    'Esame kağıdının fotoğrafını çek, liste kendiliğinden dolsun',
+                scan: true,
+                ctx: ctx,
+              ),
+              option(
+                icon: Icons.edit_note_rounded,
+                title: 'Elle gir',
+                sub: 'Kadrodan seç; ankete evet diyenler ayrı sekmede',
+                scan: false,
+                ctx: ctx,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (scan == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EsameEditScreen(
+          match: m,
+          teamId: teamId,
+          teamName: teamName,
+          isHome: teamId == m.homeTeamId,
+          autoScan: scan,
+        ),
+      ),
+    );
+    _EsameMissingStrip.refresh.value++;
+  }
+
+  /// Takım sorumlusu: katılım anketi (yanıtlar, WhatsApp bağlantıları).
+  Future<void> _pollSheet(
+    MatchModel m,
+    String teamId,
+    String teamName,
+    String rivalName,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: DashColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: AttendanceCard(
+              match: m,
+              teamId: teamId,
+              teamName: teamName,
+              rivalName: rivalName,
+            ),
+          ),
+        ),
+      ),
+    );
+    AttendanceHomeCard.refresh.value++;
   }
 
   Future<void> _pickFollowedTeam(_DashData data) async {
@@ -1801,9 +1941,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final hasTime = RegExp(
       r'^\d{1,2}:\d{2}',
     ).hasMatch((m.matchTime ?? '').trim());
-    final openAt = kickoff == null || !hasTime
-        ? null
-        : kickoff.subtract(Duration(hours: d.openHours));
+    // Esame maç günü 00:00'dan (TR) açık; turnuva süresi daha erkense o.
+    DateTime? openAt;
+    if (kickoff != null && hasTime) {
+      final byHours = kickoff.subtract(Duration(hours: d.openHours));
+      final local = kickoff.add(const Duration(hours: 3));
+      final dayStart = DateTime.utc(
+        local.year,
+        local.month,
+        local.day,
+      ).subtract(const Duration(hours: 3));
+      openAt = byHours.isBefore(dayStart) ? byHours : dayStart;
+    }
     final now = DateTime.now().toUtc();
     // Sorumlusu olunan takım (iki takımın da sorumlusuysa ev sahibi).
     final managedTeamId =
@@ -1815,6 +1964,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ? m.awayTeamId
         : null;
     final managesThis = managedTeamId != null;
+    final myName = (managedTeamId == m.homeTeamId ? home : away)?.name ?? '';
+    final rivalName = (managedTeamId == m.homeTeamId ? away : home)?.name ?? '';
 
     String esame;
     var esameOpen = false;
@@ -1979,7 +2130,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
                         ? Icons.assignment_outlined
                         : Icons.lock_clock_rounded,
                     accent: accent,
-                    onPressed: esameOpen ? () => _openMatch(m, tab: 1) : null,
+                    onPressed: esameOpen
+                        ? () => _esameChoice(m, managedTeamId, myName)
+                        : null,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1989,11 +2142,20 @@ class _HomeDashboardState extends State<HomeDashboard> {
                     matchId: m.id,
                     teamId: managedTeamId,
                     accent: accent,
-                    onOpenRoster: () => _openMatch(m, tab: 1),
+                    onOpenRoster: () =>
+                        _pollSheet(m, managedTeamId, myName, rivalName),
                   ),
                 ),
               ],
             ),
+            if (esameOpen)
+              _EsameMissingStrip(
+                key: ValueKey('esame-${m.id}-$managedTeamId'),
+                matchId: m.id,
+                teamId: managedTeamId,
+                seasonId: m.seasonId,
+                onTap: () => _esameChoice(m, managedTeamId, myName),
+              ),
             if (!esameOpen) ...[
               const SizedBox(height: 8),
               Text(
@@ -2501,6 +2663,12 @@ class _HomePollButtonState extends State<_HomePollButton> {
 
   /// null: yükleniyor; true: anket açık; false: başlatılabilir.
   bool? _active;
+
+  /// Anket var ama kapandı (maçtan 3 saat önce ya da elle); dokununca
+  /// sonuçlar görünür. Anket yokken süre dolduysa başlatılamaz.
+  bool _closed = false;
+  bool _expired = false;
+  int _yes = 0;
   bool _busy = false;
 
   @override
@@ -2516,7 +2684,17 @@ class _HomePollButtonState extends State<_HomePollButton> {
         params: {'p_match_id': widget.matchId, 'p_team_id': widget.teamId},
       );
       if (!mounted || raw is! Map) return;
-      setState(() => _active = raw['poll_id'] != null && raw['closed'] != true);
+      final hasPoll = raw['poll_id'] != null;
+      final open = raw['match_open'] == true;
+      setState(() {
+        _closed = hasPoll && (raw['closed'] == true || !open);
+        _expired = !hasPoll && !open;
+        _active = hasPoll && !_closed;
+        _yes = [
+          for (final p in (raw['players'] as List? ?? const []))
+            if (p is Map && p['status'] == 'yes') p,
+        ].length;
+      });
     } catch (_) {
       if (mounted) setState(() => _active = false);
     }
@@ -2581,9 +2759,9 @@ class _HomePollButtonState extends State<_HomePollButton> {
       height: 38,
       child: FilledButton.icon(
         style: style,
-        onPressed: active == null || _busy
+        onPressed: active == null || _busy || _expired
             ? null
-            : active
+            : active || _closed
             ? widget.onOpenRoster
             : _start,
         icon: Icon(
@@ -2591,13 +2769,136 @@ class _HomePollButtonState extends State<_HomePollButton> {
           size: 17,
         ),
         label: Text(
-          active == true ? 'Anket Açık' : 'Anketi Başlat',
+          _closed
+              ? 'Anket kapandı · $_yes evet'
+              : _expired
+              ? 'Anket kapalı'
+              : active == true
+              ? 'Anket · $_yes evet'
+              : 'Anketi Başlat',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontFamily: 'Barlow',
             fontSize: 13,
             fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Takım sorumlusu ana sayfası: esame açıkken İlk 11 eksikse uyarı şeridi;
+/// dokununca "Kağıttan okut / Elle gir" seçimi.
+class _EsameMissingStrip extends StatefulWidget {
+  const _EsameMissingStrip({
+    super.key,
+    required this.matchId,
+    required this.teamId,
+    required this.seasonId,
+    required this.onTap,
+  });
+
+  final String matchId;
+  final String teamId;
+  final String seasonId;
+  final VoidCallback onTap;
+
+  /// Esame ekranından dönünce yeniden sayılır.
+  static final refresh = ValueNotifier<int>(0);
+
+  @override
+  State<_EsameMissingStrip> createState() => _EsameMissingStripState();
+}
+
+class _EsameMissingStripState extends State<_EsameMissingStrip> {
+  final _sb = Supabase.instance.client;
+  bool _missing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _EsameMissingStrip.refresh.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    _EsameMissingStrip.refresh.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final (season, rows) = await (
+        _sb
+            .from('seasons')
+            .select('starting_player_count')
+            .eq('id', widget.seasonId)
+            .maybeSingle(),
+        _sb
+            .from('match_rosters')
+            .select('id')
+            .eq('match_id', widget.matchId)
+            .eq('team_id', widget.teamId)
+            .eq('is_starting', true),
+      ).wait;
+      final need = (season?['starting_player_count'] as num?)?.toInt() ?? 11;
+      final missing = rows.length < need;
+      if (mounted && missing != _missing) setState(() => _missing = missing);
+    } catch (_) {
+      // Okunamazsa uyarı gösterilmez.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_missing) return const SizedBox.shrink();
+    const amber = Color(0xFFFBBF24);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Material(
+        color: const Color(0xFF2A1D0B),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: amber.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: amber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Esame girişi tamamlanmadı',
+                        style: _barlow(
+                          size: 14,
+                          weight: FontWeight.w800,
+                          color: amber,
+                        ),
+                      ),
+                      Text(
+                        'Kağıttan okut ya da elle gir',
+                        style: _barlow(
+                          size: 12,
+                          color: const Color(0xFFFCD34D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: amber),
+              ],
+            ),
           ),
         ),
       ),

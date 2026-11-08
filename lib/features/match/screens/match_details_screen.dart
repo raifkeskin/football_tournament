@@ -4712,7 +4712,15 @@ DateTime? _rosterOpenAt(MatchModel m, int hours) {
     int.parse(t.group(1)!),
     int.parse(t.group(2)!),
   ).subtract(const Duration(hours: 3));
-  return kickoff.subtract(Duration(hours: hours));
+  // Maç günü 00:00'dan açık; turnuva süresi daha erkense o (sunucu
+  // match_roster_open_at ile aynı).
+  final byHours = kickoff.subtract(Duration(hours: hours));
+  final dayStart = DateTime.utc(
+    d.year,
+    d.month,
+    d.day,
+  ).subtract(const Duration(hours: 3));
+  return byHours.isBefore(dayStart) ? byHours : dayStart;
 }
 
 class _LineupTabState extends State<_LineupTab>
@@ -4885,9 +4893,11 @@ class _LineupTabState extends State<_LineupTab>
           _RosterInfoNote(hours: _openHours),
           const SizedBox(height: 10),
         ],
-        // Katılım Durum Sorgulama: yalnızca takımın sorumlusu ve kadrosu
-        // görür (yetkisizde kart çizilmez).
-        if (AppSession.of(context).value.user != null) ...[
+        // Katılım anketi maç detayında görünmez (takım sorumlusu ana
+        // sayfadan yönetir, oyuncu ana sayfadan yanıtlar); yalnız WhatsApp
+        // kişisel bağlantısıyla gelen oyuncuya yanıt sorusu için çizilir.
+        if (AppSession.of(context).value.user != null &&
+            AttendanceCard.promptMatchId == m.id) ...[
           AttendanceCard(
             match: m,
             teamId: m.homeTeamId,
