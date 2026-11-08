@@ -32,6 +32,7 @@ import '../../tournament/models/league_extras.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
+import 'notif_invite_banner.dart';
 import '../../match/screens/esame_edit_screen.dart';
 import '../../match/widgets/attendance_card.dart';
 import 'my_week_card.dart';
@@ -1114,6 +1115,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 UnassignedRefereesBanner(leagueId: widget.league.id),
                 UnscheduledMatchesBanner(leagueId: widget.league.id),
                 const RefereeHomeCard(),
+                NotifInviteBanner(
+                  leagueId: widget.league.id,
+                  leagueName: widget.league.name,
+                ),
                 AttendanceHomeCard(leagueId: widget.league.id),
                 if (session.playerId != null && MyWeekCard.enabledFor(session))
                   MyWeekCard(leagueId: widget.league.id),
