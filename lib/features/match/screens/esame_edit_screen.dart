@@ -31,12 +31,16 @@ class EsameEditScreen extends StatefulWidget {
     required this.teamId,
     required this.teamName,
     required this.isHome,
+    this.autoScan = false,
   });
 
   final MatchModel match;
   final String teamId;
   final String teamName;
   final bool isHome;
+
+  /// Ana sayfadan "Kağıttan okut" ile açıldı: yüklenince tarama başlar.
+  final bool autoScan;
 
   @override
   State<EsameEditScreen> createState() => _EsameEditScreenState();
@@ -92,6 +96,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// -1: Tümü, 0..3: Kaleci / Defans / Orta Saha / Forvet.
   int _tab = -1;
 
+  /// Katılım anketinde "evet" diyenler (anket yoksa null; çip görünmez).
+  Set<String>? _pollYes;
+  static const _pollTab = 99;
+
   static const _bg = Color(0xFF0F172A);
   static const _card = Color(0xFF1E293B);
   static const _green = Color(0xFF10B981);
@@ -110,6 +118,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     super.initState();
     _loadData();
     _loadBoxesOpen();
+    _loadPoll();
     SeasonMatchSettings.of(widget.match.seasonId).then((s) {
       if (mounted && s.aiEsame != _aiEsame) {
         setState(() => _aiEsame = s.aiEsame);
@@ -179,6 +188,23 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       _dirty = false;
     });
     await _loadData();
+  }
+
+  Future<void> _loadPoll() async {
+    try {
+      final raw = await Supabase.instance.client.rpc(
+        'attendance_summary',
+        params: {'p_match_id': widget.match.id, 'p_team_id': widget.teamId},
+      );
+      if (raw is! Map || raw['poll_id'] == null || !mounted) return;
+      final yes = <String>{
+        for (final p in (raw['players'] as List? ?? const []))
+          if (p is Map && p['status'] == 'yes') '${p['id']}',
+      };
+      setState(() => _pollYes = yes);
+    } catch (_) {
+      // Anket okunamazsa çip görünmez.
+    }
   }
 
   Future<void> _loadData() async {
@@ -258,6 +284,12 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         _isLoading = false;
       });
       _loadVerified();
+      // Ana sayfadan "Kağıttan okut": liste yüklenince tarama açılır.
+      if (widget.autoScan && _players.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _readFromPaper();
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1791,7 +1823,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
   Widget _tabs() {
     final left = _remaining;
-    final labels = ['Tümü', ...positionLineLabels];
+    final labels = [
+      'Tümü',
+      ...positionLineLabels,
+      if (_pollYes != null) 'Ankete evet',
+    ];
     return SizedBox(
       height: 36,
       child: ListView.separated(
@@ -1800,9 +1836,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         itemCount: labels.length,
         separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, k) {
-          final t = k - 1;
+          final t = k > positionLineLabels.length ? _pollTab : k - 1;
           final on = _tab == t;
-          final n = t < 0
+          final n = t == _pollTab
+              ? left.where((p) => _pollYes!.contains(p.id)).length
+              : t < 0
               ? left.length
               : left.where((p) => _line(p) == t).length;
           return GestureDetector(
@@ -1885,7 +1923,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
   Widget _squadList(double keyboard) {
     final left = _remaining;
-    final shown = _tab < 0
+    final shown = _tab == _pollTab
+        ? left.where((p) => _pollYes?.contains(p.id) ?? false).toList()
+        : _tab < 0
         ? left
         : left.where((p) => _line(p) == _tab).toList();
     final children = <Widget>[];
