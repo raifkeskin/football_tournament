@@ -20,6 +20,8 @@ import '../home/widgets/overdue_results_banner.dart';
 import '../home/widgets/unassigned_referees_banner.dart';
 import '../home/widgets/unscheduled_matches_banner.dart';
 import '../identity/ibraz_pending_screen.dart';
+import '../news/screens/week_awards_screen.dart';
+import '../tournament/models/league.dart';
 import '../match/models/match.dart';
 import '../match/screens/esame_edit_screen.dart';
 import '../match/screens/match_details_screen.dart';
@@ -145,6 +147,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   /// Seçili sekme; boşsa ekran maçı olan sekmeye geçer (önce Canlı).
   int _tab = 1;
+
+  /// Tamamlanan haftalar (Haftanın Enleri sekmesi): hafta, bölge, bülten yayında mı.
+  List<({int week, String regionId, String region, bool published})> _enler =
+      const [];
+  String _enlerKey = '';
 
   /// Kimlik ibrazı onayı bekleyen kayıt sayısı (yetki alanına göre).
   int _ibrazPending = 0;
@@ -282,9 +289,162 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       for (final m in list) {
         _checkEmbed(m['youtube_url'] as String?);
       }
+      _loadEnler();
     } catch (_) {
       _failed();
     }
+  }
+
+  /// Tüm maçları bitmiş (ertelenen / iptal edilenler bekletmez) son haftalar.
+  Future<void> _loadEnler({bool force = false}) async {
+    final s = _scope;
+    if (s == null) return;
+    final key = '${s.leagueId}|${_regionId ?? ''}';
+    if (!force && key == _enlerKey) return;
+    _enlerKey = key;
+    try {
+      final seasons = await _sb
+          .from('seasons')
+          .select('id, is_active, start_date')
+          .eq('league_id', s.leagueId)
+          .isFilter('deleted_at', null)
+          .order('start_date', ascending: false);
+      if (seasons.isEmpty) return;
+      final season = seasons.firstWhere(
+        (x) => x['is_active'] == true,
+        orElse: () => seasons.first,
+      );
+      final sid = season['id'].toString();
+      final (matches, groups, news) = await (
+        _sb
+            .from('matches')
+            .select('week, status, group_id')
+            .eq('season_id', sid)
+            .isFilter('deleted_at', null)
+            .not('week', 'is', null),
+        _sb.from('groups').select('id, region_id').eq('season_id', sid),
+        _sb
+            .from('news')
+            .select('week, region_id')
+            .eq('season_id', sid)
+            .eq('auto_kind', 'week_awards'),
+      ).wait;
+      final regionOfGroup = {
+        for (final g in groups) '${g['id']}': '${g['region_id'] ?? ''}',
+      };
+      final names = {for (final r in s.regions) r.$1: r.$2};
+      // (bölge, hafta) → [biten, bekleyen]
+      final stat = <(String, int), List<int>>{};
+      for (final m in matches) {
+        final r = regionOfGroup['${m['group_id']}'] ?? '';
+        if (_regionId != null && r != _regionId) continue;
+        final e = stat.putIfAbsent((
+          r,
+          (m['week'] as num).toInt(),
+        ), () => [0, 0]);
+        final st = '${m['status']}';
+        if (st == 'finished') {
+          e[0]++;
+        } else if (st != 'cancelled' && st != 'postponed') {
+          e[1]++;
+        }
+      }
+      final published = {
+        for (final n in news)
+          ('${n['region_id'] ?? ''}', (n['week'] as num?)?.toInt() ?? 0),
+      };
+      final list = [
+        for (final e in stat.entries)
+          if (e.value[0] > 0 && e.value[1] == 0)
+            (
+              week: e.key.$2,
+              regionId: e.key.$1,
+              region: names[e.key.$1] ?? '',
+              published: published.contains(e.key),
+            ),
+      ]..sort((a, b) => b.week.compareTo(a.week));
+      if (!mounted) return;
+      setState(() => _enler = list.take(6).toList());
+    } catch (_) {
+      _enlerKey = '';
+    }
+  }
+
+  bool get _showEnler =>
+      AppSession.of(context).value.isAdmin ||
+      AppSettings.weekAwardsEnabled.value;
+
+  Future<void> _openEnler() async {
+    final s = _scope;
+    if (s == null) return;
+    try {
+      final row = await _sb
+          .from('leagues')
+          .select()
+          .eq('id', s.leagueId)
+          .single();
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'WeekAwardsScreen'),
+          builder: (_) => WeekAwardsScreen(
+            tournaments: [League.fromMap(Map<String, dynamic>.from(row))],
+          ),
+        ),
+      );
+      _loadEnler(force: true);
+    } catch (_) {}
+  }
+
+  Widget _enlerCard(
+    ({int week, String regionId, String region, bool published}) e,
+  ) {
+    final title = '${e.week}. hafta${e.region.isEmpty ? '' : ' · ${e.region}'}';
+    return _shell(
+      border: e.published ? null : _amber.withValues(alpha: 0.5),
+      head: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.military_tech_rounded, color: _amber, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              e.published ? 'Yayında' : 'Hazırlanmadı',
+              style: TextStyle(
+                color: e.published ? _greenText : _amber,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+      children: [
+        Text(
+          e.published
+              ? 'Haftanın enleri bülteni yayınlandı. Değiştirmek için aç.'
+              : 'Bu haftanın bütün maçları bitti. Haftanın 11\'ini ve enlerini '
+                    'seçip bülten olarak yayınlayabilirsin.',
+          style: const TextStyle(color: _mid, fontSize: 13.5, height: 1.4),
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: _openEnler,
+          icon: const Icon(Icons.military_tech_rounded, size: 18),
+          label: Text(e.published ? 'Bülteni aç' : 'Enleri seç ve yayınla'),
+        ),
+      ],
+    );
   }
 
   Future<void> _checkEmbed(String? url) async {
@@ -497,11 +657,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final pre = _matches.where(_isPre).toList();
     final live = _matches.where(_isLive).toList();
     final post = _matches.where(_isPost).toList();
-    final counts = [pre.length, live.length, post.length];
+    final enler = _showEnler
+        ? _enler
+        : const <
+            ({int week, String regionId, String region, bool published})
+          >[];
+    final counts = [pre.length, live.length, post.length, enler.length];
     // Maçı olmayan sekme seçilemez; seçili sekme boşsa sırayla Canlı,
-    // Maç öncesi, Maç sonu'ndan maçı olana geçilir.
+    // Maç öncesi, Maç sonu, Enler'den dolu olana geçilir.
     if (counts[_tab] == 0) {
-      for (final i in const [1, 0, 2]) {
+      for (final i in const [1, 0, 2, 3]) {
         if (counts[i] > 0) {
           _tab = i;
           break;
@@ -513,6 +678,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       1 => live,
       _ => post,
     };
+    final onEnler = _tab == 3;
     return BandBackPage(
       theme: _theme,
       subtitle: 'Yönetim Paneli',
@@ -544,7 +710,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                     UnassignedRefereesBanner(leagueId: _scope!.leagueId),
                     UnscheduledMatchesBanner(leagueId: _scope!.leagueId),
                   ],
-                  _tabs(pre.length, live.length, post.length),
+                  _tabs(pre.length, live.length, post.length, enler.length),
                   const SizedBox(height: 12),
                   if (_loading)
                     const Padding(
@@ -555,6 +721,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                     _empty(_error!)
                   else if (_scope == null)
                     _empty('Yönettiğin aktif bir turnuva yok.')
+                  else if (onEnler)
+                    for (final e in enler)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _enlerCard(e),
+                      )
                   else if (shown.isEmpty)
                     _empty(switch (_tab) {
                       0 => 'Bugün maç yok.',
@@ -732,8 +904,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     _loadMatches();
   }
 
-  Widget _tabs(int pre, int live, int post) {
-    final labels = ['Maç öncesi · $pre', 'Canlı · $live', 'Maç sonu · $post'];
+  Widget _tabs(int pre, int live, int post, int enler) {
+    final counts = [pre, live, post, if (_showEnler) enler];
+    final labels = [
+      'Maç öncesi · $pre',
+      'Canlı · $live',
+      'Maç sonu · $post',
+      if (_showEnler) 'Enler · $enler',
+    ];
+    final compact = labels.length > 3;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -742,13 +921,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       ),
       child: Row(
         children: [
-          for (var i = 0; i < 3; i++)
+          for (var i = 0; i < labels.length; i++)
             Expanded(
               child: GestureDetector(
                 // Maçı olmayan sekme görünür ama seçilemez.
-                onTap: [pre, live, post][i] == 0
-                    ? null
-                    : () => setState(() => _tab = i),
+                onTap: counts[i] == 0 ? null : () => setState(() => _tab = i),
                 child: Container(
                   height: 40,
                   alignment: Alignment.center,
@@ -758,16 +935,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: _tab == i
-                          ? _bg
-                          : [pre, live, post][i] == 0
-                          ? const Color(0xFF475569)
-                          : const Color(0xFFCBD5E1),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      labels[i],
+                      style: TextStyle(
+                        color: _tab == i
+                            ? _bg
+                            : counts[i] == 0
+                            ? const Color(0xFF475569)
+                            : const Color(0xFFCBD5E1),
+                        fontWeight: FontWeight.w800,
+                        fontSize: compact ? 12 : 13,
+                      ),
                     ),
                   ),
                 ),

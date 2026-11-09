@@ -227,7 +227,23 @@ async function buildPack(matchId: string, kind: "pre" | "post") {
     deplasman: names.get(x.away_team_id) ?? (x.away_team_id === hId ? hn : an),
   }));
 
-  if (kind === "pre") return { pack, season: m.season_id, matchRow: m, names };
+  if (kind === "pre") {
+    const { data: w } = await admin.from("match_weather").select(
+      "temp, feels_like, humidity, wind_kmh, pop, rain_mm, description",
+    ).eq("match_id", m.id).maybeSingle();
+    if (w) {
+      pack.hava = {
+        sicaklik_c: w.temp != null ? Math.round(Number(w.temp)) : null,
+        hissedilen_c: w.feels_like != null ? Math.round(Number(w.feels_like)) : null,
+        nem_yuzde: w.humidity ?? null,
+        ruzgar_kmh: w.wind_kmh != null ? Math.round(Number(w.wind_kmh)) : null,
+        yagis_ihtimali_yuzde: w.pop != null ? Math.round(Number(w.pop) * (Number(w.pop) <= 1 ? 100 : 1)) : null,
+        yagis_mm: w.rain_mm ?? null,
+        durum: w.description ?? null,
+      };
+    }
+    return { pack, season: m.season_id, matchRow: m, names };
+  }
 
   // Maç sonrası: olaylar ve sonuç
   const evs = events.filter((e) => e.match_id === m.id);
@@ -328,8 +344,10 @@ Kurallar:
 - Üslup: akıcı, canlı, futbol terimlerine uygun spor basını dili (ilk yarı, ikinci yarı, uzatma dakikaları, averaj, hat-trick, asist, skor yarışı, geriye düşüp dönmek, liderlik...). Klişe ve abartıdan kaçın; sıralama, seri, sezon golü, önceki karşılaşma gibi veriden çıkan yorumları kat. Asist veren oyuncuları adıyla an.
 - 70+3 gibi gösterimler uzatma dakikalarıdır. 'devre_suresi_dk' bir devrenin süresidir.
 - Manşet normal cümle düzeninde yazılır (tamamı büyük harf olmaz), en çok 110 karakter.
+- Takım renkleri, lakap, kadro, taraftar, tarihçe gibi veride olmayan hiçbir bilgiyi ekleme (örneğin takım adından renk çıkarma).
 - Yapay zekâdan söz etme.
 - Maç sonrası haberinde son paragrafa iki takımın sonraki maçını (tarih, rakip, rakibin durumu) kısaca ekle; veri yoksa ekleme.
+- Maç öncesi haberde 'hava' verisi varsa sıcaklık, rüzgâr ve yağış ihtimalini maçın oynanacağı koşullar olarak bir cümleyle an; yoksa hava durumundan söz etme.
 - Maç öncesi haberde sonuç tahmini yapma; iki takımın durumunu, formunu, önceki karşılaşmalarını, gol yarışını ve maçın yerini/zamanını anlat.
 Çıktı JSON: {"manset": string, "spot": string (1-2 cümle), "paragraflar": string[] (3-5 paragraf, toplam 140-220 kelime)}`;
 
@@ -393,9 +411,14 @@ function check(out: { manset: string; spot: string; paragraflar: string[] }, pac
   }
   const mins = new Set<string>();
   for (const d of raw.matchAll(/"dakika":"(\d{1,3})(?:\+(\d{1,2}))?"/g)) { mins.add(d[1]); if (d[2]) mins.add(`${d[1]}+${d[2]}`); }
-  for (const d of text.matchAll(/(\d{1,3})(\+\d{1,2})?(?:['’]|\.\s*dakika)/g)) {
+  // Dakika: "7. dakikada", "53'te", "70+4'te". Saat (20:30'da), skor (3-3'e)
+  // ve devre süresi (35'er dakika) dakika sayılmaz.
+  const half = Number(pack?.mac?.devre_suresi_dk) || 0;
+  for (const d of text.matchAll(/(?<![\d:\-+])(\d{1,3})(\+\d{1,2})?(?:['’]|\.\s*dakika)/g)) {
     const full = d[1] + (d[2] ?? "");
-    if (!mins.has(full) && !mins.has(d[1])) return `pakette olmayan dakika: ${d[0]}`;
+    if (!mins.has(full) && !mins.has(d[1]) && Number(d[1]) !== half && Number(d[1]) !== half * 2) {
+      return `pakette olmayan dakika: ${d[0]}`;
+    }
   }
   return null;
 }
@@ -433,7 +456,9 @@ Deno.serve(async (req) => {
 
     const built = await buildPack(matchId, kind);
     if (!built) return json({ skipped: "pasif turnuva" });
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(built.pack) + model))
+    // Hava durumu sık güncellenir; yeniden yazım tetiklemesin diye özetten çıkar.
+    const { hava: _hava, ...stable } = built.pack;
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(stable) + model))
       .then((b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("").slice(0, 24));
 
     if (!dry) {
@@ -472,10 +497,20 @@ Deno.serve(async (req) => {
       console.error("news-editor doğrulama", err);
       return json({ skipped: "doğrulama", err });
     }
-    await admin.from("news").update({
+    const upd: any = {
       headline, deck, article,
       editor_meta: { hash, kind, model, headline, article, deck, at: new Date().toISOString() },
-    }).eq("id", news.id);
+    };
+    // Maç sonrası yazı onaya düşer: kurucu / sorumlu inceler, onaylanmazsa
+    // 1 saat sonra kendiliğinden yayınlanır (haber onayı açıksa).
+    if (kind === "post") {
+      const { data: ap } = await admin.from("app_settings").select("value").eq("key", "news_approval_enabled").maybeSingle();
+      if (ap?.value === true && !(news.editor_meta?.hash)) {
+        upd.is_published = false;
+        upd.pending_until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      }
+    }
+    await admin.from("news").update(upd).eq("id", news.id);
     return json({ ok: true, cost });
   } catch (e) {
     console.error("news-editor", (e as Error).message);
