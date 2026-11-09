@@ -1380,6 +1380,8 @@ class _Clipping extends StatelessWidget {
     this.tilt = true,
     this.brand = false,
     this.lineHeight = 1.55,
+    this.from = 0,
+    this.continued = false,
   });
 
   final NewsItem item;
@@ -1387,6 +1389,11 @@ class _Clipping extends StatelessWidget {
 
   /// Metin satır aralığı (hikâyede daha sıkı).
   final double lineHeight;
+
+  /// Hikâyenin 2. sayfası: metnin kaldığı paragraftan devam eder; manşet ve
+  /// skor kutusu yoktur.
+  final int from;
+  final bool continued;
 
   /// Instagram hikâyesinde üst satırın sağında Lig Masası arması ve adı.
   final bool brand;
@@ -1436,7 +1443,7 @@ class _Clipping extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    a.kicker,
+                    continued ? '${a.kicker} · DEVAMI' : a.kicker,
                     style: _cond(
                       12.5,
                       color: _kickRed,
@@ -1456,59 +1463,62 @@ class _Clipping extends StatelessWidget {
                 ],
               ],
             ),
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    a.headline,
-                    style: const TextStyle(
-                      fontFamily: 'PlayfairDisplay',
-                      fontWeight: FontWeight.w900,
-                      color: _ink,
-                      fontSize: 27,
-                      height: 1.08,
+            if (!continued) ...[
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      a.headline,
+                      style: const TextStyle(
+                        fontFamily: 'PlayfairDisplay',
+                        fontWeight: FontWeight.w900,
+                        color: _ink,
+                        fontSize: 27,
+                        height: 1.08,
+                      ),
                     ),
                   ),
+                  if (onEdit != null)
+                    IconButton(
+                      tooltip: 'Haberi düzenle',
+                      onPressed: onEdit,
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.edit_outlined, color: _ink2),
+                    ),
+                ],
+              ),
+              if (a.home != null && a.away != null) ...[
+                const SizedBox(height: 12),
+                _ScoreBox(
+                  article: a,
+                  time: (item.autoData?['time'] ?? '').toString(),
+                  seed: item.id,
                 ),
-                if (onEdit != null)
-                  IconButton(
-                    tooltip: 'Haberi düzenle',
-                    onPressed: onEdit,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.edit_outlined, color: _ink2),
-                  ),
               ],
-            ),
-            if (a.home != null && a.away != null) ...[
-              const SizedBox(height: 12),
-              _ScoreBox(
-                article: a,
-                time: (item.autoData?['time'] ?? '').toString(),
-                seed: item.id,
-              ),
-            ],
-            // Maç sonucunda skor kutusu zaten var; skor satırı tekrar yazılmaz.
-            if (a.deck.isNotEmpty && a.hs == null) ...[
-              const SizedBox(height: 10),
-              Text(
-                a.deck,
-                style: const TextStyle(
-                  fontFamily: 'OldStandard',
-                  fontStyle: FontStyle.italic,
-                  color: _ink2,
-                  fontSize: 15,
-                  height: 1.35,
+              // Maç sonucunda skor kutusu zaten var; skor satırı tekrar yazılmaz.
+              if (a.deck.isNotEmpty && a.hs == null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  a.deck,
+                  style: const TextStyle(
+                    fontFamily: 'OldStandard',
+                    fontStyle: FontStyle.italic,
+                    color: _ink2,
+                    fontSize: 15,
+                    height: 1.35,
+                  ),
                 ),
-              ),
+              ],
             ],
             const SizedBox(height: 10),
             Container(height: 1, color: _ink.withValues(alpha: 0.45)),
             const SizedBox(height: 10),
-            for (final p in a.paragraphs.take(
-              maxParagraphs ?? a.paragraphs.length,
-            ))
+            for (final p
+                in a.paragraphs
+                    .skip(from)
+                    .take(maxParagraphs ?? a.paragraphs.length))
               Padding(
                 padding: const EdgeInsets.only(bottom: 9),
                 child: maxParagraphs == null
@@ -1946,6 +1956,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
   final _shot = GlobalKey();
   bool _busy = false;
 
+  /// Uzun haber iki hikâyeye bölünür: görünen sayfa (0 / 1).
+  int _page = 0;
+
   /// Hikâyede kullanılacak fotoğraf (birden fazlaysa seçilir).
   late int _photo = widget.initialPhoto.clamp(
     0,
@@ -1982,6 +1995,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
         messenger.showSnackBar(
           const SnackBar(content: Text('Instagram açılamadı.')),
         );
+      } else if (_storyPlan().length > _page + 1 && mounted) {
+        // 1/2 paylaşıldı: sıradaki sayfa hazır.
+        setState(() => _page++);
       }
     } catch (e) {
       messenger.showSnackBar(
@@ -2023,6 +2039,7 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 ),
               ),
             ),
+            if (!widget.card && _storyPlan().length > 1) _pageChips(),
             if (n.imageUrls.length > 1) _photoPicker(n.imageUrls),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -2048,7 +2065,11 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                   label: Text(
                     _busy
                         ? 'Hazırlanıyor…'
-                        : (widget.card ? 'PAYLAŞ' : 'HİKÂYEDE PAYLAŞ'),
+                        : (widget.card
+                              ? 'PAYLAŞ'
+                              : _storyPlan().length > 1
+                              ? 'HİKÂYEDE PAYLAŞ · ${_page + 1}/${_storyPlan().length}'
+                              : 'HİKÂYEDE PAYLAŞ'),
                     style: const TextStyle(
                       fontFamily: 'BarlowCondensed',
                       fontWeight: FontWeight.w800,
@@ -2064,6 +2085,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
               child: Text(
                 widget.card
                     ? 'Görsel, manşet ve haberin linkiyle gider.'
+                    : _storyPlan().length > 1
+                    ? 'Haber uzun olduğu için 2 hikâyeye bölündü: önce 1/2\'yi, '
+                          'sonra 2/2\'yi paylaş.'
                     : 'Instagram\'da o an açık olan hesaptan paylaşılır.',
                 style: const TextStyle(color: _muted, fontSize: 12.5),
               ),
@@ -2073,6 +2097,25 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
       ),
     );
   }
+
+  /// Uzun haberde hikâye sayfası seçimi (1/2, 2/2).
+  Widget _pageChips() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < _storyPlan().length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChoiceChip(
+              label: Text('${i + 1}/${_storyPlan().length}'),
+              selected: _page == i,
+              onSelected: (_) => setState(() => _page = i),
+            ),
+          ),
+      ],
+    ),
+  );
 
   /// Fotoğraf seçimi: küçük kareler, seçili olan çerçeveli.
   Widget _photoPicker(List<String> urls) => Padding(
@@ -2222,11 +2265,13 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     ),
   );
 
-  /// Hikâye küpürüne sığacak paragraf sayısı: yazı okunur kalacak (ölçek
-  /// >= 0,66) en çok paragraf; sığmazsa son paragraflar atılır.
-  int _storyParagraphs(double availW, double availH) {
+  /// Hikâye sayfaları: [başlangıç, bitiş) paragraf aralıkları. Önce tümü tek
+  /// sayfaya okunur ölçekte (>= 0,66) sığıyor mu bakılır; sığmıyorsa iki
+  /// sayfaya bölünür (ikisi de okunur kalacak en dengeli yerden). İki sayfaya
+  /// da sığmayan çok uzun haberde sondaki paragraflar atılır.
+  List<(int, int)> _storyPlan() {
     final a = widget.article;
-    const baseW = 420.0, pad = 36.0;
+    const baseW = 420.0, pad = 36.0, availW = 320.0, availH = 384.0;
     final tw = baseW - pad;
     double h(String t, TextStyle st) {
       final tp = TextPainter(
@@ -2251,33 +2296,59 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
         height: 1.08,
       ),
     );
-    var fixed = 44.0 + 22 + 6 + head + 21 + 4 + 28 + 10;
-    if (a.home != null && a.away != null) fixed += 12 + 120;
+    // Küpürün paragraf dışı yüksekliği: 1. sayfada manşet + skor kutusu.
+    var fixed1 = 44.0 + 22 + 6 + head + 21 + 4 + 28 + 10;
+    if (a.home != null && a.away != null) fixed1 += 12 + 120;
     if (a.deck.isNotEmpty && a.hs == null) {
-      fixed += 10 + h(a.deck, body.copyWith(fontStyle: FontStyle.italic));
+      fixed1 += 10 + h(a.deck, body.copyWith(fontStyle: FontStyle.italic));
     }
+    final fixed2 = 44.0 + 22 + 21 + 4 + 28 + 10;
     final ph = [for (final p in a.paragraphs) h(p, body) + 9];
-    for (var k = ph.length; k >= 1; k--) {
-      final total = fixed + ph.take(k).fold<double>(0, (x, y) => x + y);
-      final scale = (availH / total).clamp(0.0, availW / baseW);
-      if (scale >= 0.66) return k;
+    double sum(int from, int to) {
+      var t = 0.0;
+      for (var i = from; i < to; i++) {
+        t += ph[i];
+      }
+      return t;
     }
-    return 1;
+
+    double scale(double fixed, int from, int to) =>
+        (availH / (fixed + sum(from, to))).clamp(0.0, availW / baseW);
+    const minScale = 0.66;
+    final n = ph.length;
+    if (n == 0 || scale(fixed1, 0, n) >= minScale) return [(0, n)];
+    // İki sayfa: ikisi de okunur kalan bölünmeler arasında en büyük ölçek.
+    var best = -1;
+    var bestScale = 0.0;
+    for (var k = 1; k < n; k++) {
+      final m = scale(fixed1, 0, k) < scale(fixed2, k, n)
+          ? scale(fixed1, 0, k)
+          : scale(fixed2, k, n);
+      if (m >= minScale && m > bestScale) {
+        best = k;
+        bestScale = m;
+      }
+    }
+    if (best > 0) return [(0, best), (best, n)];
+    // Çok uzun: her sayfaya okunur kalacak kadar paragraf, gerisi atılır.
+    var k1 = 1;
+    while (k1 < n && scale(fixed1, 0, k1 + 1) >= minScale) {
+      k1++;
+    }
+    var k2 = k1;
+    while (k2 < n && scale(fixed2, k1, k2 + 1) >= minScale) {
+      k2++;
+    }
+    return k2 > k1 ? [(0, k1), (k1, k2)] : [(0, k1)];
   }
 
   Widget _story(NewsItem n) {
-    return LayoutBuilder(
-      builder: (context, c) => _storyBody(
-        n,
-        _storyParagraphs(
-          c.maxWidth.isFinite ? c.maxWidth - 40 : 350,
-          c.maxHeight.isFinite ? c.maxHeight - 200 - 56 : 438,
-        ),
-      ),
-    );
+    final plan = _storyPlan();
+    final r = plan[_page.clamp(0, plan.length - 1)];
+    return _storyBody(n, r.$1, r.$2, continued: r.$1 > 0);
   }
 
-  Widget _storyBody(NewsItem n, int paragraphs) {
+  Widget _storyBody(NewsItem n, int from, int to, {required bool continued}) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -2312,7 +2383,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 child: _Clipping(
                   item: n,
                   article: widget.article,
-                  maxParagraphs: paragraphs,
+                  from: from,
+                  maxParagraphs: to - from,
+                  continued: continued,
                   lineHeight: 1.42,
                   tilt: false,
                   brand: true,
