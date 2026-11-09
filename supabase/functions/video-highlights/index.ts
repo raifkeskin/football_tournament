@@ -119,7 +119,7 @@ const RETRY_WINDOW = 300;
 const CLOCK_FPS = 0.5;
 // Tüm video taramasında kare hızı (varsayılan 2 sn'de bir kare; görüntü
 // maliyeti yarıya iner, ses aynı kalır).
-const CLIP_SEC = 15;
+const CLIP_SEC = 20;
 const FULL_FPS = Number(Deno.env.get("GEMINI_FULL_FPS") ?? "0.5");
 
 const CORS = {
@@ -912,7 +912,7 @@ async function run(opts: RunOpts) {
         if (w && start != null && start < w.start) start += w.start;
         if (w && end != null && end < w.start) end += w.start;
         if (start == null || start > goalSec - 3 || start < goalSec - 30) start = goalSec - 11;
-        // Bir gol için 15 sn yeterli (atak + gol + kısa sevinç).
+        // Bir gol kesiti 20 sn (atak + gol + sevinç).
         start = Math.max(0, Math.max(start, goalSec - 11));
         end = start + CLIP_SEC;
 
