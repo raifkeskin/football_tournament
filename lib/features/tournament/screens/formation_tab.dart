@@ -815,111 +815,114 @@ class _FormationTabState extends State<FormationTab>
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (widget.embedded && fold != null) ...[
-                      LineupFoldHeader(
-                        open: true,
-                        onTap: fold,
-                        onFullscreen: widget.onFullscreen,
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    Row(
-                      children: [
-                        if (!widget.embedded || fold == null) ...[
-                          const Icon(
-                            Icons.grid_view_rounded,
-                            color: _midText,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Diziliş',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
+                    Builder(
+                      builder: (context) {
+                        final controls = <Widget>[
+                          if (_saveFailed)
+                            _SaveStatus(
+                              dirty: dirty,
+                              saving: _saving,
+                              failed: _saveFailed,
+                              onRetry: () {
+                                setState(() => _saveFailed = false);
+                                _autoSave(_selected);
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                        ],
-                        _FormationPicker(
-                          value: formation,
-                          options: options,
-                          enabled: _canEdit && options.length > 1,
-                          onChanged: _changeFormation,
-                        ),
-                        const Spacer(),
-                        // Gösterim tercihi diziliş afişine de uygulanır.
-                        // Yalnız ikon: yazılarla dar ekranda taşıyordu.
-                        PitchTokenStyleToggle(compact: true, showPhoto: true),
-                        if (_canShare && widget.onShare != null)
-                          IconButton(
-                            tooltip: 'Diziliş afişini paylaş',
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 34,
-                              minHeight: 34,
+                          const PitchStyleMenuButton(showPhoto: true),
+                          if (_canShare && widget.onShare != null)
+                            _ShareButton(
+                              onTap: () async {
+                                final teamId = _teamId;
+                                await _flush();
+                                if (!mounted) return;
+                                widget.onShare!(teamId);
+                              },
                             ),
-                            icon: const Icon(
-                              Icons.ios_share_rounded,
-                              color: Colors.white,
-                              size: 20,
+                        ];
+                        if (widget.embedded && fold != null) {
+                          return LineupFoldHeader(
+                            open: true,
+                            onTap: fold,
+                            onFullscreen: widget.onFullscreen,
+                            trailing: controls,
+                          );
+                        }
+                        return Row(
+                          children: [
+                            const Icon(
+                              Icons.grid_view_rounded,
+                              color: _midText,
+                              size: 16,
                             ),
-                            onPressed: () async {
-                              final teamId = _teamId;
-                              await _flush();
-                              if (!mounted) return;
-                              widget.onShare!(teamId);
-                            },
-                          ),
-                        if (_canEdit) ...[
-                          const SizedBox(width: 8),
-                          _SaveStatus(
-                            dirty: dirty,
-                            saving: _saving,
-                            failed: _saveFailed,
-                            onRetry: () {
-                              setState(() => _saveFailed = false);
-                              _autoSave(_selected);
-                            },
-                          ),
-                        ],
-                      ],
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Diziliş',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const Spacer(),
+                            for (var i = 0; i < controls.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 8),
+                              controls[i],
+                            ],
+                          ],
+                        );
+                      },
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     AspectRatio(
                       // Kaleciye kadar tüm saha telefon ekranına sığar.
                       aspectRatio: 0.8,
-                      child: ValueListenableBuilder<PitchTokenStyle>(
-                        valueListenable: PitchTokenStylePref.notifier,
-                        builder: (context, style, _) =>
-                            ValueListenableBuilder<Map<String, String>>(
-                              valueListenable: PhotoCutouts.map,
-                              builder: (context, cutouts, _) => _Pitch(
-                                lines: pitchLines,
-                                cutouts: PhotoCutouts.visible(context)
-                                    ? cutouts
-                                    : const {},
-                                teamColor: teamColor,
-                                style: style,
-                                insights: insights,
-                                onSwap: _canEdit
-                                    ? (from, to) => _swap(currentIds, from, to)
-                                    : null,
-                                picked: _picked,
-                                onPick: _canEdit
-                                    ? (id) => _pick(currentIds, id)
-                                    : null,
-                                onTapPlayer: widget.onPlayerTap == null
-                                    ? null
-                                    : (p) => widget.onPlayerTap!(
-                                        _teamId,
-                                        p.id,
-                                        p.name,
-                                        p.number,
-                                      ),
-                              ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ValueListenableBuilder<PitchTokenStyle>(
+                            valueListenable: PitchTokenStylePref.notifier,
+                            builder: (context, style, _) =>
+                                ValueListenableBuilder<Map<String, String>>(
+                                  valueListenable: PhotoCutouts.map,
+                                  builder: (context, cutouts, _) => _Pitch(
+                                    lines: pitchLines,
+                                    cutouts: PhotoCutouts.visible(context)
+                                        ? cutouts
+                                        : const {},
+                                    teamColor: teamColor,
+                                    style: style,
+                                    insights: insights,
+                                    onSwap: _canEdit
+                                        ? (from, to) =>
+                                              _swap(currentIds, from, to)
+                                        : null,
+                                    picked: _picked,
+                                    onPick: _canEdit
+                                        ? (id) => _pick(currentIds, id)
+                                        : null,
+                                    onTapPlayer: widget.onPlayerTap == null
+                                        ? null
+                                        : (p) => widget.onPlayerTap!(
+                                            _teamId,
+                                            p.id,
+                                            p.name,
+                                            p.number,
+                                          ),
+                                  ),
+                                ),
+                          ),
+                          // Formasyon sahanın sol üstünde (oyunculara değmez).
+                          Positioned(
+                            left: 10,
+                            top: 8,
+                            child: _FormationPicker(
+                              value: formation,
+                              options: options,
+                              enabled: _canEdit && options.length > 1,
+                              onChanged: _changeFormation,
+                              onPitch: true,
                             ),
+                          ),
+                        ],
                       ),
                     ),
                     if (_canEdit)
@@ -1140,6 +1143,7 @@ class _FormationPicker extends StatelessWidget {
     required this.options,
     required this.enabled,
     required this.onChanged,
+    this.onPitch = false,
   });
 
   final String value;
@@ -1147,12 +1151,17 @@ class _FormationPicker extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String> onChanged;
 
+  /// Sahanın üstünde: koyu yarı saydam zemin, küçük boy.
+  final bool onPitch;
+
   @override
   Widget build(BuildContext context) {
     final chip = Container(
-      padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+      padding: EdgeInsets.fromLTRB(8, onPitch ? 3 : 5, 4, onPitch ? 3 : 5),
       decoration: BoxDecoration(
-        color: _accent.withValues(alpha: 0.14),
+        color: onPitch
+            ? const Color(0xCC052E1C)
+            : _accent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: _accent.withValues(alpha: 0.45)),
       ),
@@ -1193,6 +1202,43 @@ class _FormationPicker extends StatelessWidget {
           ),
       ],
       child: chip,
+    );
+  }
+}
+
+/// Dolu yeşil Paylaş düğmesi (ikon + yazı).
+class _ShareButton extends StatelessWidget {
+  const _ShareButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _accent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.ios_share_rounded, size: 16, color: Color(0xFF04130D)),
+              SizedBox(width: 5),
+              Text(
+                'Paylaş',
+                style: TextStyle(
+                  color: Color(0xFF04130D),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2155,10 +2201,14 @@ class LineupFoldHeader extends StatelessWidget {
     required this.open,
     required this.onTap,
     this.onFullscreen,
+    this.trailing = const [],
   });
 
   final bool open;
   final VoidCallback onTap;
+
+  /// Başlık satırında oktan önce yer alan düğmeler (gösterim, Paylaş).
+  final List<Widget> trailing;
 
   /// Tam ekran yatay saha (hızlı olay girişi); null ise düğme yok.
   final VoidCallback? onFullscreen;
@@ -2219,6 +2269,8 @@ class LineupFoldHeader extends StatelessWidget {
                   ),
                 ),
               ),
+            for (final w in trailing)
+              Padding(padding: const EdgeInsets.only(right: 8), child: w),
             Tooltip(
               message: open ? 'Dizilişi gizle' : 'Dizilişi göster',
               child: Container(

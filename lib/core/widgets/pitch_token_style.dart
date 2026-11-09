@@ -212,3 +212,136 @@ class PitchTokenStyleToggle extends StatelessWidget {
     );
   }
 }
+
+/// Tek düğme: dokununca Profil / Forma / Yuvarlak seçimi açılır. Seçili
+/// gösterim düğmenin üstünde yazar; tercih cihazda hatırlanır.
+class PitchStyleMenuButton extends StatelessWidget {
+  const PitchStyleMenuButton({super.key, this.showPhoto = true});
+
+  final bool showPhoto;
+
+  static const _accent = Color(0xFF10B981);
+
+  static (String, String, Widget) _info(PitchTokenStyle v, {double s = 16}) =>
+      switch (v) {
+        PitchTokenStyle.circle => (
+          'Yuvarlak',
+          'Numaralı yuvarlak',
+          Container(
+            width: s - 2,
+            height: s - 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+          ),
+        ),
+        PitchTokenStyle.shirt => (
+          'Forma',
+          'Numaralı forma',
+          JerseyShape(
+            width: s,
+            color: Colors.transparent,
+            borderColor: Colors.white,
+          ),
+        ),
+        PitchTokenStyle.photo => (
+          'Profil',
+          'Dekupe fotoğraf, yoksa forma',
+          Icon(Icons.account_circle_outlined, size: s, color: Colors.white),
+        ),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<PitchTokenStyle>(
+      valueListenable: PitchTokenStylePref.notifier,
+      builder: (context, style, _) {
+        final values = [
+          PitchTokenStyle.photo,
+          PitchTokenStyle.shirt,
+          PitchTokenStyle.circle,
+        ].where((v) => showPhoto || v != PitchTokenStyle.photo).toList();
+        final cur = style == PitchTokenStyle.photo && !showPhoto
+            ? PitchTokenStyle.shirt
+            : style;
+        final (label, _, icon) = _info(cur);
+        return PopupMenuButton<PitchTokenStyle>(
+          tooltip: 'Gösterim',
+          initialValue: cur,
+          color: const Color(0xFF0A1324),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Colors.white24),
+          ),
+          onSelected: PitchTokenStylePref.set,
+          itemBuilder: (_) => [
+            for (final v in values)
+              PopupMenuItem(
+                value: v,
+                child: Row(
+                  children: [
+                    _info(v, s: 18).$3,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _info(v).$1,
+                            style: TextStyle(
+                              color: v == cur ? _accent : Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            _info(v).$2,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (v == cur)
+                      const Icon(Icons.check_rounded, color: _accent, size: 18),
+                  ],
+                ),
+              ),
+          ],
+          child: Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

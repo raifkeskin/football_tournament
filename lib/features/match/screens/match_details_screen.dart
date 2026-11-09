@@ -3099,31 +3099,43 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              FloatingActionButton(
-                                heroTag: 'speed_${a.label}_$i',
-                                mini: true,
-                                onPressed: () {
-                                  _close();
-                                  a.onTap();
-                                },
-                                child: Icon(a.icon),
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: FittedBox(
+                                  child: FloatingActionButton(
+                                    heroTag: 'speed_${a.label}_$i',
+                                    mini: true,
+                                    onPressed: () {
+                                      _close();
+                                      a.onTap();
+                                    },
+                                    child: Icon(a.icon),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
                         ),
                 );
               }),
-              FloatingActionButton(
-                heroTag: 'speed_main',
-                onPressed: _toggle,
-                tooltip: _open ? 'Kapat' : 'İşlemler',
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 160),
-                  transitionBuilder: (c, a) =>
-                      RotationTransition(turns: a, child: c),
-                  child: Icon(
-                    _open ? Icons.close_rounded : Icons.menu_rounded,
-                    key: ValueKey(_open),
+              SizedBox(
+                width: 46,
+                height: 46,
+                child: FittedBox(
+                  child: FloatingActionButton(
+                    heroTag: 'speed_main',
+                    onPressed: _toggle,
+                    tooltip: _open ? 'Kapat' : 'İşlemler',
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 160),
+                      transitionBuilder: (c, a) =>
+                          RotationTransition(turns: a, child: c),
+                      child: Icon(
+                        _open ? Icons.close_rounded : Icons.menu_rounded,
+                        key: ValueKey(_open),
+                      ),
+                    ),
                   ),
                 ),
               ),
