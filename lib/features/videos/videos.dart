@@ -301,6 +301,12 @@ class VideoService {
     changed.value++;
   }
 
+  /// Maç röportajının türü: pre / live / post.
+  static Future<void> setKind(String id, VideoKind kind) async {
+    await _db.rpc('video_set_kind', params: {'p_id': id, 'p_kind': kind.code});
+    changed.value++;
+  }
+
   static Future<void> setPinned(String id, bool pinned) async {
     await _db.rpc('video_set_pinned', params: {'p_id': id, 'p_pinned': pinned});
     changed.value++;
@@ -667,6 +673,18 @@ Future<void> showVideoActions(
               ),
               onTap: () => Navigator.pop(ctx, 'tag'),
             ),
+          if (v.matchId != null)
+            ListTile(
+              leading: const Icon(
+                Icons.swap_horiz_rounded,
+                color: Colors.white70,
+              ),
+              title: Text(
+                'Türünü değiştir (şu an: ${v.kind.label})',
+                style: const TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.pop(ctx, 'kind'),
+            ),
           ListTile(
             leading: const Icon(Icons.image_outlined, color: Colors.white70),
             title: Text(
@@ -735,6 +753,19 @@ Future<void> showVideoActions(
       await VideoService.setPlayers(v.id, picked);
       messenger.showSnackBar(
         const SnackBar(content: Text('Etiketler kaydedildi.')),
+      );
+    } else if (action == 'kind') {
+      final picked = await showAdminOptionPicker<VideoKind>(
+        context: context,
+        title: 'Röportaj Türü',
+        items: VideoKind.interviews,
+        selected: v.kind,
+        labelBuilder: (k) => k.label,
+      );
+      if (picked == null || picked == v.kind) return;
+      await VideoService.setKind(v.id, picked);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Tür "${picked.label}" olarak değiştirildi.')),
       );
     } else if (action == 'uncover') {
       await VideoService.setCover(v.id, null);
