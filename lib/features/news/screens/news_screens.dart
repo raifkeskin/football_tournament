@@ -2191,6 +2191,60 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
           ],
         );
 
+  /// Hikâyenin üst bandı: turnuva logosu ve adı ortada (fotoğraf üstünde
+  /// okunsun diye koyu geçişli).
+  Widget _storyLeague(NewsItem n) {
+    final logo = (n.leagueLogoUrl ?? '').trim();
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xAA000000), Color(0x00000000)],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (logo.isNotEmpty) ...[
+              WebSafeImage(url: logo, width: 30, height: 30),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Text(
+                n.leagueName.trUpper,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _cond(
+                  16,
+                  color: Colors.white,
+                ).copyWith(letterSpacing: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Hikâyenin alt satırı: Lig Masası arması ve adı, büyük puntoyla ortada.
+  Widget _storyBrand() => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Image.asset(AppLogo.asset, width: 30, height: 30),
+      const SizedBox(width: 8),
+      Text(
+        'LİG MASASI',
+        style: _cond(
+          22,
+          color: Colors.white,
+        ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 1.2),
+      ),
+    ],
+  );
+
   /// Alt satır: turnuva logosu ve adı (görselde ayrıca site adresi).
   Widget _footer(NewsItem n, {bool site = false}) {
     final logo = (n.leagueLogoUrl ?? '').trim();
@@ -2382,6 +2436,8 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             height: 300,
             child: _photoHeader(n),
           ),
+          // Üstte ortada turnuva logosu ve adı.
+          Positioned(left: 0, right: 0, top: 0, child: _storyLeague(n)),
           Positioned(
             // Yanlarda 20'şer boşluk: kısa haberde küpür kenardan kenara
             // uzamaz, en fazla ekranın ~%90'ı olur.
@@ -2404,12 +2460,12 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                   continued: continued,
                   lineHeight: 1.42,
                   tilt: false,
-                  brand: true,
                 ),
               ),
             ),
           ),
-          Positioned(left: 18, right: 18, bottom: 14, child: _footer(n)),
+          // Altta ortada Lig Masası arması ve adı (büyük).
+          Positioned(left: 18, right: 18, bottom: 12, child: _storyBrand()),
         ],
       ),
     );
