@@ -2086,8 +2086,8 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 widget.card
                     ? 'Görsel, manşet ve haberin linkiyle gider.'
                     : _storyPlan().length > 1
-                    ? 'Haber uzun olduğu için 2 hikâyeye bölündü: önce 1/2\'yi, '
-                          'sonra 2/2\'yi paylaş.'
+                    ? 'Haber uzun olduğu için ${_storyPlan().length} hikâyeye bölündü: '
+                          'sırayla paylaş.'
                     : 'Instagram\'da o an açık olan hesaptan paylaşılır.',
                 style: const TextStyle(color: _muted, fontSize: 12.5),
               ),
@@ -2266,9 +2266,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
   );
 
   /// Hikâye sayfaları: [başlangıç, bitiş) paragraf aralıkları. Önce tümü tek
-  /// sayfaya okunur ölçekte (>= 0,66) sığıyor mu bakılır; sığmıyorsa iki
-  /// sayfaya bölünür (ikisi de okunur kalacak en dengeli yerden). İki sayfaya
-  /// da sığmayan çok uzun haberde sondaki paragraflar atılır.
+  /// sayfaya okunur ölçekte (>= 0,66) sığıyor mu bakılır; sığmıyorsa 2, o da
+  /// yetmezse 3 sayfaya bölünür (hepsi okunur kalacak en dengeli yerden).
+  /// 3 sayfaya da sığmayan çok uzun haberde sondaki paragraflar atılır.
   List<(int, int)> _storyPlan() {
     final a = widget.article;
     const baseW = 420.0, pad = 36.0, availW = 320.0, availH = 384.0;
@@ -2317,29 +2317,45 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     const minScale = 0.66;
     final n = ph.length;
     if (n == 0 || scale(fixed1, 0, n) >= minScale) return [(0, n)];
+    double sc(int page, int from, int to) =>
+        scale(page == 0 ? fixed1 : fixed2, from, to);
     // İki sayfa: ikisi de okunur kalan bölünmeler arasında en büyük ölçek.
-    var best = -1;
+    var best2 = -1;
     var bestScale = 0.0;
     for (var k = 1; k < n; k++) {
-      final m = scale(fixed1, 0, k) < scale(fixed2, k, n)
-          ? scale(fixed1, 0, k)
-          : scale(fixed2, k, n);
+      final m = math.min(sc(0, 0, k), sc(1, k, n));
       if (m >= minScale && m > bestScale) {
-        best = k;
+        best2 = k;
         bestScale = m;
       }
     }
-    if (best > 0) return [(0, best), (best, n)];
+    if (best2 > 0) return [(0, best2), (best2, n)];
+    // Üç sayfa: aynı ölçüt.
+    var b1 = -1, b2 = -1;
+    bestScale = 0.0;
+    for (var k1 = 1; k1 < n - 1; k1++) {
+      for (var k2 = k1 + 1; k2 < n; k2++) {
+        final m = math.min(sc(0, 0, k1), math.min(sc(1, k1, k2), sc(1, k2, n)));
+        if (m >= minScale && m > bestScale) {
+          b1 = k1;
+          b2 = k2;
+          bestScale = m;
+        }
+      }
+    }
+    if (b1 > 0) return [(0, b1), (b1, b2), (b2, n)];
     // Çok uzun: her sayfaya okunur kalacak kadar paragraf, gerisi atılır.
-    var k1 = 1;
-    while (k1 < n && scale(fixed1, 0, k1 + 1) >= minScale) {
-      k1++;
+    final out = <(int, int)>[];
+    var from = 0;
+    for (var page = 0; page < 3 && from < n; page++) {
+      var to = from + 1;
+      while (to < n && sc(page, from, to + 1) >= minScale) {
+        to++;
+      }
+      out.add((from, to));
+      from = to;
     }
-    var k2 = k1;
-    while (k2 < n && scale(fixed2, k1, k2 + 1) >= minScale) {
-      k2++;
-    }
-    return k2 > k1 ? [(0, k1), (k1, k2)] : [(0, k1)];
+    return out;
   }
 
   Widget _story(NewsItem n) {
