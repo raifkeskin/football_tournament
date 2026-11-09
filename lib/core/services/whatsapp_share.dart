@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Videoyu WhatsApp'ta paylaşır: sohbete ya da Durum'a WhatsApp'ın kendi
-/// ekranında seçilir. Android'de WhatsApp doğrudan açılır
+/// Videoyu WhatsApp'ta BELGE olarak paylaşır (video olarak gidince WhatsApp
+/// kaliteyi düşürüyor; belge olarak dosya olduğu gibi gider). Sohbet
+/// WhatsApp'ın kendi ekranında seçilir. Android'de WhatsApp doğrudan açılır
 /// (MainActivity.kt); iOS ve web'de sistemin paylaş menüsü açılır.
 class WhatsAppShare {
   WhatsAppShare._();
@@ -31,7 +32,10 @@ class WhatsAppShare {
     }
     await SharePlus.instance.share(
       ShareParams(
-        files: [XFile.fromData(mp4, mimeType: 'video/mp4', name: name)],
+        // Video türü yerine genel dosya türü: WhatsApp belge olarak alır.
+        files: [
+          XFile.fromData(mp4, mimeType: 'application/octet-stream', name: name),
+        ],
         sharePositionOrigin: origin,
       ),
     );
