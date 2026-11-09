@@ -414,7 +414,7 @@ function check(out: { manset: string; spot: string; paragraflar: string[] }, pac
   // Dakika: "7. dakikada", "53'te", "70+4'te". Saat (20:30'da), skor (3-3'e)
   // ve devre süresi (35'er dakika) dakika sayılmaz.
   const half = Number(pack?.mac?.devre_suresi_dk) || 0;
-  for (const d of text.matchAll(/(?<![\d:\-+])(\d{1,3})(\+\d{1,2})?(?:['’]|\.\s*dakika)/g)) {
+  for (const d of text.matchAll(/(?<![\d:\-+])(\d{1,3})(\+\d{1,2})?(?:['’](?:d[ea]|t[ea])\b|\.\s*dakika)/g)) {
     const full = d[1] + (d[2] ?? "");
     if (!mins.has(full) && !mins.has(d[1]) && Number(d[1]) !== half && Number(d[1]) !== half * 2) {
       return `pakette olmayan dakika: ${d[0]}`;
