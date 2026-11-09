@@ -2032,7 +2032,8 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                     key: _shot,
                     child: SizedBox(
                       width: 360,
-                      height: widget.card ? 450 : 640,
+                      // WhatsApp görseli haberin boyuna göre uzar (en az 4:5).
+                      height: widget.card ? null : 640,
                       child: widget.card ? _shareCard(n) : _story(n),
                     ),
                   ),
@@ -2271,7 +2272,8 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     );
   }
 
-  /// WhatsApp görseli (4:5): fotoğraf, üzerinde küpür, altta turnuva.
+  /// WhatsApp görseli: fotoğraf, üzerinde küpür (tüm paragraflar), altta
+  /// turnuva. En az 4:5; haber uzunsa görsel aşağı doğru uzar.
   Widget _shareCard(NewsItem n) => DecoratedBox(
     decoration: const BoxDecoration(
       gradient: LinearGradient(
@@ -2289,20 +2291,16 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
           height: 190,
           child: _photoHeader(n),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 150,
-          bottom: 44,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.topCenter,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 450),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 150, bottom: 44),
             child: SizedBox(
               width: 360,
               child: _Clipping(
                 item: n,
                 article: widget.article,
-                maxParagraphs: 1,
+                maxParagraphs: widget.article.paragraphs.length,
                 tilt: false,
                 brand: true,
               ),
