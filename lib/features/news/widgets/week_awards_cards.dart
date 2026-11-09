@@ -3,9 +3,11 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/instagram_share.dart';
@@ -1369,8 +1371,33 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
     super.dispose();
   }
 
+  /// Haftanın Golü videosu (build'te güncellenir) ve kartın sayfa sırası.
+  String _goalVideoUrl = '';
+  int _goalPage = -1;
+
   Future<void> _shareInstagram() async {
     if (_busy) return;
+    if (_page == _goalPage && _goalVideoUrl.isNotEmpty) {
+      // 2 sn kart + gol videosu: hikâye olarak paylaşılır.
+      final messenger = ScaffoldMessenger.of(context);
+      setState(() => _busy = true);
+      try {
+        final r = await http.get(Uri.parse(_goalVideoUrl));
+        if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+        if (!await InstagramShare.shareVideo(r.bodyBytes, story: true)) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Instagram açılamadı.')),
+          );
+        }
+      } catch (_) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
+        );
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
     final story = await askInstagramTarget(context);
     if (story == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1484,6 +1511,15 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
             ),
         ];
         final igPage = w.instagramUrl.isNotEmpty ? cards.length : -1;
+        final videoOk =
+            w.goalVideoUrl.isNotEmpty &&
+            (AppSession.of(context).value.isAdmin ||
+                AppSettings.goalClipMp4Enabled.value);
+        _goalVideoUrl = videoOk ? w.goalVideoUrl : '';
+        _goalPage = w.awards.indexWhere((a) => a.kind == AwardKind.goal) >= 0
+            ? w.awards.indexWhere((a) => a.kind == AwardKind.goal) +
+                  (w.hasEleven ? 1 : 0)
+            : -1;
         // Görünen kart haftanın golüyse altında "Golü izle".
         final goal = _goalWithClip(awardAt(_page));
         return Container(
@@ -1540,22 +1576,17 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   ],
                 ),
               ),
-              // Uygulamada daha alçak: kart 4:5 kalır (paylaşım görseli), kare
-              // alanda ortalanır.
+              // Kart (4:5) alanın tamamını kaplar; en-boy oranı korunur, bu
+              // yüzden alan da 4:5'tir (fotoğraf şişmez / kırpılmaz).
               AspectRatio(
-                aspectRatio: 1.08,
+                aspectRatio: 4 / 5,
                 child: PageView.builder(
                   controller: _pager,
                   itemCount: pages.length,
                   onPageChanged: (i) => setState(() => _page = i),
-                  itemBuilder: (context, i) => Center(
-                    child: AspectRatio(
-                      aspectRatio: 4 / 5,
-                      child: RepaintBoundary(
-                        key: _keys.putIfAbsent(i, GlobalKey.new),
-                        child: pages[i],
-                      ),
-                    ),
+                  itemBuilder: (context, i) => RepaintBoundary(
+                    key: _keys.putIfAbsent(i, GlobalKey.new),
+                    child: pages[i],
                   ),
                 ),
               ),
