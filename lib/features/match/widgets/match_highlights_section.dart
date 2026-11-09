@@ -700,6 +700,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   MatchHighlightJob? _job;
   Map<String, HighlightScorer> _scorers = const {};
   Map<String, String> _goalScores = const {};
+  List<HighlightGoal> _goals = const [];
   List<HighlightRosterPlayer>? _roster;
   bool _loading = true;
   String? _playingId;
@@ -793,6 +794,62 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         items: _items,
       );
       if (mounted) setState(() => _scorers = map);
+    } catch (_) {}
+    try {
+      final g = await MatchHighlightService.goalEvents(m.id);
+      if (mounted) setState(() => _goals = g);
+    } catch (_) {}
+  }
+
+  String _goalLabel(HighlightGoal g) {
+    final team = g.teamId == widget.match.homeTeamId
+        ? shortTeamName(widget.homeName)
+        : shortTeamName(widget.awayName);
+    final min = g.addedMinute > 0
+        ? "${g.minute}+${g.addedMinute}'"
+        : "${g.minute}'";
+    final taken = _items.any(
+      (x) => x.matchEventId == g.id && x.status != 'rejected',
+    );
+    return '${g.order}. gol · $min ${g.playerName.isEmpty ? '' : '${g.playerName} '}'
+        '($team)${taken ? ' · kesiti var' : ''}';
+  }
+
+  /// Kesitin hangi gol kaydına ait olduğunu seçer (ör. yayın geç başladıysa
+  /// ilk bulunan kesit maçın 3. golüdür).
+  Future<void> _pickGoal(MatchHighlight h) async {
+    if (_goals.isEmpty) {
+      await _loadScorers();
+    }
+    if (!mounted) return;
+    if (_goals.isEmpty) {
+      _snack('Maç detayında gol kaydı yok.');
+      return;
+    }
+    final picked = await showAdminOptionPicker<HighlightGoal>(
+      context: context,
+      title: 'Bu Kesit Hangi Gol?',
+      items: _goals,
+      selected: _goals.where((g) => g.id == h.matchEventId).firstOrNull,
+      labelBuilder: _goalLabel,
+      emptyText: 'Maç detayında gol kaydı yok.',
+    );
+    if (picked == null) return;
+    await _update(
+      h,
+      matchEventId: picked.id,
+      minute: picked.minute,
+      addedMinute: picked.addedMinute,
+      teamId: picked.teamId,
+      playerId: picked.playerId,
+    );
+    try {
+      final scores = await MatchHighlightService.goalScores(
+        matchId: widget.match.id,
+        homeTeamId: widget.match.homeTeamId,
+        awayTeamId: widget.match.awayTeamId,
+      );
+      if (mounted) setState(() => _goalScores = scores);
     } catch (_) {}
   }
 
@@ -980,6 +1037,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     String? status,
     String? description,
     String? playerId,
+    String? matchEventId,
+    int? minute,
+    int? addedMinute,
+    String? teamId,
   }) async {
     setState(() => _busy.add(h.id));
     try {
@@ -990,6 +1051,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         status: status,
         description: description,
         playerId: playerId,
+        matchEventId: matchEventId,
+        minute: minute,
+        addedMinute: addedMinute,
+        teamId: teamId,
       );
       if (!mounted) return;
       setState(() {
@@ -1511,6 +1576,21 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
             ],
           ),
           const SizedBox(height: 8),
+          _editRow(
+            icon: Icons.sports_soccer_rounded,
+            text: h.matchEventId == null
+                ? 'Hangi gol olduğu seçilmedi'
+                : (_goals.where((g) => g.id == h.matchEventId).firstOrNull ==
+                          null
+                      ? "${h.minute ?? '?'}'. dakika golü"
+                      : _goalLabel(
+                          _goals.firstWhere((g) => g.id == h.matchEventId),
+                        )),
+            muted: h.matchEventId == null,
+            action: h.matchEventId == null ? 'Seç' : 'Değiştir',
+            onTap: busy ? null : () => _pickGoal(h),
+          ),
+          const SizedBox(height: 6),
           _editRow(
             icon: Icons.person_rounded,
             text: _scorers[h.id] == null
