@@ -15,6 +15,7 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../tournament/models/league_extras.dart';
+import '../../videos/instagram_embed.dart';
 import '../week_awards.dart';
 import 'result_news_cards.dart';
 
@@ -1475,7 +1476,14 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   : null,
               child: c,
             ),
+          // Yayından sonra eklenen Instagram gönderisi / Reels son sayfa.
+          if (w.instagramUrl.isNotEmpty)
+            ColoredBox(
+              color: Colors.black,
+              child: InstagramEmbed(url: w.instagramUrl, focused: true),
+            ),
         ];
+        final igPage = w.instagramUrl.isNotEmpty ? cards.length : -1;
         // Görünen kart haftanın golüyse altında "Golü izle".
         final goal = _goalWithClip(awardAt(_page));
         return Container(
@@ -1600,7 +1608,11 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   likeCount: widget.likeCount,
                   onToggleLike: widget.onToggleLike,
                   onShare: widget.onShare,
-                  onInstagram: snap.data == true && !_busy && pages.isNotEmpty
+                  onInstagram:
+                      snap.data == true &&
+                          !_busy &&
+                          pages.isNotEmpty &&
+                          _page != igPage
                       ? _shareInstagram
                       : null,
                 ),

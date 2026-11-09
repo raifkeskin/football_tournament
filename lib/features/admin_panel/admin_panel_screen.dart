@@ -9,6 +9,7 @@ import '../../core/services/app_settings.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/services/active_tournament.dart';
 import '../../core/widgets/admin_form.dart';
+import '../../core/widgets/admin_page.dart';
 import '../../core/utils/team_name.dart';
 import '../../core/widgets/app_name_band.dart';
 import '../match/widgets/match_highlights_section.dart';
@@ -149,9 +150,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   int _tab = 1;
 
   /// Tamamlanan haftalar (Haftanın Enleri sekmesi): hafta, bölge, bülten yayında mı.
-  List<({int week, String regionId, String region, bool published})> _enler =
+  List<({int week, String regionId, String region, String? newsId})> _enler =
       const [];
   String _enlerKey = '';
+
+  /// Yayınlanan bültenlerin Instagram bağlantısı (haber id → adres).
+  Map<String, String> _igUrls = const {};
 
   /// Kimlik ibrazı onayı bekleyen kayıt sayısı (yetki alanına göre).
   int _ibrazPending = 0;
@@ -325,7 +329,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         _sb.from('groups').select('id, region_id').eq('season_id', sid),
         _sb
             .from('news')
-            .select('week, region_id')
+            .select('id, week, region_id, auto_data')
             .eq('season_id', sid)
             .eq('auto_kind', 'week_awards'),
       ).wait;
@@ -351,8 +355,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       }
       final published = {
         for (final n in news)
-          ('${n['region_id'] ?? ''}', (n['week'] as num?)?.toInt() ?? 0),
+          ('${n['region_id'] ?? ''}', (n['week'] as num?)?.toInt() ?? 0):
+              '${n['id']}',
       };
+      final igOf = {
+        for (final n in news)
+          '${n['id']}': n['auto_data'] is Map
+              ? '${(n['auto_data'] as Map)['instagram_url'] ?? ''}'
+              : '',
+      };
+      _igUrls = igOf;
       final list = [
         for (final e in stat.entries)
           if (e.value[0] > 0 && e.value[1] == 0)
@@ -360,11 +372,21 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               week: e.key.$2,
               regionId: e.key.$1,
               region: names[e.key.$1] ?? '',
-              published: published.contains(e.key),
+              newsId: published[e.key],
             ),
-      ]..sort((a, b) => b.week.compareTo(a.week));
+      ];
+      // Yalnız mevcut hafta: her bölgenin en son tamamlanan haftası.
+      final latest =
+          <
+            String,
+            ({int week, String regionId, String region, String? newsId})
+          >{};
+      for (final e in list) {
+        final cur = latest[e.regionId];
+        if (cur == null || e.week > cur.week) latest[e.regionId] = e;
+      }
       if (!mounted) return;
-      setState(() => _enler = list.take(6).toList());
+      setState(() => _enler = latest.values.toList());
     } catch (_) {
       _enlerKey = '';
     }
@@ -397,11 +419,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   Widget _enlerCard(
-    ({int week, String regionId, String region, bool published}) e,
+    ({int week, String regionId, String region, String? newsId}) e,
   ) {
+    final published = e.newsId != null;
+    final ig = published ? (_igUrls[e.newsId] ?? '') : '';
     final title = '${e.week}. hafta${e.region.isEmpty ? '' : ' · ${e.region}'}';
     return _shell(
-      border: e.published ? null : _amber.withValues(alpha: 0.5),
+      border: published ? null : _amber.withValues(alpha: 0.5),
       head: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
         child: Row(
@@ -419,9 +443,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               ),
             ),
             Text(
-              e.published ? 'Yayında' : 'Hazırlanmadı',
+              published ? 'Yayında' : 'Hazırlanmadı',
               style: TextStyle(
-                color: e.published ? _greenText : _amber,
+                color: published ? _greenText : _amber,
                 fontSize: 12.5,
                 fontWeight: FontWeight.w800,
               ),
@@ -431,20 +455,49 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       ),
       children: [
         Text(
-          e.published
-              ? 'Haftanın enleri bülteni yayınlandı. Değiştirmek için aç.'
+          published
+              ? 'Haftanın enleri bülteni yayınlandı; yayınlanan bülten '
+                    'değiştirilmez. Instagram\'da paylaşırsan gönderiyi '
+                    'bültenin son sayfası olarak ekleyebilirsin.'
               : 'Bu haftanın bütün maçları bitti. Haftanın 11\'ini ve enlerini '
                     'seçip bülten olarak yayınlayabilirsin.',
           style: const TextStyle(color: _mid, fontSize: 13.5, height: 1.4),
         ),
         const SizedBox(height: 10),
-        FilledButton.icon(
-          onPressed: _openEnler,
-          icon: const Icon(Icons.military_tech_rounded, size: 18),
-          label: Text(e.published ? 'Bülteni aç' : 'Enleri seç ve yayınla'),
-        ),
+        if (!published)
+          FilledButton.icon(
+            onPressed: _openEnler,
+            icon: const Icon(Icons.military_tech_rounded, size: 18),
+            label: const Text('Enleri seç ve yayınla'),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: () => _editInstagram(e.newsId!, ig),
+            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+            label: Text(
+              ig.isEmpty
+                  ? 'Instagram gönderisi ekle'
+                  : 'Instagram gönderisini değiştir',
+            ),
+          ),
       ],
     );
+  }
+
+  /// Yayınlanan bültenin tek değiştirilebilen yeri: Instagram bağlantısı.
+  Future<void> _editInstagram(String newsId, String current) async {
+    final saved = await showAdminPopup<String>(
+      context: context,
+      builder: (_) => _InstagramLinkForm(newsId: newsId, current: current),
+    );
+    if (saved != null) {
+      _loadEnler(force: true);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(saved)));
+      }
+    }
   }
 
   Future<void> _checkEmbed(String? url) async {
@@ -660,7 +713,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final enler = _showEnler
         ? _enler
         : const <
-            ({int week, String regionId, String region, bool published})
+            ({int week, String regionId, String region, String? newsId})
           >[];
     final counts = [pre.length, live.length, post.length, enler.length];
     // Maçı olmayan sekme seçilemez; seçili sekme boşsa sırayla Canlı,
@@ -1634,6 +1687,129 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           trailing: _link('Paylaş', () => _poster(m)),
         ),
       ],
+    );
+  }
+}
+
+/// Yayınlanan Haftanın Enleri bültenine Instagram gönderisi / Reels bağlantısı
+/// ekleme penceresi (bültenin tek değiştirilebilen yeri).
+class _InstagramLinkForm extends StatefulWidget {
+  const _InstagramLinkForm({required this.newsId, required this.current});
+
+  final String newsId;
+  final String current;
+
+  @override
+  State<_InstagramLinkForm> createState() => _InstagramLinkFormState();
+}
+
+class _InstagramLinkFormState extends State<_InstagramLinkForm> {
+  late final _url = TextEditingController(text: widget.current);
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    final v = _url.text.trim();
+    if (v.isNotEmpty && !isInstagramPostUrl(v)) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Instagram gönderisi ya da Reels bağlantısı gir.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final normalized = v.isEmpty
+          ? ''
+          : (v.startsWith('http') ? v : 'https://$v').split('?').first;
+      await Supabase.instance.client.rpc(
+        'set_week_awards_instagram',
+        params: {'p_news_id': widget.newsId, 'p_url': normalized},
+      );
+      nav.pop(
+        v.isEmpty
+            ? 'Instagram bağlantısı kaldırıldı.'
+            : 'Instagram gönderisi eklendi.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      final msg = e is PostgrestException ? e.message : '$e';
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $msg')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminDialogCloseOverlay(
+      onClose: _saving ? null : () => Navigator.of(context).pop(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const AdminDialogHeader(
+            icon: Icons.camera_alt_outlined,
+            title: 'Instagram Gönderisi',
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AdminFieldGroup(
+                    children: [
+                      AdminFieldRow(
+                        icon: Icons.link_rounded,
+                        label: 'Bağlantı',
+                        child: TextField(
+                          controller: _url,
+                          enabled: !_saving,
+                          keyboardType: TextInputType.url,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          cursorColor: kAdminAccent,
+                          decoration: adminInlineInputDecoration(
+                            hint: 'instagram.com/reel/…',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
+                    child: Text(
+                      'Gönderi ya da Reels bağlantısı. Bültenin son sayfası '
+                      'olarak (ör. 2/2) gösterilir. Boş bırakıp kaydedersen '
+                      'kaldırılır.',
+                      style: TextStyle(color: kAdminMuted, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+            child: AdminPrimaryButton(
+              label: 'Kaydet',
+              busy: _saving,
+              onPressed: _saving ? null : _save,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

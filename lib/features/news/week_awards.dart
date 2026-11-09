@@ -230,6 +230,7 @@ class WeekAwards {
     required this.formation,
     required this.eleven,
     required this.awards,
+    this.instagramUrl = '',
   });
 
   factory WeekAwards.fromJson(Map d) => WeekAwards(
@@ -245,6 +246,7 @@ class WeekAwards {
       for (final a in (d['awards'] as List? ?? const []))
         if (a is Map) WeekAward.fromJson(a),
     ],
+    instagramUrl: (d['instagram_url'] ?? '').toString().trim(),
   );
 
   final int week;
@@ -255,6 +257,9 @@ class WeekAwards {
   final String formation;
   final List<ElevenSlot> eleven;
   final List<WeekAward> awards;
+
+  /// Yayından sonra eklenen Instagram gönderisi / Reels (bültenin son sayfası).
+  final String instagramUrl;
 
   bool get hasEleven =>
       eleven.isNotEmpty &&

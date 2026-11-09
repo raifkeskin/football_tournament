@@ -155,6 +155,9 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
   bool get _fullAccess =>
       AppSession.of(context).value.canManageLeague(_leagueId);
 
+  /// Yayınlanan bülten değiştirilmez (yalnız admin düzeltebilir).
+  bool get _locked => _exists && !AppSession.of(context).value.isAdmin;
+
   League? get _league =>
       widget.tournaments.where((l) => l.id == _leagueId).firstOrNull;
 
@@ -1112,7 +1115,9 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
         child: AdminPrimaryButton(
           label: _exists ? 'Bülteni güncelle' : 'Bülteni yayınla',
           busy: _saving,
-          onPressed: !ready || _saving || _uploading ? null : _publish,
+          onPressed: !ready || _saving || _uploading || _locked
+              ? null
+              : _publish,
         ),
       ),
       body: ListView(
@@ -1199,7 +1204,9 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
           else if (ready) ...[
             if (_exists)
               _Hint(
-                'Bu haftanın bülteni yayınlandı. Değiştirip yeniden yayınlarsan haber güncellenir.',
+                _locked
+                    ? 'Bu haftanın bülteni yayınlandı; yayınlanan bülten değiştirilmez.'
+                    : 'Bu haftanın bülteni yayınlandı. Değiştirip yeniden yayınlarsan haber güncellenir.',
                 color: kAdminAmber,
               ),
             const _Hint(
