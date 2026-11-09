@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
+import '../../../core/utils/string_utils.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
@@ -881,6 +882,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     List<_Option> options,
     String? current,
   ) {
+    var query = '';
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -892,81 +894,121 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
         expand: false,
         initialChildSize: 0.75,
         maxChildSize: 0.92,
-        builder: (ctx, scroll) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            Expanded(
-              child: options.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Bu hafta aday yok.',
-                        style: TextStyle(color: kAdminMuted),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: scroll,
-                      itemCount: options.length,
-                      itemBuilder: (ctx, i) {
-                        final o = options[i];
-                        final on = o.key == current;
-                        return ListTile(
-                          onTap: () => Navigator.pop(ctx, o.key),
-                          leading: SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: o.logo.isEmpty
-                                ? const Icon(
-                                    Icons.shield_outlined,
-                                    color: Colors.white38,
-                                  )
-                                : WebSafeImage(
-                                    url: o.logo,
-                                    fit: BoxFit.contain,
-                                  ),
-                          ),
-                          title: Text(
-                            o.title,
-                            style: TextStyle(
-                              color: on ? kAdminAccent : Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          subtitle: Text(
-                            o.sub,
-                            style: const TextStyle(
-                              color: kAdminMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                          trailing: o.trailing.isEmpty
-                              ? (on
-                                    ? const Icon(
-                                        Icons.check_rounded,
-                                        color: kAdminAccent,
-                                      )
-                                    : null)
-                              : Text(
-                                  o.trailing,
-                                  style: const TextStyle(
-                                    color: kAdminAmber,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                        );
-                      },
+        builder: (ctx, scroll) => StatefulBuilder(
+          builder: (ctx, setS) {
+            final nq = StringUtils.normalizeTrKey(query);
+            final shown = nq.isEmpty
+                ? options
+                : [
+                    for (final o in options)
+                      if (StringUtils.normalizeTrKey(
+                        '${o.title} ${o.sub}',
+                      ).contains(nq))
+                        o,
+                  ];
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
                     ),
-            ),
-          ],
+                  ),
+                ),
+                if (options.length > 5)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: TextField(
+                      onChanged: (v) => setS(() => query = v),
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: kAdminAccent,
+                      decoration: InputDecoration(
+                        hintText: 'İsimle ara',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: kAdminMuted,
+                        ),
+                        isDense: true,
+                        filled: true,
+                        fillColor: const Color(0xFF0F172A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: shown.isEmpty
+                      ? Center(
+                          child: Text(
+                            options.isEmpty
+                                ? 'Bu hafta aday yok.'
+                                : 'Eşleşen yok.',
+                            style: TextStyle(color: kAdminMuted),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: scroll,
+                          itemCount: shown.length,
+                          itemBuilder: (ctx, i) {
+                            final o = shown[i];
+                            final on = o.key == current;
+                            return ListTile(
+                              onTap: () => Navigator.pop(ctx, o.key),
+                              leading: SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: o.logo.isEmpty
+                                    ? const Icon(
+                                        Icons.shield_outlined,
+                                        color: Colors.white38,
+                                      )
+                                    : WebSafeImage(
+                                        url: o.logo,
+                                        fit: BoxFit.contain,
+                                      ),
+                              ),
+                              title: Text(
+                                o.title,
+                                style: TextStyle(
+                                  color: on ? kAdminAccent : Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                o.sub,
+                                style: const TextStyle(
+                                  color: kAdminMuted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: o.trailing.isEmpty
+                                  ? (on
+                                        ? const Icon(
+                                            Icons.check_rounded,
+                                            color: kAdminAccent,
+                                          )
+                                        : null)
+                                  : Text(
+                                      o.trailing,
+                                      style: const TextStyle(
+                                        color: kAdminAmber,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

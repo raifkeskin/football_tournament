@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
+import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
@@ -523,6 +524,8 @@ class _WeeklyPickScreenState extends State<WeeklyPickScreen> {
   String _score(_MatchLite m) =>
       '${_team(m.homeId).name} ${m.hs}-${m.as} ${_team(m.awayId).name}';
 
+  String _q = '';
+
   List<_Candidate> get _candidates {
     final d = _data;
     if (d == null) return const [];
@@ -964,7 +967,37 @@ class _WeeklyPickScreenState extends State<WeeklyPickScreen> {
                   ),
                 ),
               ),
-            for (final c in candidates)
+            if (candidates.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TextField(
+                  onChanged: (v) => setState(() => _q = v),
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: kAdminAccent,
+                  decoration: InputDecoration(
+                    hintText: 'İsimle ara',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: kAdminMuted,
+                    ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+            for (final c in candidates.where(
+              (c) =>
+                  _q.trim().isEmpty ||
+                  StringUtils.normalizeTrKey(
+                    '${c.title} ${c.sub} ${c.team.name}',
+                  ).contains(StringUtils.normalizeTrKey(_q)),
+            ))
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _CandidateRow(
