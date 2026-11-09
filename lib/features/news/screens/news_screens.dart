@@ -2215,10 +2215,12 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             child: _photoHeader(n),
           ),
           Positioned(
-            left: 0,
-            right: 0,
-            // Küpür skorun hemen altından başlar ve ekranın ~%88'ini kaplar
-            // (taban genişlik 420: metin daha az satıra yayılır, ölçek büyür).
+            // Yanlarda 20'şer boşluk: kısa haberde küpür kenardan kenara
+            // uzamaz, en fazla ekranın ~%90'ı olur.
+            left: 20,
+            right: 20,
+            // Küpür skorun hemen altından başlar (taban genişlik 420: metin
+            // daha az satıra yayılır, ölçek büyür).
             top: 200,
             bottom: 56,
             child: FittedBox(
