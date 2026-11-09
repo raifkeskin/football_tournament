@@ -79,6 +79,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// sunucudaki hâl bundan farklıysa esameyi başka bir sorumlu değiştirmiştir.
   String? _baseSig;
 
+  /// Kayıtlı saha yerleşimi (oyuncu → pos_x). Esame yeniden kaydedilirken
+  /// Kadro sekmesinde yapılan diziliş düzenlemesi silinmesin diye korunur.
+  Map<String, int> _savedSlots = {};
+
   /// Numarası yazılan oyuncu: satırı vurgulanır, klavyenin üstündeki
   /// şeritte adı görünür.
   String? _editingId;
@@ -260,6 +264,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           for (final r in rosters)
             (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
         ]);
+        _savedSlots = {
+          for (final r in rosters)
+            if (r.isStarting && r.slot != null) r.playerId: r.slot!,
+        };
         // Esame sırası kayıtlıysa (list_order) aynen o sırayla açılır.
         final ordered = rosters.every((r) => r.listOrder != null)
             ? ([...rosters]
@@ -756,6 +764,28 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     if (!mounted) return false;
     setState(() => _isSaving = true);
     try {
+      // Saha yerleşimi: aynı ilk 11 ise olduğu gibi; tek oyuncu değiştiyse
+      // giren çıkanın yerine; daha fazlası değiştiyse yalnız kaleci (ilk
+      // sıradaki) sabit, gerisini diziliş ekranı yeniden dizer.
+      final starters = _starters.toSet();
+      final complete =
+          _savedSlots.isNotEmpty &&
+          _savedSlots.keys.toSet().length == _savedSlots.length &&
+          _savedSlots.values.toSet().length == _savedSlots.length;
+      final slots = <String, int>{};
+      if (complete) {
+        final out = _savedSlots.keys
+            .where((k) => !starters.contains(k))
+            .toList();
+        final inn = starters.where((k) => !_savedSlots.containsKey(k)).toList();
+        if (out.isEmpty && inn.isEmpty) {
+          slots.addAll(_savedSlots);
+        } else if (out.length == 1 && inn.length == 1) {
+          slots.addAll(_savedSlots);
+          slots[inn.first] = slots.remove(out.first)!;
+        }
+      }
+      if (slots.isEmpty && _starters.isNotEmpty) slots[_starters.first] = 0;
       final rosters = <MatchRosterModel>[
         for (final id in ids)
           MatchRosterModel(
@@ -769,7 +799,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             isStarting: _starters.contains(id),
             jerseyNumber: _jersey[id]?.text.trim(),
             isCaptain: _starters.contains(id) && id == _captainId,
-            slot: _starters.isNotEmpty && id == _starters.first ? 0 : null,
+            slot: _starters.contains(id) ? slots[id] : null,
           ),
       ];
       await _matchService.updateMatchRoster(
@@ -781,6 +811,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         rosters: rosters,
       );
       _dirty = false;
+      _savedSlots = slots.length == starters.length ? slots : {};
       _baseSig = _sigOf([
         for (final r in rosters)
           (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
