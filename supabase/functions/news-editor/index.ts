@@ -349,7 +349,7 @@ Kurallar:
 - Maç sonrası haberinde son paragrafa iki takımın sonraki maçını (tarih, rakip, rakibin durumu) kısaca ekle; veri yoksa ekleme.
 - Maç öncesi haberde 'hava' verisi varsa sıcaklık, rüzgâr ve yağış ihtimalini maçın oynanacağı koşullar olarak bir cümleyle an; yoksa hava durumundan söz etme.
 - Maç öncesi haberde sonuç tahmini yapma; iki takımın durumunu, formunu, önceki karşılaşmalarını, gol yarışını ve maçın yerini/zamanını anlat.
-Çıktı JSON: {"manset": string, "spot": string (1-2 cümle), "paragraflar": string[] (en çok 4 paragraf, toplam 120-170 kelime; son paragraf sonraki maç bilgisi)}`;
+Çıktı JSON: {"manset": string, "spot": string (1-2 cümle), "paragraflar": string[] (3-5 paragraf, toplam 140-220 kelime)}`;
 
 const SCHEMA = {
   type: "OBJECT",
