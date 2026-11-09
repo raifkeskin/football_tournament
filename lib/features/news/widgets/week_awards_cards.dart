@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:video_player/video_player.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -1373,14 +1374,14 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
 
   /// Haftanın Golü videosu (build'te güncellenir) ve kartın sayfa sırası.
   String _goalVideoUrl = '';
-  int _goalPage = -1;
+  Set<int> _goalPages = {};
 
   /// Instagram gönderisi olan sayfalar (görüntü olarak paylaşılamaz).
   Set<int> _igPages = {};
 
   Future<void> _shareInstagram() async {
     if (_busy) return;
-    if (_page == _goalPage && _goalVideoUrl.isNotEmpty) {
+    if (_goalPages.contains(_page) && _goalVideoUrl.isNotEmpty) {
       // 2 sn kart + gol videosu: hikâye olarak paylaşılır.
       final messenger = ScaffoldMessenger.of(context);
       setState(() => _busy = true);
@@ -1498,17 +1499,35 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
 
         // Sayfalar: her kart; enin Instagram bağlantısı varsa kartın hemen
         // ardından o gönderi (2. sayfa).
-        final entries = <({int card, WeekAward? award, bool ig})>[];
+        final mp4Ok =
+            AppSession.of(context).value.isAdmin ||
+            AppSettings.goalClipMp4Enabled.value;
+        String? clipMp4(WeekAward a) {
+          final c = a.clip;
+          final u = (c?['story_url'] ?? c?['clip_url'] ?? '').toString();
+          return u.isEmpty ? null : u;
+        }
+
+        final entries =
+            <({int card, WeekAward? award, bool ig, String? video})>[];
         for (var i = 0; i < cards.length; i++) {
           final a = awardAt(i);
-          entries.add((card: i, award: a, ig: false));
+          entries.add((card: i, award: a, ig: false, video: null));
           if (a != null && a.instagramUrl.isNotEmpty) {
-            entries.add((card: i, award: a, ig: true));
+            entries.add((card: i, award: a, ig: true, video: null));
+          } else if (a != null &&
+              a.kind == AwardKind.goal &&
+              mp4Ok &&
+              clipMp4(a) != null) {
+            // Instagram gönderisi yoksa gol videosu aynı yerde 2. sayfa.
+            entries.add((card: i, award: a, ig: false, video: clipMp4(a)));
           }
         }
         final pages = <Widget>[
           for (final e in entries)
-            if (!e.ig)
+            if (e.video != null)
+              _ClipPage(url: e.video!, label: '${e.award!.kind.full} · 2/2')
+            else if (!e.ig)
               GestureDetector(
                 onTap: widget.expandOnTap
                     ? () => openFull(e.card)
@@ -1548,21 +1567,26 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                 ),
               ),
         ];
-        _igPages = {
-          for (var i = 0; i < entries.length; i++)
-            if (entries[i].ig) i,
-        };
         final videoOk =
             w.goalVideoUrl.isNotEmpty &&
             (AppSession.of(context).value.isAdmin ||
                 AppSettings.goalClipMp4Enabled.value);
+        _igPages = {
+          for (var i = 0; i < entries.length; i++)
+            if (entries[i].ig || (entries[i].video != null && !videoOk)) i,
+        };
         _goalVideoUrl = videoOk ? w.goalVideoUrl : '';
-        _goalPage = entries.indexWhere(
-          (e) => !e.ig && e.award?.kind == AwardKind.goal,
-        );
+        _goalPages = {
+          for (var i = 0; i < entries.length; i++)
+            if (!entries[i].ig && entries[i].award?.kind == AwardKind.goal) i,
+        };
         // Görünen kart haftanın golüyse altında "Golü izle".
         final cur = _page < entries.length ? entries[_page] : null;
-        final goal = cur != null && !cur.ig ? _goalWithClip(cur.award) : null;
+        // Gol videosu 2. sayfa olarak varsa "Golü izle" düğmesi gerekmez.
+        final goal =
+            cur != null && !cur.ig && !entries.any((e) => e.video != null)
+            ? _goalWithClip(cur.award)
+            : null;
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -2284,6 +2308,117 @@ class WeekAwardsCover extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Haftanın Golü kesiti (MP4) kartın 2. sayfasında: dokununca oynar.
+class _ClipPage extends StatefulWidget {
+  const _ClipPage({required this.url, required this.label});
+
+  final String url;
+  final String label;
+
+  @override
+  State<_ClipPage> createState() => _ClipPageState();
+}
+
+class _ClipPageState extends State<_ClipPage> {
+  VideoPlayerController? _c;
+  bool _failed = false;
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    var c = _c;
+    if (c == null) {
+      // Veri harcamamak için video yalnız dokununca indirilmeye başlar.
+      c = _c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      setState(() {});
+      try {
+        await c.initialize();
+        await c.setLooping(true);
+        if (!mounted) return;
+        setState(() {});
+        await c.play();
+      } catch (_) {
+        if (mounted) setState(() => _failed = true);
+      }
+      return;
+    }
+    if (!c.value.isInitialized) return;
+    c.value.isPlaying ? await c.pause() : await c.play();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    final ready = c != null && c.value.isInitialized;
+    return GestureDetector(
+      onTap: _toggle,
+      child: ColoredBox(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (ready)
+              Center(
+                child: AspectRatio(
+                  aspectRatio: c.value.aspectRatio,
+                  child: VideoPlayer(c),
+                ),
+              ),
+            if (!ready || !c.value.isPlaying)
+              Center(
+                child: _failed
+                    ? const Text(
+                        'Video açılamadı',
+                        style: TextStyle(color: Colors.white70),
+                      )
+                    : c != null && !ready
+                    ? const CircularProgressIndicator(color: Colors.white70)
+                    : Container(
+                        width: 72,
+                        height: 72,
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 48,
+                        ),
+                      ),
+              ),
+            Positioned(
+              left: 10,
+              top: 10,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    widget.label,
+                    style: _cond(13, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
