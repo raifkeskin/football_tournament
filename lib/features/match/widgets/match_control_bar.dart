@@ -201,8 +201,8 @@ class _MatchControlBarState extends State<MatchControlBar> {
     if (mine) {
       // Yer kaplamasın: küçük rozet; devre butonları yanında durur.
       return Container(
-        height: 32,
-        padding: const EdgeInsets.only(left: 10, right: 4),
+        height: 40,
+        padding: const EdgeInsets.only(left: 12, right: 4),
         decoration: BoxDecoration(
           color: kAdminAccent.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(99),
@@ -211,8 +211,8 @@ class _MatchControlBarState extends State<MatchControlBar> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.sports_rounded, color: kAdminAccent, size: 15),
-            const SizedBox(width: 5),
+            const Icon(Icons.sports_rounded, color: kAdminAccent, size: 18),
+            const SizedBox(width: 6),
             const Flexible(
               child: Text(
                 'Yönetiyorsun',
@@ -221,7 +221,7 @@ class _MatchControlBarState extends State<MatchControlBar> {
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
               ),
             ),
@@ -237,7 +237,7 @@ class _MatchControlBarState extends State<MatchControlBar> {
                 'Bırak',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 12,
+                  fontSize: 14,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -386,7 +386,9 @@ Future<void> askMatchTakeover(BuildContext context, String matchId) async {
   final name = (s['controller_name'] ?? 'Başka bir sorumlu').toString();
   if (s['req_mine'] == true) {
     messenger.showSnackBar(
-      SnackBar(content: Text('Devir isteğin gönderildi; $name onayı bekleniyor.')),
+      SnackBar(
+        content: Text('Devir isteğin gönderildi; $name onayı bekleniyor.'),
+      ),
     );
     return;
   }
