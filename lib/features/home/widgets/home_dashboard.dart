@@ -2694,6 +2694,14 @@ class _HomePollButtonState extends State<_HomePollButton> {
   void initState() {
     super.initState();
     _load();
+    // Ana sayfadaki katılım kartından yanıt verilince sayaç yenilenir.
+    AttendanceHomeCard.answerSaved.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    AttendanceHomeCard.answerSaved.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

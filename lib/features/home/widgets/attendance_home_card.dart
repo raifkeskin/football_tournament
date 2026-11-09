@@ -17,6 +17,9 @@ class AttendanceHomeCard extends StatefulWidget {
   /// Ana sayfa yenilenince artırılır.
   static final refresh = ValueNotifier<int>(0);
 
+  /// Bir yanıt kaydedilince artar; anket sayacını gösteren yerler yenilenir.
+  static final answerSaved = ValueNotifier<int>(0);
+
   /// Bütün sorgular yanıtlandıysa kart kalkar; selamlamada yeşil tikli
   /// katılım ikonu çıkar (ilk cevabın durumu: yes / no).
   static final answered = ValueNotifier<String?>(null);
@@ -128,6 +131,7 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
           'p_status': status,
         },
       );
+      AttendanceHomeCard.answerSaved.value++;
       final prev = p['status'];
       if (prev == 'yes') p['yes_count'] = _count(p, 'yes_count') - 1;
       if (prev == 'no') p['no_count'] = _count(p, 'no_count') - 1;
