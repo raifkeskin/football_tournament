@@ -443,11 +443,170 @@ def measure_drive():
     log('Drive ölçüldü:', round(total / 1e9, 2), 'GB')
 
 
+# --- Haftanın Golü hikâye videosu: 2 sn kart + gol videosu -------------------
+AWARD_QUERY = """
+select coalesce(json_agg(t), '[]'::json) from (
+  select n.id, n.week, n.auto_data->>'league_name' as league,
+         n.auto_data->>'league_logo' as league_logo, a as goal
+    from public.news n, jsonb_array_elements(n.auto_data->'awards') a
+   where n.auto_kind = 'week_awards' and a->>'kind' = 'goal'
+     and coalesce(a->'clip'->>'story_url', '') <> ''
+     and coalesce(n.auto_data->>'goal_video_url', '') = ''
+     and n.created_at > now() - interval '21 days'
+   limit 4
+) t
+"""
+
+
+def tr_upper(t):
+    return (t or '').replace('i', 'İ').replace('ı', 'I').upper()
+
+
+def award_intro(g, out, tmp):
+    """9:16 tuvalde ortalanmış 4:5 'Haftanın Golü' kartı (uygulamadaki kartın aynısı)."""
+    W, H = 1080, 1920
+    CW, CH = 1080, 1350
+    top = (H - CH) // 2
+    bg = Image.linear_gradient('L').resize((W, H))
+    im = Image.merge('RGB', [bg.point(lambda v, a=a: int(a[0] + (a[1] - a[0]) * v / 255))
+                             for a in ((15, 10), (23, 16), (42, 30))]).convert('RGBA')
+    card = Image.new('RGBA', (CW, CH), (11, 24, 28, 255))
+    d = ImageDraw.Draw(card)
+    CORAL = (248, 113, 113, 255)
+    GOLD = (226, 184, 69, 255)
+    WHITE = (241, 245, 249, 255)
+    MUTED = (203, 213, 225, 255)
+    goal, pl, team = g['goal'], g['goal'].get('player') or {}, g['goal'].get('team') or {}
+
+    # Sol: oyuncu fotoğrafı, sağ kenarı eğik kesik.
+    top_x, bot_x = int(CW * 0.53), int(CW * 0.43)
+    photo = fetch(goal.get('photo') or pl.get('photo'), os.path.join(tmp, 'ph.img'))
+    if photo:
+        ph = Image.open(photo).convert('RGBA')
+        pw = top_x + 20
+        scale = max(pw / ph.width, CH / ph.height)
+        ph = ph.resize((int(ph.width * scale), int(ph.height * scale)), Image.LANCZOS)
+        ox, oy = (ph.width - pw) // 2, int((ph.height - CH) * 0.3)
+        ph = ph.crop((ox, oy, ox + pw, oy + CH))
+        mask = Image.new('L', (CW, CH), 0)
+        ImageDraw.Draw(mask).polygon([(0, 0), (top_x, 0), (bot_x, CH), (0, CH)], fill=255)
+        layer = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
+        layer.paste(ph, (0, 0))
+        card.paste(layer, (0, 0), mask)
+    else:
+        lg = fetch(team.get('logo'), os.path.join(tmp, 'tl.img'))
+        if lg:
+            t = Image.open(lg).convert('RGBA')
+            t.thumbnail((420, 420), Image.LANCZOS)
+            card.alpha_composite(t, (80, CH // 2 - t.height // 2))
+
+    right = CW - 56
+    def rtext(y, t, fo, fill, sp=0):
+        if sp:
+            w = sum(d.textlength(ch, font=fo) for ch in t) + sp * (len(t) - 1)
+            x = right - w
+            for ch in t:
+                d.text((x, y), ch, font=fo, fill=fill)
+                x += d.textlength(ch, font=fo) + sp
+        else:
+            d.text((right - d.textlength(t, font=fo), y), t, font=fo, fill=fill)
+
+    def fit(t, name, size, maxw):
+        while size > 30 and d.textlength(t, font=font(name, size)) > maxw:
+            size -= 4
+        return font(name, size)
+
+    # Üst: turnuva + hafta, sağda turnuva logosu
+    ll = fetch(g.get('league_logo'), os.path.join(tmp, 'll.img'))
+    lx = right
+    if ll:
+        t = Image.open(ll).convert('RGBA')
+        t.thumbnail((96, 96), Image.LANCZOS)
+        card.alpha_composite(t, (right - t.width, 56))
+        lx = right - t.width - 20
+    league = tr_upper(g.get('league'))
+    fl = fit(league, 'BarlowCondensed-ExtraBold.ttf', 36, 440)
+    d.text((lx - d.textlength(league, font=fl), 60), league, font=fl, fill=GOLD)
+    wk = f"{g['week']}. HAFTA"
+    fw = font('BarlowCondensed-ExtraBold.ttf', 30)
+    d.text((lx - d.textlength(wk, font=fw), 106), wk, font=fw, fill=WHITE)
+
+    # Orta: HAFTANIN GOLÜ + oyuncu adı
+    rtext(470, 'HAFTANIN', font('BarlowCondensed-ExtraBold.ttf', 34), CORAL, sp=10)
+    rtext(505, 'GOLÜ', font('BarlowCondensed-ExtraBoldItalic.ttf', 150), CORAL)
+    parts = (pl.get('name') or '').split()
+    first, last = ' '.join(parts[:-1]), (parts[-1] if parts else '')
+    if first:
+        rtext(690, tr_upper(first), fit(tr_upper(first), 'BarlowCondensed-ExtraBold.ttf', 70, 480), WHITE)
+    fl2 = fit(tr_upper(last), 'BarlowCondensed-ExtraBoldItalic.ttf', 150, 500)
+    rtext(740, tr_upper(last), fl2, CORAL)
+    d.line([(right - 220, 925), (right, 925)], fill=CORAL, width=5)
+
+    # Takım adı + arması
+    tn = (team.get('name') or '').replace(' Masterlar', '').replace(' Masterler', '')
+    tn = tr_upper(tn)
+    tl = fetch(team.get('logo'), os.path.join(tmp, 'tl2.img'))
+    tx = right
+    if tl:
+        t = Image.open(tl).convert('RGBA')
+        t.thumbnail((82, 82), Image.LANCZOS)
+        card.alpha_composite(t, (right - t.width, 950))
+        tx = right - t.width - 16
+    ft = fit(tn, 'BarlowCondensed-ExtraBold.ttf', 40, 380)
+    d.text((tx - d.textlength(tn, font=ft), 965), tn, font=ft, fill=MUTED)
+
+    # Alt: Lig Masası imzası
+    fb = font('BarlowCondensed-ExtraBold.ttf', 44)
+    tw = d.textlength('LİG MASASI', font=fb)
+    d.text((right - tw, CH - 100), 'LİG MASASI', font=fb, fill=WHITE)
+    al = Image.open(APP_LOGO).convert('RGBA')
+    al.thumbnail((68, 68), Image.LANCZOS)
+    card.alpha_composite(al, (int(right - tw - 16 - al.width), CH - 108))
+
+    im.alpha_composite(card, (0, top))
+    im.convert('RGB').save(out)
+
+
+def award_videos():
+    raw = psql(AWARD_QUERY)
+    rows = json.loads(raw) if raw else []
+    for g in rows:
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                intro = os.path.join(tmp, 'intro.png')
+                award_intro(g, intro, tmp)
+                story = os.path.join(tmp, 'story.mp4')
+                urllib.request.urlretrieve(g['goal']['clip']['story_url'], story)
+                out = os.path.join(tmp, 'award.mp4')
+                run([f'{BREW}/ffmpeg', '-v', 'error', '-y', '-loop', '1', '-t', '2', '-i', intro,
+                     '-i', story, '-f', 'lavfi', '-t', '2', '-i', 'anullsrc=r=44100:cl=stereo',
+                     '-filter_complex',
+                     '[0:v]fps=30,scale=1080:1920,format=yuv420p,setsar=1[v0];'
+                     '[1:v]fps=30,scale=1080:1920,format=yuv420p,setsar=1[v1];'
+                     '[2:a]aresample=44100,aformat=channel_layouts=stereo[a0];'
+                     '[1:a]aresample=44100,aformat=channel_layouts=stereo[a1];'
+                     '[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]',
+                     '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '18',
+                     '-preset', 'medium', '-c:a', 'aac', '-b:a', '128k',
+                     '-movflags', '+faststart', out])
+                url = upload(out, f"weekly/{g['id']}_goal.mp4")
+                psql("update public.news set auto_data = jsonb_set(auto_data, '{goal_video_url}', "
+                     f"to_jsonb({q(url)}::text)) where id = {q(g['id'])}")
+            log('Haftanın Golü videosu hazır:', g['week'], '. hafta')
+        except Exception as e:
+            log('Haftanın Golü videosu HATA:', str(e)[-300:])
+
+
+
 def main():
     try:
         measure_drive()
     except Exception as e:
         log('Drive ölçülemedi:', e)
+    try:
+        award_videos()
+    except Exception as e:
+        log('Haftanın Golü videoları:', e)
     ap = argparse.ArgumentParser()
     ap.add_argument('--match')
     ap.add_argument('--limit', type=int, default=8)

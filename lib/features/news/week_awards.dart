@@ -231,6 +231,7 @@ class WeekAwards {
     required this.eleven,
     required this.awards,
     this.instagramUrl = '',
+    this.goalVideoUrl = '',
   });
 
   factory WeekAwards.fromJson(Map d) => WeekAwards(
@@ -247,6 +248,7 @@ class WeekAwards {
         if (a is Map) WeekAward.fromJson(a),
     ],
     instagramUrl: (d['instagram_url'] ?? '').toString().trim(),
+    goalVideoUrl: (d['goal_video_url'] ?? '').toString().trim(),
   );
 
   final int week;
@@ -260,6 +262,9 @@ class WeekAwards {
 
   /// Yayından sonra eklenen Instagram gönderisi / Reels (bültenin son sayfası).
   final String instagramUrl;
+
+  /// Haftanın Golü hikâye videosu (2 sn kart + gol); Mac işi üretir.
+  final String goalVideoUrl;
 
   bool get hasEleven =>
       eleven.isNotEmpty &&
