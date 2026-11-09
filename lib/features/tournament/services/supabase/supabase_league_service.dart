@@ -667,7 +667,7 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data, link_url, headline, article, pending_until, '
+      'auto_kind, match_id, week, auto_data, link_url, headline, article, deck, pending_until, '
       'reactions, comment_count, poll, pinned_at';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
@@ -791,6 +791,9 @@ class SupabaseLeagueService implements ILeagueService {
       article: (r['article'] ?? '').toString().trim().isEmpty
           ? null
           : r['article'].toString().trim(),
+      deck: (r['deck'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['deck'].toString().trim(),
       headline: (r['headline'] ?? '').toString().trim().isEmpty
           ? null
           : r['headline'].toString().trim(),
@@ -885,6 +888,9 @@ class SupabaseLeagueService implements ILeagueService {
       'auto_data',
       'link_url',
       'pinned_at',
+      'headline',
+      'article',
+      'deck',
     ];
     for (final k in watched) {
       if (!next.containsKey(k)) continue;

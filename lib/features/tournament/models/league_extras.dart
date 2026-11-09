@@ -44,6 +44,7 @@ class NewsItem {
     this.linkUrl,
     this.headline,
     this.article,
+    this.deck,
     this.pendingUntil,
     this.reactions = const {},
     this.commentCount = 0,
@@ -74,6 +75,9 @@ class NewsItem {
   /// Sorumlunun düzenlediği haber metni (paragraflar boş satırla ayrılır);
   /// null ise kurallarla yazılan metin.
   final String? article;
+
+  /// Spor editörü tarzı haberin spotu; null ise kurallarla yazılan spot.
+  final String? deck;
 
   /// Onay bekleyen otomatik haber: bu saatte kendiliğinden yayınlanır.
   final DateTime? pendingUntil;
