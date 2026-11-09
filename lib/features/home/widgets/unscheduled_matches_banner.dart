@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/app_session.dart';
 import '../../match/models/match.dart';
-import '../../match/screens/match_details_screen.dart';
+import '../../../core/widgets/admin_form.dart';
+import '../../match/widgets/match_schedule_dialog.dart';
 
 /// Oynanacak haftada tarihi ya da stadı girilmemiş maç.
 class _Unscheduled {
@@ -119,24 +120,21 @@ class _UnscheduledMatchesBannerState extends State<UnscheduledMatchesBanner> {
     }
   }
 
+  /// Maçın tarih / saat / saha pencereni (standart popup) açar; maç
+  /// detayına gidilmez.
   Future<void> _openMatch(_Unscheduled u) async {
-    final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    final isAdmin = AppSession.of(context).value.isAdmin;
     try {
       final row = await Supabase.instance.client
           .from('matches')
           .select()
           .eq('id', u.id)
           .single();
-      await nav.push(
-        MaterialPageRoute<void>(
-          settings: const RouteSettings(name: 'MatchDetailsScreen'),
-          builder: (_) => MatchDetailsScreen(
-            match: MatchModel.fromMap(row, u.id),
-            isAdmin: isAdmin,
-          ),
-        ),
+      if (!mounted) return;
+      await showMatchScheduleDialog(
+        context,
+        match: MatchModel.fromMap(row, u.id),
+        onDataChanged: _load,
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Maç açılamadı: $e')));
@@ -145,86 +143,11 @@ class _UnscheduledMatchesBannerState extends State<UnscheduledMatchesBanner> {
   }
 
   Future<void> _openList() async {
-    final picked = await showModalBottomSheet<_Unscheduled>(
+    final picked = await showAdminOptionPicker<_Unscheduled>(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (c) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(c).height * 0.7,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 18, 20, 10),
-                child: Text(
-                  'Tarihi ya da stadı eksik maçlar',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 6),
-                  itemBuilder: (_, i) {
-                    final u = _items[i];
-                    return Material(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      child: ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        onTap: () => Navigator.pop(c, u),
-                        leading: const Icon(
-                          Icons.edit_calendar_rounded,
-                          color: _yellow,
-                        ),
-                        title: Text(
-                          '${u.home} – ${u.away}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          u.when,
-                          style: const TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 12,
-                          ),
-                        ),
-                        trailing: const Text(
-                          'Gir ›',
-                          style: TextStyle(
-                            color: _yellow,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'Tarihi ya da stadı eksik maçlar',
+      items: _items,
+      labelBuilder: (u) => '${u.home} – ${u.away} · ${u.when}',
     );
     if (picked != null && mounted) await _openMatch(picked);
   }
