@@ -9,6 +9,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/photo_crop_screen.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../auth/password_change_popup.dart';
 import '../../auth/registration/registration_service.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../identity/change_phone_screen.dart';
@@ -499,6 +500,36 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
           _photoSection(),
           const SizedBox(height: 22),
           _phoneSection(),
+          // Şifre: telefona gelen kodla değiştirilir (ayar açıkken).
+          ValueListenableBuilder<bool>(
+            valueListenable: AppSettings.passwordChangeEnabled,
+            builder: (context, on, _) => !on
+                ? const SizedBox.shrink()
+                : AdminFormSection(
+                    title: 'Güvenlik',
+                    child: AdminFieldGroup(
+                      children: [
+                        AdminFieldRow(
+                          icon: Icons.vpn_key_outlined,
+                          label: 'Şifre',
+                          onTap: () => showPasswordChangePopup(context),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.white54,
+                          ),
+                          child: const Text(
+                            'Şifre değiştir',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
           AdminFormSection(
             title: 'Ad Soyad',
             child: AdminFieldGroup(

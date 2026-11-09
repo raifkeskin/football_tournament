@@ -40,6 +40,7 @@ class AppSettings {
   static const _kLivePitch = 'live_pitch_enabled';
   static const _kAdminPanel = 'admin_panel_enabled';
   static const _kIbraz = 'ibraz_enabled';
+  static const _kPasswordChange = 'password_change_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -168,6 +169,9 @@ class AppSettings {
 
   /// Kimlik ibrazıyla onay + kimliğini okutmadan kayıt (yeni özellik kapısı).
   static final ibrazEnabled = ValueNotifier<bool>(false);
+
+  /// Profilde telefon koduyla şifre değiştirme (yeni özellik kapısı).
+  static final passwordChangeEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -262,6 +266,8 @@ class AppSettings {
           adminPanelEnabled.value = r['value'] == true;
         } else if (r['key'] == _kIbraz) {
           ibrazEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kPasswordChange) {
+          passwordChangeEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {
@@ -360,7 +366,12 @@ class AppSettings {
   static Future<Map<String, bool>> loadIbrazSettings() async {
     final rows = await _sb.from('app_settings').select('key, value').inFilter(
       'key',
-      [_kIbraz, 'ibraz_approve_owner', 'ibraz_approve_region'],
+      [
+        _kIbraz,
+        'ibraz_approve_owner',
+        'ibraz_approve_region',
+        _kPasswordChange,
+      ],
     );
     return {for (final r in rows) r['key'].toString(): r['value'] == true};
   }
@@ -372,6 +383,7 @@ class AppSettings {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
     if (key == _kIbraz) ibrazEnabled.value = on;
+    if (key == _kPasswordChange) passwordChangeEnabled.value = on;
   }
 
   static Future<void> setManualPlayerCreateEnabled(bool enabled) async {

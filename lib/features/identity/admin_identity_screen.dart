@@ -132,6 +132,14 @@ class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
                     'Kendi turnuvasındaki kayıtlar',
                   ),
                   _ibrazRow(
+                    Icons.vpn_key_outlined,
+                    'Şifre değiştirme',
+                    'password_change_enabled',
+                    (_ibraz['password_change_enabled'] ?? false)
+                        ? 'Profilde açık (telefon koduyla)'
+                        : 'Kapalı',
+                  ),
+                  _ibrazRow(
                     Icons.map_outlined,
                     'Bölge sorumlusu onaylar',
                     'ibraz_approve_region',
