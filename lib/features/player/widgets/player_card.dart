@@ -292,68 +292,71 @@ class _PlayerCardState extends State<PlayerCard> {
               decoration: adminInlineInputDecoration(hint: hint ?? label),
             ),
           );
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: AdminDialogHeader(
-                  icon: Icons.manage_accounts_rounded,
-                  title: 'Futbolcu Güncelle',
+          return AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(ctx, false),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: AdminDialogHeader(
+                    icon: Icons.manage_accounts_rounded,
+                    title: 'Futbolcu Güncelle',
+                  ),
                 ),
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                  child: AdminFormSection(
-                    title: 'Kimlik',
-                    child: AdminFieldGroup(
-                      children: [
-                        row(Icons.person_outline_rounded, 'Ad', name),
-                        row(Icons.person_outline_rounded, 'Soyad', surname),
-                        row(
-                          Icons.cake_outlined,
-                          'Doğum Tarihi',
-                          birthText,
-                          hint: 'GG-AA-YYYY',
-                          date: true,
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.calendar_month_outlined,
-                              color: Colors.white54,
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: AdminFormSection(
+                      title: 'Kimlik',
+                      child: AdminFieldGroup(
+                        children: [
+                          row(Icons.person_outline_rounded, 'Ad', name),
+                          row(Icons.person_outline_rounded, 'Soyad', surname),
+                          row(
+                            Icons.cake_outlined,
+                            'Doğum Tarihi',
+                            birthText,
+                            hint: 'GG-AA-YYYY',
+                            date: true,
+                            trailing: IconButton(
+                              icon: const Icon(
+                                Icons.calendar_month_outlined,
+                                color: Colors.white54,
+                              ),
+                              tooltip: 'Takvimden seç',
+                              onPressed: () async {
+                                final d = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: birth ?? DateTime(1985),
+                                  firstDate: DateTime(1930),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (d == null) return;
+                                setD(() {
+                                  birth = d;
+                                  birthText.text = DateFormat(
+                                    'dd-MM-yyyy',
+                                  ).format(d);
+                                });
+                              },
                             ),
-                            tooltip: 'Takvimden seç',
-                            onPressed: () async {
-                              final d = await showDatePicker(
-                                context: ctx,
-                                initialDate: birth ?? DateTime(1985),
-                                firstDate: DateTime(1930),
-                                lastDate: DateTime.now(),
-                              );
-                              if (d == null) return;
-                              setD(() {
-                                birth = d;
-                                birthText.text = DateFormat(
-                                  'dd-MM-yyyy',
-                                ).format(d);
-                              });
-                            },
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                child: AdminPrimaryButton(
-                  label: 'GÜNCELLE',
-                  onPressed: () => Navigator.pop(ctx, true),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: AdminPrimaryButton(
+                    label: 'GÜNCELLE',
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
