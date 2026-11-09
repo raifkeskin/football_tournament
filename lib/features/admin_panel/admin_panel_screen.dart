@@ -22,6 +22,7 @@ import '../home/widgets/unassigned_referees_banner.dart';
 import '../home/widgets/unscheduled_matches_banner.dart';
 import '../identity/ibraz_pending_screen.dart';
 import '../news/screens/week_awards_screen.dart';
+import '../news/week_awards.dart';
 import '../tournament/models/league.dart';
 import '../match/models/match.dart';
 import '../match/screens/esame_edit_screen.dart';
@@ -154,8 +155,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       const [];
   String _enlerKey = '';
 
-  /// Yayınlanan bültenlerin Instagram bağlantısı (haber id → adres).
-  Map<String, String> _igUrls = const {};
+  /// Yayınlanan bültenlerdeki enler ve Instagram bağlantıları (haber id → enler).
+  Map<String, List<({String kind, String title, String url})>> _awardsOf =
+      const {};
 
   /// Kimlik ibrazı onayı bekleyen kayıt sayısı (yetki alanına göre).
   int _ibrazPending = 0;
@@ -358,13 +360,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           ('${n['region_id'] ?? ''}', (n['week'] as num?)?.toInt() ?? 0):
               '${n['id']}',
       };
-      final igOf = {
+      _awardsOf = {
         for (final n in news)
-          '${n['id']}': n['auto_data'] is Map
-              ? '${(n['auto_data'] as Map)['instagram_url'] ?? ''}'
-              : '',
+          '${n['id']}': [
+            if (n['auto_data'] is Map)
+              for (final x
+                  in ((n['auto_data'] as Map)['awards'] as List? ?? const []))
+                if (x is Map && AwardKindX.of('${x['kind']}') != null)
+                  (
+                    kind: '${x['kind']}',
+                    title: AwardKindX.of('${x['kind']}')!.full,
+                    url: '${x['instagram_url'] ?? ''}',
+                  ),
+          ],
       };
-      _igUrls = igOf;
       final list = [
         for (final e in stat.entries)
           if (e.value[0] > 0 && e.value[1] == 0)
@@ -422,7 +431,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     ({int week, String regionId, String region, String? newsId}) e,
   ) {
     final published = e.newsId != null;
-    final ig = published ? (_igUrls[e.newsId] ?? '') : '';
+    final awards = published
+        ? (_awardsOf[e.newsId] ??
+              const <({String kind, String title, String url})>[])
+        : const <({String kind, String title, String url})>[];
+    final withIg = awards.where((a) => a.url.isNotEmpty).length;
     final title = '${e.week}. hafta${e.region.isEmpty ? '' : ' · ${e.region}'}';
     return _shell(
       border: published ? null : _amber.withValues(alpha: 0.5),
@@ -457,8 +470,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         Text(
           published
               ? 'Haftanın enleri bülteni yayınlandı; yayınlanan bülten '
-                    'değiştirilmez. Instagram\'da paylaşırsan gönderiyi '
-                    'bültenin son sayfası olarak ekleyebilirsin.'
+                    'değiştirilmez. Turnuva sahipleri Instagram\'da bir en için '
+                    'video paylaştıysa (ör. kurtarış) onu o enin 2. sayfası '
+                    'olarak ekleyebilirsin.'
               : 'Bu haftanın bütün maçları bitti. Haftanın 11\'ini ve enlerini '
                     'seçip bülten olarak yayınlayabilirsin.',
           style: const TextStyle(color: _mid, fontSize: 13.5, height: 1.4),
@@ -472,12 +486,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           )
         else
           OutlinedButton.icon(
-            onPressed: () => _editInstagram(e.newsId!, ig),
+            onPressed: awards.isEmpty
+                ? null
+                : () => _editInstagram(e.newsId!, awards),
             icon: const Icon(Icons.camera_alt_outlined, size: 18),
             label: Text(
-              ig.isEmpty
-                  ? 'Instagram gönderisi ekle'
-                  : 'Instagram gönderisini değiştir',
+              withIg == 0
+                  ? 'Instagram videosu ekle'
+                  : 'Instagram videoları · $withIg',
             ),
           ),
       ],
@@ -485,10 +501,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 
   /// Yayınlanan bültenin tek değiştirilebilen yeri: Instagram bağlantısı.
-  Future<void> _editInstagram(String newsId, String current) async {
+  Future<void> _editInstagram(
+    String newsId,
+    List<({String kind, String title, String url})> awards,
+  ) async {
     final saved = await showAdminPopup<String>(
       context: context,
-      builder: (_) => _InstagramLinkForm(newsId: newsId, current: current),
+      builder: (_) => _InstagramLinkForm(newsId: newsId, awards: awards),
     );
     if (saved != null) {
       _loadEnler(force: true);
@@ -1691,54 +1710,70 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   }
 }
 
-/// Yayınlanan Haftanın Enleri bültenine Instagram gönderisi / Reels bağlantısı
-/// ekleme penceresi (bültenin tek değiştirilebilen yeri).
+/// Yayınlanan bültendeki her en için Instagram gönderisi / Reels bağlantısı
+/// (bültenin tek değiştirilebilen yeri; enin kartının 2. sayfası olur).
 class _InstagramLinkForm extends StatefulWidget {
-  const _InstagramLinkForm({required this.newsId, required this.current});
+  const _InstagramLinkForm({required this.newsId, required this.awards});
 
   final String newsId;
-  final String current;
+  final List<({String kind, String title, String url})> awards;
 
   @override
   State<_InstagramLinkForm> createState() => _InstagramLinkFormState();
 }
 
 class _InstagramLinkFormState extends State<_InstagramLinkForm> {
-  late final _url = TextEditingController(text: widget.current);
+  late final Map<String, TextEditingController> _c = {
+    for (final a in widget.awards) a.kind: TextEditingController(text: a.url),
+  };
   bool _saving = false;
 
   @override
   void dispose() {
-    _url.dispose();
+    for (final c in _c.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
-    final v = _url.text.trim();
-    if (v.isNotEmpty && !isInstagramPostUrl(v)) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Instagram gönderisi ya da Reels bağlantısı gir.'),
-        ),
-      );
+    final changes = <String, String>{};
+    for (final a in widget.awards) {
+      final v = _c[a.kind]!.text.trim();
+      if (v == a.url) continue;
+      if (v.isNotEmpty && !isInstagramPostUrl(v)) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '${a.title}: Instagram gönderisi ya da Reels bağlantısı gir.',
+            ),
+          ),
+        );
+        return;
+      }
+      changes[a.kind] = v.isEmpty
+          ? ''
+          : (v.startsWith('http') ? v : 'https://$v').split('?').first;
+    }
+    if (changes.isEmpty) {
+      nav.pop();
       return;
     }
     setState(() => _saving = true);
     try {
-      final normalized = v.isEmpty
-          ? ''
-          : (v.startsWith('http') ? v : 'https://$v').split('?').first;
-      await Supabase.instance.client.rpc(
-        'set_week_awards_instagram',
-        params: {'p_news_id': widget.newsId, 'p_url': normalized},
-      );
-      nav.pop(
-        v.isEmpty
-            ? 'Instagram bağlantısı kaldırıldı.'
-            : 'Instagram gönderisi eklendi.',
-      );
+      for (final e in changes.entries) {
+        await Supabase.instance.client.rpc(
+          'set_week_award_instagram',
+          params: {
+            'p_news_id': widget.newsId,
+            'p_kind': e.key,
+            'p_url': e.value,
+          },
+        );
+      }
+      nav.pop('Instagram videoları kaydedildi.');
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -1757,7 +1792,7 @@ class _InstagramLinkFormState extends State<_InstagramLinkForm> {
         children: [
           const AdminDialogHeader(
             icon: Icons.camera_alt_outlined,
-            title: 'Instagram Gönderisi',
+            title: 'Instagram Videoları',
           ),
           Flexible(
             child: SingleChildScrollView(
@@ -1767,32 +1802,33 @@ class _InstagramLinkFormState extends State<_InstagramLinkForm> {
                 children: [
                   AdminFieldGroup(
                     children: [
-                      AdminFieldRow(
-                        icon: Icons.link_rounded,
-                        label: 'Bağlantı',
-                        child: TextField(
-                          controller: _url,
-                          enabled: !_saving,
-                          keyboardType: TextInputType.url,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          cursorColor: kAdminAccent,
-                          decoration: adminInlineInputDecoration(
-                            hint: 'instagram.com/reel/…',
+                      for (final a in widget.awards)
+                        AdminFieldRow(
+                          icon: Icons.link_rounded,
+                          label: a.title,
+                          child: TextField(
+                            controller: _c[a.kind],
+                            enabled: !_saving,
+                            keyboardType: TextInputType.url,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            cursorColor: kAdminAccent,
+                            decoration: adminInlineInputDecoration(
+                              hint: 'instagram.com/reel/…',
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
                     child: Text(
-                      'Gönderi ya da Reels bağlantısı. Bültenin son sayfası '
-                      'olarak (ör. 2/2) gösterilir. Boş bırakıp kaydedersen '
-                      'kaldırılır.',
+                      'Gönderi ya da Reels bağlantısı. Eklenen video, enin '
+                      'kartının 2. sayfası olarak gösterilir. Boş bırakıp '
+                      'kaydedersen kaldırılır.',
                       style: TextStyle(color: kAdminMuted, fontSize: 12),
                     ),
                   ),
