@@ -189,7 +189,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
     var assistantReferees = season?.assistantReferees ?? true;
-    var requireVerifiedId = season?.requireVerifiedId ?? false;
+    var verifiedIdMode = season?.verifiedIdMode ?? 'any';
     var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
     var rollingSubs = season?.rollingSubs ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
@@ -288,7 +288,8 @@ class SeasonManagementScreen extends StatelessWidget {
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
         assistantReferees: assistantReferees,
-        requireVerifiedId: requireVerifiedId,
+        requireVerifiedId: verifiedIdMode != 'any',
+        verifiedIdMode: verifiedIdMode,
         goalkeeperAddAnytime: goalkeeperAddAnytime,
         rollingSubs: rollingSubs,
         transferStartDate: transferStartDate,
@@ -578,16 +579,32 @@ class SeasonManagementScreen extends StatelessWidget {
                                     setSheetState(() => assistantReferees = v),
                               ),
                             if (showIdentity)
-                              switchRow(
-                                Icons.verified_outlined,
-                                'Onaylı Kimlik Zorunlu',
-                                requireVerifiedId
-                                    ? 'Kimliği onaylı olmayan oyuncu esameye '
-                                          'eklenemez'
-                                    : 'Kapalı: kimlik onayı istenmez',
-                                requireVerifiedId,
-                                (v) =>
-                                    setSheetState(() => requireVerifiedId = v),
+                              AdminSelectRow(
+                                icon: Icons.verified_outlined,
+                                label: 'Kadroya Kimler Yazılabilir',
+                                value: switch (verifiedIdMode) {
+                                  'chip' => 'Yalnız Kimlik Çip Onaylı',
+                                  'chip_ibraz' => 'Kimlik Çip + İbraz Onaylı',
+                                  _ => 'Hepsi',
+                                },
+                                placeholder: 'Hepsi',
+                                onTap: () async {
+                                  final v = await showAdminOptionPicker<String>(
+                                    context: context,
+                                    title: 'Kadroya Kimler Yazılabilir',
+                                    items: const ['chip', 'chip_ibraz', 'any'],
+                                    selected: verifiedIdMode,
+                                    labelBuilder: (k) => switch (k) {
+                                      'chip' => 'Yalnız Kimlik Çip Onaylı',
+                                      'chip_ibraz' =>
+                                        'Kimlik Çip + İbraz Onaylı',
+                                      _ => 'Hepsi (onaysız da yazılabilir)',
+                                    },
+                                  );
+                                  if (v != null) {
+                                    setSheetState(() => verifiedIdMode = v);
+                                  }
+                                },
                               ),
                             switchRow(
                               Icons.sports_handball_rounded,

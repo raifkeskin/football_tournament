@@ -91,6 +91,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// Sezonda onaylı kimlik zorunlu mu; zorunluysa onaysız oyuncu esameye
   /// eklenemez.
   bool _requireId = false;
+
+  /// Sezon kuralı: any / chip / chip_ibraz.
+  String _idMode = 'any';
   Set<String> _verified = const {};
 
   /// -1: Tümü, 0..3: Kaleci / Defans / Orta Saha / Forvet.
@@ -216,7 +219,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               .from('seasons')
               .select(
                 'starting_player_count, sub_player_count, age_rules, '
-                'require_verified_id',
+                'require_verified_id, verified_id_mode',
               )
               .eq('id', widget.match.seasonId)
               .maybeSingle();
@@ -248,6 +251,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         _subLimit = sRes?['sub_player_count'] ?? 7;
         _ageRules = AgeRules.fromJson(sRes?['age_rules']);
         _requireId = sRes?['require_verified_id'] == true;
+        _idMode = (sRes?['verified_id_mode'] ?? (_requireId ? 'chip' : 'any'))
+            .toString();
         _players = [...players]..sort(_compare);
         _byId = {for (final p in _players) p.id: p};
         _penalized = penalties;
@@ -303,7 +308,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   }
 
   /// Sezon onaylı kimlik istiyor ve oyuncunun kimliği onaylı değil.
-  bool _unverified(String id) => _requireId && !_verified.contains(id);
+  bool _unverified(String id) =>
+      _requireId &&
+      (!_verified.contains(id) ||
+          (_idMode == 'chip' && IdentityService.isIbraz(id)));
 
   /// Esameden "Kimliği okut": doğrulama ekranı açılır, dönünce liste
   /// yenilenir.
@@ -2063,9 +2071,12 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ),
           ),
           if (_verified.contains(p.id))
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: VerifiedBadge(size: 15),
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: VerifiedBadge(
+                size: 15,
+                ibraz: IdentityService.isIbraz(p.id),
+              ),
             ),
           if (_ageRules.hasMatchLimits && _isQuota(p))
             _tag('KONTENJAN ${AgeRules.birthYearOf(p.birthDate)}', _gold),

@@ -16,6 +16,51 @@ class AdminIdentityScreen extends StatefulWidget {
 
 class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
   bool _saving = false;
+  Map<String, bool> _ibraz = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    AppSettings.loadIbrazSettings()
+        .then((m) {
+          if (mounted) setState(() => _ibraz = m);
+        })
+        .catchError((_) {});
+  }
+
+  Future<void> _setIbraz(String key, bool on) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final prev = _ibraz;
+    setState(() => _ibraz = {...prev, key: on});
+    try {
+      await AppSettings.setIbrazSetting(key, on);
+    } catch (e) {
+      if (mounted) setState(() => _ibraz = prev);
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+    }
+  }
+
+  Widget _ibrazRow(IconData icon, String label, String key, String sub) {
+    final on = _ibraz[key] ?? false;
+    return AdminFieldRow(
+      icon: icon,
+      label: label,
+      onTap: () => _setIbraz(key, !on),
+      trailing: Switch.adaptive(
+        value: on,
+        activeTrackColor: kIbrazOrange,
+        onChanged: (v) => _setIbraz(key, v),
+      ),
+      child: Text(
+        sub,
+        style: TextStyle(
+          color: on ? Colors.white : kAdminMuted,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 
   Future<void> _set(bool on) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -67,6 +112,49 @@ class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            AdminFormSection(
+              title: 'Kimlik ibrazıyla onay',
+              child: AdminFieldGroup(
+                children: [
+                  _ibrazRow(
+                    Icons.badge_outlined,
+                    'İbraz özelliği',
+                    'ibraz_enabled',
+                    (_ibraz['ibraz_enabled'] ?? false) ? 'Açık' : 'Kapalı',
+                  ),
+                  _ibrazRow(
+                    Icons.account_balance_outlined,
+                    'Kurucu başkan onaylar',
+                    'ibraz_approve_owner',
+                    'Kendi turnuvasındaki kayıtlar',
+                  ),
+                  _ibrazRow(
+                    Icons.vpn_key_outlined,
+                    'Şifre değiştirme',
+                    'password_change_enabled',
+                    (_ibraz['password_change_enabled'] ?? false)
+                        ? 'Profilde açık (telefon koduyla)'
+                        : 'Kapalı',
+                  ),
+                  _ibrazRow(
+                    Icons.map_outlined,
+                    'Bölge sorumlusu onaylar',
+                    'ibraz_approve_region',
+                    'Yalnız kendi bölgesindeki kayıtlar',
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
+              child: Text(
+                'Açıkken Kayıt Ol ekranında "Kimliğimi okutmadan devam et" '
+                'görünür; kayıtlar yetkilinin kimliği görüp onaylamasıyla '
+                'turuncu tikli olur. Admin her zaman onaylayabilir.',
+                style: TextStyle(color: kAdminMuted, fontSize: 12, height: 1.4),
               ),
             ),
             Padding(

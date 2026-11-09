@@ -1,20 +1,33 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/admin_form.dart' show showAdminInfoDialog;
 import 'identity_service.dart';
 
 /// Onaylı profil rengi (mavi tik).
 const kVerifiedBlue = Color(0xFF38BDF8);
 
+/// Kimlik ibrazıyla onaylı profil rengi (turuncu tik).
+const kIbrazOrange = Color(0xFFF97316);
+
 /// Kimliği çipten doğrulanmış oyuncunun yanında görünen mavi tik.
 class VerifiedBadge extends StatelessWidget {
-  const VerifiedBadge({super.key, this.size = 16});
+  const VerifiedBadge({super.key, this.size = 16, this.ibraz = false});
 
   final double size;
 
+  /// Kimlik ibrazıyla onaylı: turuncu tik.
+  final bool ibraz;
+
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: 'Onaylı profil: kimliği çipten doğrulandı',
-    child: Icon(Icons.verified_rounded, color: kVerifiedBlue, size: size),
+    message: ibraz
+        ? 'Kimlik İbraz Onaylı'
+        : 'Onaylı profil: kimliği çipten doğrulandı',
+    child: Icon(
+      Icons.verified_rounded,
+      color: ibraz ? kIbrazOrange : kVerifiedBlue,
+      size: size,
+    ),
   );
 }
 
@@ -71,13 +84,47 @@ class _VerifiedBadgeForState extends State<VerifiedBadgeFor> {
     } catch (_) {}
   }
 
+  Future<void> _showIbrazInfo(BuildContext context) async {
+    Map<String, dynamic>? info;
+    try {
+      info = await IdentityService.badgeInfo(widget.playerId);
+    } catch (_) {}
+    if (!context.mounted) return;
+    final by = (info?['by'] ?? '').toString();
+    final at = DateTime.tryParse((info?['verified_at'] ?? '').toString());
+    final date = at == null
+        ? ''
+        : '${at.toLocal().day.toString().padLeft(2, '0')}.'
+              '${at.toLocal().month.toString().padLeft(2, '0')}.'
+              '${at.toLocal().year}';
+    await showAdminInfoDialog(
+      context: context,
+      title: 'Kimlik İbraz Onaylı',
+      message: [
+        'Kimlik taratılmadı ibraz yoluyla onay alındı',
+        if (by.isNotEmpty) 'Onaylayan: $by',
+        if (date.isNotEmpty) date,
+      ].join(' · '),
+      icon: Icons.verified_rounded,
+      iconColor: kIbrazOrange,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Mavi tik kimlik doğrulama pasifken de görünür (bir kez doğrulanmış).
     if (!_ok) return const SizedBox.shrink();
+    final ibraz = IdentityService.isIbraz(widget.playerId);
+    final badge = VerifiedBadge(size: widget.size, ibraz: ibraz);
     return Padding(
       padding: EdgeInsets.only(left: widget.leading),
-      child: VerifiedBadge(size: widget.size),
+      child: ibraz
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _showIbrazInfo(context),
+              child: badge,
+            )
+          : badge,
     );
   }
 }
