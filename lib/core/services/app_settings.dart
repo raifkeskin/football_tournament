@@ -354,6 +354,26 @@ class AppSettings {
     identityVerificationEnabled.value = enabled;
   }
 
+  /// Kimlik ibrazı ayarları: ibraz_enabled (özellik kapısı),
+  /// ibraz_approve_owner (kurucu başkan onaylar), ibraz_approve_region
+  /// (bölge sorumlusu onaylar).
+  static Future<Map<String, bool>> loadIbrazSettings() async {
+    final rows = await _sb.from('app_settings').select('key, value').inFilter(
+      'key',
+      [_kIbraz, 'ibraz_approve_owner', 'ibraz_approve_region'],
+    );
+    return {for (final r in rows) r['key'].toString(): r['value'] == true};
+  }
+
+  static Future<void> setIbrazSetting(String key, bool on) async {
+    await _sb.from('app_settings').upsert({
+      'key': key,
+      'value': on,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    if (key == _kIbraz) ibrazEnabled.value = on;
+  }
+
   static Future<void> setManualPlayerCreateEnabled(bool enabled) async {
     await _sb.from('app_settings').upsert({
       'key': _kManualPlayerCreate,

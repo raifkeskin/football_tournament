@@ -24,6 +24,7 @@ class Season {
     this.trackGoalMinutes = true,
     this.assistantReferees = true,
     this.requireVerifiedId = false,
+    this.verifiedIdMode = 'any',
     this.goalkeeperAddAnytime = false,
     this.rollingSubs = false,
   });
@@ -62,6 +63,10 @@ class Season {
   /// Onaylı kimlik zorunlu mu? Açıksa kimliği çipten doğrulanmamış oyuncu
   /// esameye eklenemez (sunucu da engeller).
   final bool requireVerifiedId;
+
+  /// Kadroya kimler yazılabilir: any (hepsi), chip (yalnız çip onaylı),
+  /// chip_ibraz (çip + ibraz onaylı).
+  final String verifiedIdMode;
 
   /// Kaleci istisnası: lig başladıktan sonra transfer dönemi dışında da ana
   /// mevkisi kaleci olan oyuncu kadroya eklenebilir (sunucu da uygular).
@@ -141,6 +146,8 @@ class Season {
         v('assistantReferees', 'assistant_referees_enabled'),
         fallback: true,
       ),
+      verifiedIdMode: (v('verifiedIdMode', 'verified_id_mode') ?? 'any')
+          .toString(),
       requireVerifiedId: boolFrom(
         v('requireVerifiedId', 'require_verified_id'),
         fallback: false,
@@ -198,6 +205,7 @@ class Season {
       'track_goal_minutes': trackGoalMinutes,
       'assistant_referees_enabled': assistantReferees,
       'require_verified_id': requireVerifiedId,
+      'verified_id_mode': verifiedIdMode,
       'goalkeeper_add_anytime': goalkeeperAddAnytime,
       'rolling_subs': rollingSubs,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
@@ -238,6 +246,7 @@ class Season {
         'trackGoalMinutes': trackGoalMinutes,
         'assistantReferees': assistantReferees,
         'requireVerifiedId': requireVerifiedId,
+        'verifiedIdMode': verifiedIdMode,
         'goalkeeperAddAnytime': goalkeeperAddAnytime,
         'rollingSubs': rollingSubs,
         'teamsPerGroup': teamsPerGroup,

@@ -602,7 +602,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           'age_rules, starting_player_count, sub_player_count, '
           'match_period_duration, number_of_player_changes, '
           'transfer_start_date, transfer_end_date, goalkeeper_add_anytime, '
-          'require_verified_id',
+          'require_verified_id, verified_id_mode',
         )
         .eq('id', seasonId)
         .maybeSingle()
@@ -824,7 +824,10 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         'Kadro ekleme dönemi: ${start ?? '…'} – ${end ?? '…'}'
             '${r['goalkeeper_add_anytime'] == true ? ' (kaleci her zaman eklenebilir)' : ''}.',
       if (r['require_verified_id'] == true)
-        'Esameye yalnız kimliği doğrulanmış (mavi tikli) oyuncular yazılır.',
+        r['verified_id_mode'] == 'chip_ibraz'
+            ? 'Esameye yalnız Kimlik Çip Onaylı ya da Kimlik İbraz Onaylı '
+                  'oyuncular yazılır.'
+            : 'Esameye yalnız Kimlik Çip Onaylı oyuncular yazılır.',
       if (a.playerMaxYear != null)
         'Oyuncular ${a.playerMaxYear} ve öncesi doğumlu olmalı.',
       if (a.gkMaxYear != null)
