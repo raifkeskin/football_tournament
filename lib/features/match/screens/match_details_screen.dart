@@ -367,7 +367,7 @@ class _MatchPhaseLabel extends StatelessWidget {
                 ),
               )
             : Container(
-                padding: const EdgeInsets.fromLTRB(9, 2, 11, 2),
+                padding: const EdgeInsets.fromLTRB(9, 1, 11, 1),
                 decoration: BoxDecoration(
                   color: const Color(0xD1080C14),
                   borderRadius: BorderRadius.circular(99),
@@ -1690,7 +1690,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                           padding: EdgeInsets.only(
                             // Takım bloğu üst çubuktaki turnuva bandının
                             // (44px) hemen altından başlar.
-                            top: MediaQuery.of(context).padding.top + 50,
+                            // Yayın varken tarih satırı Canlı Yayın
+                            // düğmesine yaklaşır.
+                            top:
+                                MediaQuery.of(context).padding.top +
+                                (_hasStream && !showKickoff ? 44 : 50),
                           ),
                           // Bant her sekmede aynı boyda (Diziliş'te de
                           // küçülmez). Altta iki uç: solda tarih/saat
@@ -1704,7 +1708,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 // tarihi o zaman skorun üstüne iner.
                                 if (_hasStream && !showKickoff)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
+                                    padding: const EdgeInsets.only(bottom: 2),
                                     child: Text(
                                       _dateTimeLine(m),
                                       style: const TextStyle(
@@ -1738,68 +1742,72 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         padding: const EdgeInsets.only(top: 6),
                                         child: showKickoff
                                             ? _kickoffBlock(m)
-                                            : Column(
-                                                children: [
-                                                  // Dakika / durum skorun
-                                                  // üstünde (koyu kapsül).
-                                                  _MatchPhaseLabel(match: m),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    "${m.homeScore} - ${m.awayScore}",
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      fontSize: 27,
-                                                      shadows: _hdrShadow,
-                                                    ),
-                                                  ),
-                                                  if (m.hasPens)
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            bottom: 3,
-                                                          ),
-                                                      child: Row(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          PenaltyBadge(
-                                                            m.homePens!,
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 8,
-                                                          ),
-                                                          PenaltyBadge(
-                                                            m.awayPens!,
-                                                          ),
-                                                        ],
+                                            // Dakika kapsülü yukarı taşar:
+                                            // skor logoların hizasında kalır.
+                                            : Transform.translate(
+                                                offset: const Offset(0, -24),
+                                                child: Column(
+                                                  children: [
+                                                    // Dakika / durum skorun
+                                                    // üstünde (koyu kapsül).
+                                                    _MatchPhaseLabel(match: m),
+                                                    Text(
+                                                      "${m.homeScore} - ${m.awayScore}",
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 27,
+                                                        shadows: _hdrShadow,
                                                       ),
                                                     ),
-                                                  // Sıradaki adım (Maçı Bitir
-                                                  // vb.) skorun altında.
-                                                  if (canControl &&
-                                                      !beforeWindow &&
-                                                      !ended)
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            top: 6,
-                                                          ),
-                                                      child: _MatchFlowBar(
-                                                        match: m,
-                                                        part: _FlowPart.next,
-                                                        canUndo:
-                                                            canManageLeague,
-                                                        onAction: (action) =>
-                                                            _runPhaseAction(
-                                                              m,
-                                                              action,
+                                                    if (m.hasPens)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              bottom: 3,
                                                             ),
+                                                        child: Row(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            PenaltyBadge(
+                                                              m.homePens!,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 8,
+                                                            ),
+                                                            PenaltyBadge(
+                                                              m.awayPens!,
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    ),
-                                                ],
+                                                    // Sıradaki adım (Maçı Bitir
+                                                    // vb.) skorun altında.
+                                                    if (canControl &&
+                                                        !beforeWindow &&
+                                                        !ended)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              top: 6,
+                                                            ),
+                                                        child: _MatchFlowBar(
+                                                          match: m,
+                                                          part: _FlowPart.next,
+                                                          canUndo:
+                                                              canManageLeague,
+                                                          onAction: (action) =>
+                                                              _runPhaseAction(
+                                                                m,
+                                                                action,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
                                               ),
                                       ),
                                     ),
