@@ -2217,13 +2217,15 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
           Positioned(
             left: 0,
             right: 0,
-            top: 262,
-            bottom: 52,
+            // Küpür skorun hemen altından başlar ve ekranın ~%88'ini kaplar
+            // (taban genişlik 420: metin daha az satıra yayılır, ölçek büyür).
+            top: 200,
+            bottom: 56,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.topCenter,
               child: SizedBox(
-                width: 360,
+                width: 420,
                 child: _Clipping(
                   item: n,
                   article: widget.article,
