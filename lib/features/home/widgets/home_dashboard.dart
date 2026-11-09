@@ -1113,8 +1113,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
               return const SizedBox.shrink();
             }
             // Açılışta panel bir kez kendiliğinden açılır.
-            AdminPanelAutoOpen.maybeOpen(context, session);
-            return const AdminPanelStrip();
+            AdminPanelAutoOpen.maybeOpen(
+              context,
+              session,
+              leagueId: widget.league.id,
+            );
+            return AdminPanelStrip(leagueId: widget.league.id);
           },
         ),
         Expanded(
