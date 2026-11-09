@@ -2,11 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_name_band.dart';
@@ -15,6 +15,7 @@ import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 import '../../player/services/penalty_service.dart';
 import '../../tournament/models/age_rules.dart';
+import '../../team/widgets/squad_popups.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../models/match.dart';
 import '../utils/season_match_settings.dart';
@@ -87,6 +88,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// şeritte adı görünür.
   String? _editingId;
 
+  /// Forma numarası penceresinin takım renkleri.
+  TeamPalette _palette = TeamPalette.of(null, null);
+
   int _startingLimit = 11;
   int _subLimit = 7;
   Map<String, PlayerPenalty> _penalized = const {};
@@ -124,6 +128,21 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   void initState() {
     super.initState();
     _loadData();
+    Supabase.instance.client
+        .from('teams')
+        .select('first_color, second_color')
+        .eq('id', widget.teamId)
+        .maybeSingle()
+        .then((r) {
+          if (!mounted || r == null) return;
+          setState(
+            () => _palette = TeamPalette.of(
+              r['first_color'] as String?,
+              r['second_color'] as String?,
+            ),
+          );
+        })
+        .catchError((_) {});
     _loadBoxesOpen();
     _loadPoll();
     SeasonMatchSettings.of(widget.match.seasonId).then((s) {
@@ -1070,13 +1089,6 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                       ),
                     ),
             ),
-            if (keyboard > 0 && _byId[_editingId] != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: keyboard,
-                child: _numberStrip(_byId[_editingId]!),
-              ),
           ],
         ),
       ),
@@ -1689,8 +1701,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                 bad: bad.contains(id),
                 small: true,
                 active: id == _editingId,
-                onChanged: _onJerseyChanged,
-                onFocusChange: (f) => _onJerseyFocus(id, f),
+                onTap: () => _editJersey(id),
               ),
               const SizedBox(width: 4),
               Expanded(child: _slotName(box, i, p)),
@@ -1847,14 +1858,32 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     ),
   );
 
-  void _onJerseyChanged() => setState(() => _dirty = true);
-
-  void _onJerseyFocus(String id, bool focused) {
-    if (focused) {
-      setState(() => _editingId = id);
-    } else if (_editingId == id) {
-      setState(() => _editingId = null);
-    }
+  /// Takım ekranındaki forma numarası penceresi: 1-18 seçici, dolu numaralar
+  /// kapalı. Boş = numarayı kaldır.
+  Future<void> _editJersey(String id) async {
+    final p = _byId[id];
+    final ctrl = _jersey[id];
+    if (p == null || ctrl == null) return;
+    final taken = <int>{
+      for (final o in [..._starters, ..._subs])
+        if (o != id) ?int.tryParse(_jersey[o]?.text.trim() ?? ''),
+    };
+    setState(() => _editingId = id);
+    final input = await showSquadJerseyPicker(
+      context: context,
+      playerName: p.name,
+      current: ctrl.text.trim(),
+      taken: taken,
+      palette: _palette,
+    );
+    if (!mounted) return;
+    setState(() {
+      _editingId = null;
+      if (input != null && input.trim() != ctrl.text.trim()) {
+        ctrl.text = input.trim();
+        _dirty = true;
+      }
+    });
   }
 
   List<PlayerModel> get _remaining =>
@@ -1913,69 +1942,6 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  /// Klavyenin üstünde: kimin numarası yazılıyor (klavye kutuyu örtse de).
-  Widget _numberStrip(PlayerModel p) {
-    final no = _jersey[p.id]?.text.trim() ?? '';
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 0, 10, 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: Color.lerp(_bg, _gold, 0.16),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _gold.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        children: [
-          const Text(
-            'Forma no · ',
-            style: TextStyle(color: _mid, fontSize: 13),
-          ),
-          Expanded(
-            child: Text(
-              p.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _gold,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          Text(
-            no.isEmpty ? '–' : no,
-            style: const TextStyle(
-              color: _gold,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(width: 10),
-          // iOS sayı klavyesinde "Tamam" tuşu yok; klavyeyi buradan kapat.
-          GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: _gold,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'Tamam',
-                style: TextStyle(
-                  color: Color(0xFF1F1300),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -2080,8 +2046,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             bad: false,
             small: false,
             active: editing,
-            onChanged: _onJerseyChanged,
-            onFocusChange: (f) => _onJerseyFocus(p.id, f),
+            onTap: () => _editJersey(p.id),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -2227,112 +2192,88 @@ class _JerseyBox extends StatelessWidget {
     required this.controller,
     required this.bad,
     required this.small,
-    required this.onChanged,
-    required this.onFocusChange,
+    required this.onTap,
     this.active = false,
   });
 
   final TextEditingController controller;
   final bool bad;
   final bool small;
-  final VoidCallback onChanged;
-  final ValueChanged<bool> onFocusChange;
 
-  /// Numarası şu an yazılıyor: kutu dolu sarı.
+  /// Dokununca takım ekranındaki forma numarası penceresi açılır.
+  final VoidCallback onTap;
+
+  /// Numarası şu an değiştiriliyor: kutu dolu sarı.
   final bool active;
 
   static const _gold = Color(0xFFFBBF24);
   static const _red = Color(0xFFF87171);
-
-  void _selectAll() {
-    controller.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: controller.text.length,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = bad ? _red : _gold;
     final w = small ? 26.0 : 34.0;
     final h = small ? 19.0 : 28.0;
-    return SizedBox(
-      width: w,
-      height: h,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _DashedBorder(color: c.withValues(alpha: 0.7)),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: active ? c : c.withValues(alpha: bad ? 0.14 : 0.07),
-                  borderRadius: BorderRadius.circular(small ? 4 : 6),
-                ),
-                child: Focus(
-                  onFocusChange: onFocusChange,
-                  child: TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(2),
-                    ],
-                    textAlign: TextAlign.center,
-                    textAlignVertical: TextAlignVertical.center,
-                    onTap: () {
-                      _selectAll();
-                      // Odak alınca imleç sona gidebilir; bir kare sonra yine seç.
-                      WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => _selectAll(),
-                      );
-                    },
-                    onChanged: (_) => onChanged(),
-                    style: TextStyle(
-                      color: active ? const Color(0xFF1F1300) : Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: small ? 11 : 13.5,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                    // Tema dolgu ve boşluk vermesin (küçük kutuda numara
-                    // görünmez oluyordu).
-                    decoration: InputDecoration(
-                      isCollapsed: true,
-                      isDense: true,
-                      filled: false,
-                      contentPadding: EdgeInsets.zero,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: '#',
-                      hintStyle: TextStyle(
-                        color: active
-                            ? const Color(0xFF1F1300)
-                            : c.withValues(alpha: 0.7),
-                      ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _DashedBorder(color: c.withValues(alpha: 0.7)),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: active ? c : c.withValues(alpha: bad ? 0.14 : 0.07),
+                    borderRadius: BorderRadius.circular(small ? 4 : 6),
+                  ),
+                  child: Center(
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (_, v, _) {
+                        final no = v.text.trim();
+                        return Text(
+                          no.isEmpty ? '#' : no,
+                          style: TextStyle(
+                            color: no.isEmpty
+                                ? (active
+                                      ? const Color(0xFF1F1300)
+                                      : c.withValues(alpha: 0.7))
+                                : (active
+                                      ? const Color(0xFF1F1300)
+                                      : Colors.white),
+                            fontWeight: FontWeight.w800,
+                            fontSize: small ? 11 : 13.5,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          if (!small)
-            Positioned(
-              right: -4,
-              top: -5,
-              child: IgnorePointer(
-                child: Container(
-                  padding: const EdgeInsets.all(1),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0F172A),
-                    shape: BoxShape.circle,
+            if (!small)
+              Positioned(
+                right: -4,
+                top: -5,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.all(1),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.edit_rounded, size: 9, color: c),
                   ),
-                  child: Icon(Icons.edit_rounded, size: 9, color: c),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
