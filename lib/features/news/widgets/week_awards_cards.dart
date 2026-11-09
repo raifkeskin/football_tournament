@@ -1375,6 +1375,9 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
   String _goalVideoUrl = '';
   int _goalPage = -1;
 
+  /// Instagram gönderisi olan sayfalar (görüntü olarak paylaşılamaz).
+  Set<int> _igPages = {};
+
   Future<void> _shareInstagram() async {
     if (_busy) return;
     if (_page == _goalPage && _goalVideoUrl.isNotEmpty) {
@@ -1493,35 +1496,73 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
           ),
         );
 
+        // Sayfalar: her kart; enin Instagram bağlantısı varsa kartın hemen
+        // ardından o gönderi (2. sayfa).
+        final entries = <({int card, WeekAward? award, bool ig})>[];
+        for (var i = 0; i < cards.length; i++) {
+          final a = awardAt(i);
+          entries.add((card: i, award: a, ig: false));
+          if (a != null && a.instagramUrl.isNotEmpty) {
+            entries.add((card: i, award: a, ig: true));
+          }
+        }
         final pages = <Widget>[
-          for (final (i, c) in cards.indexed)
-            GestureDetector(
-              onTap: widget.expandOnTap
-                  ? () => openFull(i)
-                  : awardAt(i)?.kind == AwardKind.goal
-                  ? () => _play(awardAt(i)!)
-                  : null,
-              child: c,
-            ),
-          // Yayından sonra eklenen Instagram gönderisi / Reels son sayfa.
-          if (w.instagramUrl.isNotEmpty)
-            ColoredBox(
-              color: Colors.black,
-              child: InstagramEmbed(url: w.instagramUrl, focused: true),
-            ),
+          for (final e in entries)
+            if (!e.ig)
+              GestureDetector(
+                onTap: widget.expandOnTap
+                    ? () => openFull(e.card)
+                    : e.award?.kind == AwardKind.goal
+                    ? () => _play(e.award!)
+                    : null,
+                child: cards[e.card],
+              )
+            else
+              ColoredBox(
+                color: Colors.black,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    InstagramEmbed(url: e.award!.instagramUrl, focused: true),
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${e.award!.kind.full} · 2/2',
+                            style: _cond(13, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
         ];
-        final igPage = w.instagramUrl.isNotEmpty ? cards.length : -1;
+        _igPages = {
+          for (var i = 0; i < entries.length; i++)
+            if (entries[i].ig) i,
+        };
         final videoOk =
             w.goalVideoUrl.isNotEmpty &&
             (AppSession.of(context).value.isAdmin ||
                 AppSettings.goalClipMp4Enabled.value);
         _goalVideoUrl = videoOk ? w.goalVideoUrl : '';
-        _goalPage = w.awards.indexWhere((a) => a.kind == AwardKind.goal) >= 0
-            ? w.awards.indexWhere((a) => a.kind == AwardKind.goal) +
-                  (w.hasEleven ? 1 : 0)
-            : -1;
+        _goalPage = entries.indexWhere(
+          (e) => !e.ig && e.award?.kind == AwardKind.goal,
+        );
         // Görünen kart haftanın golüyse altında "Golü izle".
-        final goal = _goalWithClip(awardAt(_page));
+        final cur = _page < entries.length ? entries[_page] : null;
+        final goal = cur != null && !cur.ig ? _goalWithClip(cur.award) : null;
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -1643,7 +1684,7 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                       snap.data == true &&
                           !_busy &&
                           pages.isNotEmpty &&
-                          _page != igPage
+                          !_igPages.contains(_page)
                       ? _shareInstagram
                       : null,
                 ),
