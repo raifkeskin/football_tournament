@@ -18,7 +18,10 @@ import '../../tournament/screens/formation_tab.dart'
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_name.dart';
-import '../../../core/widgets/admin_page.dart' show showAdminConfirmDialog;
+import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart'
+    show showAdminConfirmDialog, showAdminPopup;
+import '../../team/screens/team_squad_screen.dart' show BirthDateInputFormatter;
 import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/verified_badge.dart';
@@ -242,59 +245,126 @@ class _PlayerCardState extends State<PlayerCard> {
     final surname = TextEditingController(
       text: (row['surname'] ?? '').toString(),
     );
-    DateTime? birth = DateTime.tryParse((row['birth_date'] ?? '').toString());
-    final saved = await showDialog<bool>(
+    final b0 = DateTime.tryParse((row['birth_date'] ?? '').toString());
+    final birthText = TextEditingController(
+      text: b0 == null ? '' : DateFormat('dd-MM-yyyy').format(b0),
+    );
+    DateTime? birth = b0;
+    // Uygulamanın standart popup'ı (Futbolcu Güncelle ile aynı tasarım).
+    final saved = await showAdminPopup<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: const Text('Futbolcu bilgileri'),
-          content: Column(
+        builder: (ctx, setD) {
+          Widget row(
+            IconData icon,
+            String label,
+            TextEditingController c, {
+            String? hint,
+            Widget? trailing,
+            bool date = false,
+          }) => AdminFieldRow(
+            icon: icon,
+            label: label,
+            trailing: trailing,
+            child: TextField(
+              controller: c,
+              keyboardType: date ? TextInputType.number : TextInputType.name,
+              inputFormatters: date ? [BirthDateInputFormatter()] : null,
+              textCapitalization: date
+                  ? TextCapitalization.none
+                  : TextCapitalization.words,
+              onChanged: date
+                  ? (v) {
+                      try {
+                        birth = v.length == 10
+                            ? DateFormat('dd-MM-yyyy').parseStrict(v)
+                            : null;
+                      } catch (_) {
+                        birth = null;
+                      }
+                    }
+                  : null,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: adminInlineInputDecoration(hint: hint ?? label),
+            ),
+          );
+          return Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: name,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Ad'),
-              ),
-              TextField(
-                controller: surname,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Soyad'),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.cake_outlined),
-                label: Text(
-                  birth == null
-                      ? 'Doğum tarihi seç'
-                      : DateFormat('dd.MM.yyyy').format(birth!),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: AdminDialogHeader(
+                  icon: Icons.manage_accounts_rounded,
+                  title: 'Futbolcu Güncelle',
                 ),
-                onPressed: () async {
-                  final d = await showDatePicker(
-                    context: ctx,
-                    initialDate: birth ?? DateTime(1985),
-                    firstDate: DateTime(1930),
-                    lastDate: DateTime.now(),
-                  );
-                  if (d != null) setD(() => birth = d);
-                },
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: AdminFormSection(
+                    title: 'Kimlik',
+                    child: AdminFieldGroup(
+                      children: [
+                        row(Icons.person_outline_rounded, 'Ad', name),
+                        row(Icons.person_outline_rounded, 'Soyad', surname),
+                        row(
+                          Icons.cake_outlined,
+                          'Doğum Tarihi',
+                          birthText,
+                          hint: 'GG-AA-YYYY',
+                          date: true,
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.calendar_month_outlined,
+                              color: Colors.white54,
+                            ),
+                            tooltip: 'Takvimden seç',
+                            onPressed: () async {
+                              final d = await showDatePicker(
+                                context: ctx,
+                                initialDate: birth ?? DateTime(1985),
+                                firstDate: DateTime(1930),
+                                lastDate: DateTime.now(),
+                              );
+                              if (d == null) return;
+                              setD(() {
+                                birth = d;
+                                birthText.text = DateFormat(
+                                  'dd-MM-yyyy',
+                                ).format(d);
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: AdminPrimaryButton(
+                  label: 'GÜNCELLE',
+                  onPressed: () => Navigator.pop(ctx, true),
+                ),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Vazgeç'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Kaydet'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
     if (saved != true) return;
+    if (birthText.text.trim().isNotEmpty && birth == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Doğum tarihi GG-AA-YYYY olmalı.')),
+      );
+      return;
+    }
     try {
       await Supabase.instance.client.rpc(
         'player_edit_basic',

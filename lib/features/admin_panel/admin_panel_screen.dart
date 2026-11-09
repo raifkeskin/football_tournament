@@ -138,7 +138,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   List<Map<String, dynamic>> _matches = const [];
   bool _loading = true;
   String? _error;
-  int _tab = 0;
+
+  /// Seçili sekme; boşsa ekran maçı olan sekmeye geçer (önce Canlı).
+  int _tab = 1;
 
   /// Bütün girişleri tamam olan maçlar özet görünür; dokununca açılır.
   final Set<String> _expanded = {};
@@ -478,6 +480,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final pre = _matches.where(_isPre).toList();
     final live = _matches.where(_isLive).toList();
     final post = _matches.where(_isPost).toList();
+    final counts = [pre.length, live.length, post.length];
+    // Maçı olmayan sekme seçilemez; seçili sekme boşsa sırayla Canlı,
+    // Maç öncesi, Maç sonu'ndan maçı olana geçilir.
+    if (counts[_tab] == 0) {
+      for (final i in const [1, 0, 2]) {
+        if (counts[i] > 0) {
+          _tab = i;
+          break;
+        }
+      }
+    }
     final shown = switch (_tab) {
       0 => pre,
       1 => live,
@@ -626,7 +639,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           for (var i = 0; i < 3; i++)
             Expanded(
               child: GestureDetector(
-                onTap: () => setState(() => _tab = i),
+                // Maçı olmayan sekme görünür ama seçilemez.
+                onTap: [pre, live, post][i] == 0
+                    ? null
+                    : () => setState(() => _tab = i),
                 child: Container(
                   height: 40,
                   alignment: Alignment.center,
@@ -639,7 +655,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   child: Text(
                     labels[i],
                     style: TextStyle(
-                      color: _tab == i ? _bg : const Color(0xFFCBD5E1),
+                      color: _tab == i
+                          ? _bg
+                          : [pre, live, post][i] == 0
+                          ? const Color(0xFF475569)
+                          : const Color(0xFFCBD5E1),
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
                     ),
