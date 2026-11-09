@@ -23,7 +23,13 @@ class MatchScoreLine extends StatelessWidget {
     this.onWatch,
     this.showLogos = true,
     this.compact = false,
+    this.homeShort = '',
+    this.awayShort = '',
   });
+
+  /// Tablodaki kısa adlar: takvim kartında tam ad sığmazsa kullanılır.
+  final String homeShort;
+  final String awayShort;
 
   final MatchModel match;
   final String homeName;
@@ -72,7 +78,7 @@ class MatchScoreLine extends StatelessWidget {
   );
 
   Widget _build(BuildContext context, String? liveMinute) {
-    if (compact) return _buildStacked(liveMinute);
+    if (compact) return _buildStacked(context, liveMinute);
     final rawTime = (match.matchTime ?? '').trim();
     final time = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
     final status = _statusLabel(liveMinute);
@@ -268,15 +274,18 @@ class MatchScoreLine extends StatelessWidget {
 }
 
 extension on MatchScoreLine {
-  /// Takvim kartı: [ev sahibi] [saat / skor] [deplasman]; her tarafta logo
-  /// üstte, ad altında ortalı.
-  Widget _buildStacked(String? liveMinute) {
+  /// Takvim kartı: solda dar durum sütunu (MS / dakika / saat + İzle), ince
+  /// çizgi, sağda [ev sahibi] [skor] [deplasman]. Her satır aynı boyda; ad
+  /// hiç 2. satıra inmez (sığmazsa kısa ad, sonra küçülür, en son "…").
+  /// Telefonun yazı boyutu büyüdükçe satırların hepsi birlikte en çok %30
+  /// büyür.
+  Widget _buildStacked(BuildContext context, String? liveMinute) {
     const mid = MatchScoreLine._mid;
     const accent = MatchScoreLine._accent;
     const live = MatchScoreLine._live;
+    final k = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.3);
     final rawTime = (match.matchTime ?? '').trim();
     final time = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
-    final status = _statusLabel(liveMinute);
     final hs = match.homeScore;
     final as = match.awayScore;
     final isLive =
@@ -288,32 +297,29 @@ extension on MatchScoreLine {
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
-    // Sonucu belli maçta yenen beyaz, yenilen soluk (penaltılar dahil).
     final winner = match.homeWins;
     final decided = match.status == MatchStatus.finished && winner != null;
 
-    Widget side(String name, String logo, {required bool home}) {
+    Widget side(String name, String short, String logo, {required bool home}) {
       final won = winner == home;
       return Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           WebSafeImage(
             url: logo,
-            width: 30,
-            height: 30,
+            width: 26 * k,
+            height: 26 * k,
             fit: BoxFit.contain,
-            fallbackIconSize: 22,
+            fallbackIconSize: 18 * k,
           ),
-          const SizedBox(height: 5),
-          Text(
-            shortTeamName(name),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
+          SizedBox(height: 3 * k),
+          _FitName(
+            full: shortTeamName(name),
+            short: short.trim(),
             style: TextStyle(
               fontWeight: decided && !won ? FontWeight.w600 : FontWeight.w700,
-              fontSize: 15,
-              height: 1.15,
+              fontSize: 13 * k,
+              height: 1.1,
               color: decided && !won ? mid : Colors.white,
               fontFamily: 'Barlow',
             ),
@@ -322,151 +328,271 @@ extension on MatchScoreLine {
       );
     }
 
-    // Başlamamış maçta saat skor kutusunda yazar (üstte tekrar edilmez).
-    final notYet = !unplayed && !showScore && time.isNotEmpty;
-    // Skorun üstü: canlıda dakika / İY, bitince MS.
-    final top = match.status == MatchStatus.finished
-        ? (text: 'MS', color: accent)
-        : (status != null && !unplayed)
-        ? status
-        : (text: time.isEmpty ? '--:--' : time, color: mid);
+    // Sol sütun: durum.
+    final Widget status = switch (match.displayStatus) {
+      MatchStatus.finished => Text(
+        'MS',
+        style: TextStyle(
+          color: accent,
+          fontWeight: FontWeight.w800,
+          fontSize: 13 * k,
+        ),
+      ),
+      MatchStatus.live || MatchStatus.halftime => Container(
+        padding: EdgeInsets.fromLTRB(4 * k, 1, 5 * k, 1),
+        decoration: BoxDecoration(
+          color: const Color(0xD9080C14),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: const Color(0x47FFFFFF)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (match.displayStatus == MatchStatus.live)
+              _BlinkDot(size: 6 * k)
+            else
+              Container(
+                width: 6 * k,
+                height: 6 * k,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFBBF24),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            SizedBox(width: 3 * k),
+            Text(
+              match.displayStatus == MatchStatus.halftime
+                  ? 'İY'
+                  : (liveMinute ?? 'CANLI'),
+              maxLines: 1,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 13 * k,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      ),
+      MatchStatus.cancelled || MatchStatus.postponed => Text(
+        match.displayStatus == MatchStatus.cancelled ? 'İPT' : 'ERT',
+        style: TextStyle(
+          color: Colors.white54,
+          fontWeight: FontWeight.w800,
+          fontSize: 12 * k,
+        ),
+      ),
+      MatchStatus.notStarted => Text(
+        time.isEmpty ? '--:--' : time,
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 13.5 * k,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    };
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: side(homeName, homeLogo, home: true)),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 70,
+    Widget left = SizedBox(
+      width: 46 * k,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!notYet) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          top.text,
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: top.color,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-              ],
-              Container(
-                width: 66,
-                height: 32,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isLive
-                      ? live.withValues(alpha: 0.22)
-                      : const Color(0xFF064E3B),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: (isLive ? live : accent).withValues(alpha: 0.45),
-                  ),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    unplayed
-                        ? (status?.text ?? '-')
-                        : notYet
-                        ? time
-                        : (showScore ? '$hs - $as' : '-'),
-                    style: TextStyle(
-                      color: isLive
-                          ? live
-                          : (unplayed ? Colors.white70 : Colors.white),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 19,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-              ),
-              if (match.hasPens && !unplayed) ...[
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    PenaltyBadge(match.homePens!, size: 10.5),
-                    const SizedBox(width: 6),
-                    PenaltyBadge(match.awayPens!, size: 10.5),
-                  ],
-                ),
-              ],
+              status,
               if (onWatch != null) ...[
-                const SizedBox(height: 6),
-                _WatchChip(live: isLive, onTap: onWatch!),
+                SizedBox(height: 3 * k),
+                YoutubeBrandIcon(size: 18 * k),
+                Text(
+                  isLive ? 'Canlı' : 'İzle',
+                  style: TextStyle(
+                    color: const Color(0xFFFCA5A5),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 9.5 * k,
+                    height: 1,
+                  ),
+                ),
               ],
             ],
           ),
         ),
-        const SizedBox(width: 6),
-        Expanded(child: side(awayName, awayLogo, home: false)),
+      ),
+    );
+    // Sol sütuna dokununca yayın açılır (yoksa kart maç detayına gider).
+    if (onWatch != null) {
+      left = InkWell(
+        onTap: onWatch,
+        borderRadius: BorderRadius.circular(8),
+        child: left,
+      );
+    }
+
+    final score = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 54 * k,
+          height: 28 * k,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: !showScore && !unplayed
+                ? Colors.transparent
+                : isLive
+                ? live.withValues(alpha: 0.22)
+                : const Color(0xFF064E3B),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: !showScore && !unplayed
+                  ? Colors.transparent
+                  : (isLive ? live : accent).withValues(alpha: 0.45),
+            ),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              unplayed ? '-' : (showScore ? '$hs - $as' : '–'),
+              style: TextStyle(
+                color: isLive
+                    ? live
+                    : (showScore ? Colors.white : Colors.white54),
+                fontWeight: FontWeight.w800,
+                fontSize: 17 * k,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ),
+        if (match.hasPens && !unplayed) ...[
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PenaltyBadge(match.homePens!, size: 9 * k),
+              const SizedBox(width: 4),
+              PenaltyBadge(match.awayPens!, size: 9 * k),
+            ],
+          ),
+        ],
       ],
+    );
+
+    return MediaQuery(
+      // Boyutlar elle k ile ölçeklenir; yazılar ikinci kez büyümesin.
+      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+      child: SizedBox(
+        height: 62 * k,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.025),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: left,
+            ),
+            Container(
+              width: 1,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              color: const Color(0xFF2B3A57),
+            ),
+            const SizedBox(width: 2),
+            Expanded(child: side(homeName, homeShort, homeLogo, home: true)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Center(child: score),
+            ),
+            Expanded(child: side(awayName, awayShort, awayLogo, home: false)),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// Skorun altında küçük çerçeveli "İzle" düğmesi: YouTube ikonu ve yazı.
-class _WatchChip extends StatelessWidget {
-  const _WatchChip({required this.live, required this.onTap});
+/// Tek satırlık takım adı: tam ad sığmazsa kısa ad, o da sığmazsa yazı
+/// %20'ye kadar küçülür, en son sonu "…" ile kesilir.
+class _FitName extends StatelessWidget {
+  const _FitName({
+    required this.full,
+    required this.short,
+    required this.style,
+  });
 
-  final bool live;
-  final VoidCallback onTap;
+  final String full;
+  final String short;
+  final TextStyle style;
 
-  static const _red = Color(0xFFFF0033);
+  double _w(String t, TextStyle st) => (TextPainter(
+    text: TextSpan(text: t, style: st),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+    textScaler: TextScaler.noScaling,
+  )..layout()).width;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: _red.withValues(alpha: 0.10),
-      shape: StadiumBorder(
-        side: BorderSide(color: _red.withValues(alpha: 0.55)),
-      ),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 3, 9, 3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const YoutubeBrandIcon(size: 16),
-              const SizedBox(width: 4),
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    live ? 'Canlı izle' : 'İzle',
-                    maxLines: 1,
-                    style: const TextStyle(
-                      color: Color(0xFFFECDD3),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      final max = c.maxWidth;
+      var text = full;
+      var w = _w(text, style);
+      if (w > max && short.isNotEmpty && short != full) {
+        text = short;
+        w = _w(text, style);
+      }
+      final size = style.fontSize ?? 13;
+      final scale = w <= max ? 1.0 : (max / w).clamp(0.8, 1.0);
+      return Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: style.copyWith(fontSize: size * scale),
+      );
+    },
+  );
+}
+
+/// Canlı maçın yanıp sönen kırmızı noktası.
+class _BlinkDot extends StatefulWidget {
+  const _BlinkDot({required this.size});
+
+  final double size;
+
+  @override
+  State<_BlinkDot> createState() => _BlinkDotState();
+}
+
+class _BlinkDotState extends State<_BlinkDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: Tween<double>(begin: 0.3, end: 1).animate(_c),
+    child: Container(
+      width: widget.size,
+      height: widget.size,
+      decoration: const BoxDecoration(
+        color: Color(0xFFEF4444),
+        shape: BoxShape.circle,
+      ),
+    ),
+  );
 }
 
 class YoutubeBrandIcon extends StatelessWidget {

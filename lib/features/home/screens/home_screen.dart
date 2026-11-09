@@ -1100,7 +1100,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
 
                     return ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                      // Takvim kartları ekran kenarına neredeyse dayanır.
+                      padding: EdgeInsets.fromLTRB(
+                        _calendar ? 4 : 16,
+                        12,
+                        _calendar ? 4 : 16,
+                        120,
+                      ),
                       children: sortedKeys.map((key) {
                         final sId = key.split('|').first;
                         // Bölümün turnuvası: tüm turnuvalar gösterilirken
@@ -1267,8 +1273,8 @@ class _MatchCardState extends State<_MatchCard> {
         },
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: widget.compact ? 10 : 8,
-            vertical: widget.compact ? 10 : 12,
+            horizontal: widget.compact ? 4 : 8,
+            vertical: widget.compact ? 5 : 12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1365,7 +1371,7 @@ class _MatchCardState extends State<_MatchCard> {
                     ),
                   ),
                 ),
-                SizedBox(height: widget.compact ? 10 : 8),
+                SizedBox(height: widget.compact ? 4 : 8),
               ],
               MatchScoreLine(
                 match: widget.match,
@@ -1375,6 +1381,18 @@ class _MatchCardState extends State<_MatchCard> {
                 awayLogo: widget.awayLogo,
                 showLogos: widget.compact,
                 compact: widget.compact,
+                homeShort:
+                    TeamDirectory
+                        .known
+                        .value[widget.match.homeTeamId]
+                        ?.shortName ??
+                    '',
+                awayShort:
+                    TeamDirectory
+                        .known
+                        .value[widget.match.awayTeamId]
+                        ?.shortName ??
+                    '',
                 // Maç bitse de yayın kaydı izlenebilsin diye ikon kalır.
                 onWatch: _broadcastUrl == null || !widget.compact
                     ? null
