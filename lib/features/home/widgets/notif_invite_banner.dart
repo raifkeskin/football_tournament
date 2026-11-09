@@ -180,9 +180,11 @@ class _InviteSheetState extends State<_InviteSheet> {
   @override
   void initState() {
     super.initState();
-    NotificationPrefsService.followedLeagues().then((s) {
-      if (mounted) setState(() => _league = s.contains(widget.leagueId));
-    }).catchError((_) {});
+    NotificationPrefsService.followedLeagues()
+        .then((s) {
+          if (mounted) setState(() => _league = s.contains(widget.leagueId));
+        })
+        .catchError((_) {});
   }
 
   Future<void> _enable() async {
