@@ -911,9 +911,9 @@ async function run(opts: RunOpts) {
         let end = toSec(f.bitis);
         if (w && start != null && start < w.start) start += w.start;
         if (w && end != null && end < w.start) end += w.start;
-        if (start == null || start > goalSec - 3 || start < goalSec - 30) start = goalSec - 11;
-        // Bir gol kesiti 20 sn (atak + gol + sevinç).
-        start = Math.max(0, Math.max(start, goalSec - 11));
+        if (start == null || start > goalSec - 3 || start < goalSec - 30) start = goalSec - 12;
+        // Bir gol kesiti 20 sn: golden 12 sn önce başlar, 8 sn sonra biter.
+        start = Math.max(0, Math.max(start, goalSec - 12));
         end = start + CLIP_SEC;
 
         const teamName = (f.atan_takim ?? "").toLocaleLowerCase("tr");

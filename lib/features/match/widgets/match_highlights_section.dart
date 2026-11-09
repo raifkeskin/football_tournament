@@ -302,9 +302,8 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
             'kendiliğinden yeniden denenecek.',
       ),
       'failed' => (
-        'Gol videoları hazırlanamadı',
-        'Bu maçın yayını taranamadı. Yetkililer Gol Kesitleri '
-            'ekranından yeniden deneyebilir.',
+        'Gol Özet taraması hata aldı',
+        'Admin ile iletişime geçiniz.',
       ),
       _ => (
         'Tarama sırada',
@@ -353,12 +352,72 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
                   body,
                   style: const TextStyle(color: kAdminMuted, fontSize: 12),
                 ),
+                if (failed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: TextButton.icon(
+                      onPressed: _reported ? null : _reportProblem,
+                      icon: Icon(
+                        _reported
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.campaign_outlined,
+                        size: 18,
+                      ),
+                      label: Text(_reported ? 'Bildirildi' : "Admin'e Bildir"),
+                      style: TextButton.styleFrom(
+                        foregroundColor: color,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  bool _reported = false;
+
+  /// Hatayı adminlere Telegram'dan maç bilgisiyle iletir.
+  Future<void> _reportProblem() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r =
+          (await Supabase.instance.client.rpc(
+                    'report_highlight_problem',
+                    params: {'p_match_id': widget.match.id},
+                  ) ??
+                  '')
+              .toString();
+      if (!mounted) return;
+      if (r == 'ok' || r == 'already') {
+        setState(() => _reported = true);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              r == 'ok'
+                  ? 'Admine bildirildi. Teşekkürler.'
+                  : 'Bu maç için zaten bildirdin.',
+            ),
+          ),
+        );
+      } else if (r == 'login') {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Bildirmek için giriş yapmalısın.')),
+        );
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Bildirilemedi. Tekrar dene.')),
+        );
+      }
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Bağlantı hatası. Tekrar dene.')),
+      );
+    }
   }
 
   @override
@@ -1138,7 +1197,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
           : 'Gol dakikalarının çevresi taranıyor…';
       color = kAdminAmber;
     } else if (job?.status == 'error') {
-      text = 'Son analiz başarısız: ${job?.error ?? ''}';
+      text =
+          'Son analiz başarısız: ${MatchHighlightService.friendlyError(job?.error)}';
       color = kAdminDanger;
     } else if (job?.status == 'done') {
       text = 'Son analizde ${job?.found ?? 0} gol bulundu.';

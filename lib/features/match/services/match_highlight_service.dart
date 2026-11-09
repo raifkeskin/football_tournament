@@ -586,6 +586,31 @@ class MatchHighlightService {
     });
   }
 
+  /// Sunucudan dönen ham hata metnini kullanıcıya Türkçe bir açıklamaya
+  /// çevirir; ham metin gösterilmez.
+  static String friendlyError(String? raw) {
+    final e = (raw ?? '').toLowerCase();
+    if (e.isEmpty) return 'beklenmeyen bir hata oluştu.';
+    if (e.contains('permission') || e.contains('403')) {
+      return 'yayın analiz servisi tarafından okunamadı (erişim izni yok).';
+    }
+    if (e.contains('quota') || e.contains('429') || e.contains('limit')) {
+      return 'analiz kotası doldu; biraz sonra tekrar denenecek.';
+    }
+    if (e.contains('timeout') ||
+        e.contains('timed out') ||
+        e.contains('deadline')) {
+      return 'analiz zaman aşımına uğradı.';
+    }
+    if (e.contains('not found') || e.contains('404') || e.contains('private')) {
+      return 'yayın videosuna ulaşılamadı (silinmiş ya da gizli olabilir).';
+    }
+    if (e.contains('budget') || e.contains('bütçe')) {
+      return 'bu maç için analiz bütçesi doldu.';
+    }
+    return 'beklenmeyen bir hata oluştu.';
+  }
+
   static void _notifyDone(MatchHighlightJob? j, String? label) {
     final ctx = appNavigatorKey.currentContext;
     if (ctx == null || j == null) return;
@@ -597,7 +622,7 @@ class MatchHighlightService {
           ? 'Gol analizi bitti$who: $n gol kesiti bulundu, onay bekliyor.'
           : 'Gol analizi bitti$who: gol kesiti bulunamadı.';
     } else if (j.status == 'error') {
-      msg = 'Gol analizi tamamlanamadı$who: ${j.error ?? 'bilinmeyen hata'}';
+      msg = 'Gol analizi tamamlanamadı$who: ${friendlyError(j.error)}';
     } else {
       return;
     }

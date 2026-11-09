@@ -37,7 +37,7 @@ ARCHIVE_DIR = os.environ.get(
 DRIVE_ROOTS = glob.glob(os.path.expanduser(
     '~/Library/CloudStorage/GoogleDrive-*/*/LigMasasi'))
 BREW = '/opt/homebrew/bin'
-LEAD, LENGTH = 3, 20  # özetteki başlangıçtan 3 sn önce, 20 sn
+LEAD, LENGTH = 0, 20  # özetteki başlangıç (gol - 12 sn) → 20 sn: golden 12 sn önce, 8 sn sonra
 MAX_TRIES = 3
 
 
