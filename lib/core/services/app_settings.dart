@@ -39,6 +39,7 @@ class AppSettings {
   static const _kSearch = 'search_enabled';
   static const _kLivePitch = 'live_pitch_enabled';
   static const _kAdminPanel = 'admin_panel_enabled';
+  static const _kIbraz = 'ibraz_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
@@ -164,6 +165,9 @@ class AppSettings {
 
   /// Menüde Yönetim Paneli: kapalıyken yalnız admin görür.
   static final adminPanelEnabled = ValueNotifier<bool>(false);
+
+  /// Kimlik ibrazıyla onay + kimliğini okutmadan kayıt (yeni özellik kapısı).
+  static final ibrazEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Yeni haberler (ana sayfada kaydırılan fotoğraflı kartlar, ayrı
@@ -256,6 +260,8 @@ class AppSettings {
           livePitchEnabled.value = r['value'] == true;
         } else if (r['key'] == _kAdminPanel) {
           adminPanelEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kIbraz) {
+          ibrazEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

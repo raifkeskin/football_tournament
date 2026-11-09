@@ -132,6 +132,28 @@ class IdentityService {
   /// doğrulamış olabilir.
   static final Map<String, bool> _cache = {};
   static final Map<String, DateTime> _falseAt = {};
+
+  /// Onaylı olup kimlik ibrazıyla (çip okutulmadan) onaylananlar: turuncu tik.
+  static final Set<String> _ibraz = {};
+  static bool isIbraz(String playerId) => _ibraz.contains(playerId);
+
+  /// Onay/ret sonrası bu oyuncunun tik bilgisi yeniden sorulur.
+  static void invalidate(String playerId) {
+    _cache.remove(playerId);
+    _falseAt.remove(playerId);
+    _ibraz.remove(playerId);
+    changes.value++;
+  }
+
+  /// Tike dokununca: yöntem, tarih, onaylayan (ibraz için).
+  static Future<Map<String, dynamic>?> badgeInfo(String playerId) async {
+    final r = await _sb.rpc(
+      'identity_badge_info',
+      params: {'p_player': playerId},
+    );
+    return r is Map ? Map<String, dynamic>.from(r) : null;
+  }
+
   static const _falseTtl = Duration(minutes: 2);
   static StreamSubscription<AuthState>? _authSub;
 
@@ -143,6 +165,7 @@ class IdentityService {
           s.event == AuthChangeEvent.signedOut) {
         _cache.clear();
         _falseAt.clear();
+        _ibraz.clear();
         changes.value++;
       }
     });
@@ -173,9 +196,17 @@ class IdentityService {
       );
       final rows = await _sb
           .from('player_verifications')
-          .select('player_id')
+          .select('player_id, method')
           .inFilter('player_id', part);
       final ok = {for (final r in rows) (r['player_id'] ?? '').toString()};
+      for (final r in rows) {
+        final id = (r['player_id'] ?? '').toString();
+        if (r['method'] == 'ibraz') {
+          _ibraz.add(id);
+        } else {
+          _ibraz.remove(id);
+        }
+      }
       final now = DateTime.now();
       for (final id in part) {
         _cache[id] = ok.contains(id);

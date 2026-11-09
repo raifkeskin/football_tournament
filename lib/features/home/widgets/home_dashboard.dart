@@ -1125,9 +1125,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
               padding: const EdgeInsets.only(bottom: 24),
               children: [
                 _greeting(session, data),
-                OverdueResultsBanner(leagueId: widget.league.id),
-                UnassignedRefereesBanner(leagueId: widget.league.id),
-                UnscheduledMatchesBanner(leagueId: widget.league.id),
+                // Yönetim Paneli açık olanlarda bu uyarılar panelde gösterilir.
+                if (!AdminPanelAccess.visible(session)) ...[
+                  OverdueResultsBanner(leagueId: widget.league.id),
+                  UnassignedRefereesBanner(leagueId: widget.league.id),
+                  UnscheduledMatchesBanner(leagueId: widget.league.id),
+                ],
                 const RefereeHomeCard(),
                 NotifInviteBanner(
                   leagueId: widget.league.id,

@@ -16,6 +16,10 @@ import '../match/widgets/match_schedule_dialog.dart';
 import '../referees/match_referee_picker.dart';
 import '../share/pre_match_video.dart';
 import '../videos/videos.dart';
+import '../home/widgets/overdue_results_banner.dart';
+import '../home/widgets/unassigned_referees_banner.dart';
+import '../home/widgets/unscheduled_matches_banner.dart';
+import '../identity/ibraz_pending_screen.dart';
 import '../match/models/match.dart';
 import '../match/screens/esame_edit_screen.dart';
 import '../match/screens/match_details_screen.dart';
@@ -142,6 +146,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   /// Seçili sekme; boşsa ekran maçı olan sekmeye geçer (önce Canlı).
   int _tab = 1;
 
+  /// Kimlik ibrazı onayı bekleyen kayıt sayısı (yetki alanına göre).
+  int _ibrazPending = 0;
+
   /// Bütün girişleri tamam olan maçlar özet görünür; dokununca açılır.
   final Set<String> _expanded = {};
   Timer? _timer;
@@ -241,7 +248,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     } catch (_) {}
   }
 
+  Future<void> _loadIbraz() async {
+    try {
+      final n = await _sb.rpc('ibraz_pending_count');
+      if (mounted && n is int && n != _ibrazPending) {
+        setState(() => _ibrazPending = n);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadMatches() async {
+    _loadIbraz();
     final s = _scope;
     if (s == null) {
       if (mounted) setState(() => _loading = false);
@@ -520,6 +537,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 children: [
                   _scopeBar(),
                   const SizedBox(height: 10),
+                  if (_ibrazPending > 0) _ibrazStrip(),
+                  // Ana sayfadaki uyarılar artık panelde.
+                  if (_scope != null) ...[
+                    OverdueResultsBanner(leagueId: _scope!.leagueId),
+                    UnassignedRefereesBanner(leagueId: _scope!.leagueId),
+                    UnscheduledMatchesBanner(leagueId: _scope!.leagueId),
+                  ],
                   _tabs(pre.length, live.length, post.length),
                   const SizedBox(height: 12),
                   if (_loading)
@@ -562,6 +586,88 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       t,
       textAlign: TextAlign.center,
       style: const TextStyle(color: _mid),
+    ),
+  );
+
+  Widget _ibrazStrip() => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Material(
+      color: const Color(0xFFF97316).withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () async {
+          await IbrazPendingScreen.open(context);
+          _loadIbraz();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFFF97316).withValues(alpha: 0.6),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF97316),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.badge_outlined,
+                  color: Colors.white,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Kimlik ibraz onayı bekleyen kayıtlar var',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      '$_ibrazPending futbolcu kimliğini göstermeyi bekliyor',
+                      style: const TextStyle(
+                        color: Color(0xFFFED7AA),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                constraints: const BoxConstraints(minWidth: 28),
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF97316),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  '$_ibrazPending',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFFFDBA74)),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 
