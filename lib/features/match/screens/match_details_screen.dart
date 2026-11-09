@@ -397,7 +397,7 @@ class _MatchPhaseLabel extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
-                          fontSize: text.length > 6 ? 13 : 18,
+                          fontSize: text.length > 6 ? 13 : 15,
                           height: 1.15,
                         ),
                       ),
@@ -1709,14 +1709,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 if (_hasStream && !showKickoff)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 2),
-                                    child: Text(
-                                      _dateTimeLine(m),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.3,
-                                        shadows: _hdrShadow,
+                                    child: Transform.translate(
+                                      offset: const Offset(0, -7),
+                                      child: Text(
+                                        _dateTimeLine(m),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.3,
+                                          shadows: _hdrShadow,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1739,75 +1742,94 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     SizedBox(
                                       width: 118,
                                       child: Padding(
-                                        padding: const EdgeInsets.only(top: 6),
+                                        padding: const EdgeInsets.only(top: 24),
                                         child: showKickoff
                                             ? _kickoffBlock(m)
-                                            // Dakika kapsülü yukarı taşar:
-                                            // skor logoların hizasında kalır.
-                                            : Transform.translate(
-                                                offset: const Offset(0, -24),
-                                                child: Column(
-                                                  children: [
-                                                    // Dakika / durum skorun
-                                                    // üstünde (koyu kapsül).
-                                                    _MatchPhaseLabel(match: m),
-                                                    Text(
-                                                      "${m.homeScore} - ${m.awayScore}",
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        fontSize: 27,
-                                                        shadows: _hdrShadow,
-                                                      ),
-                                                    ),
-                                                    if (m.hasPens)
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets.only(
-                                                              bottom: 3,
-                                                            ),
-                                                        child: Row(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            PenaltyBadge(
-                                                              m.homePens!,
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 8,
-                                                            ),
-                                                            PenaltyBadge(
-                                                              m.awayPens!,
-                                                            ),
-                                                          ],
+                                            // Skor logoların hizasında; dakika / durum
+                                            // kapsülü skorun altında.
+                                            : Column(
+                                                children: [
+                                                  Stack(
+                                                    clipBehavior: Clip.none,
+                                                    alignment: Alignment.center,
+                                                    children: [
+                                                      Text(
+                                                        "${m.homeScore} - ${m.awayScore}",
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 27,
+                                                          shadows: _hdrShadow,
                                                         ),
                                                       ),
-                                                    // Sıradaki adım (Maçı Bitir
-                                                    // vb.) skorun altında.
-                                                    if (canControl &&
-                                                        !beforeWindow &&
-                                                        !ended)
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets.only(
-                                                              top: 6,
-                                                            ),
-                                                        child: _MatchFlowBar(
-                                                          match: m,
-                                                          part: _FlowPart.next,
-                                                          canUndo:
-                                                              canManageLeague,
-                                                          onAction: (action) =>
-                                                              _runPhaseAction(
-                                                                m,
-                                                                action,
+                                                      // Dakika / durum skorun
+                                                      // hemen üstünde; skor
+                                                      // yerinde kalır.
+                                                      Positioned(
+                                                        top: 2,
+                                                        left: -8,
+                                                        right: -8,
+                                                        child: FractionalTranslation(
+                                                          translation:
+                                                              const Offset(
+                                                                0,
+                                                                -1,
+                                                              ),
+                                                          child:
+                                                              _MatchPhaseLabel(
+                                                                match: m,
                                                               ),
                                                         ),
                                                       ),
-                                                  ],
-                                                ),
+                                                    ],
+                                                  ),
+                                                  if (m.hasPens)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            bottom: 3,
+                                                          ),
+                                                      child: Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          PenaltyBadge(
+                                                            m.homePens!,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 8,
+                                                          ),
+                                                          PenaltyBadge(
+                                                            m.awayPens!,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  // Sıradaki adım (Maçı Bitir
+                                                  // vb.) skorun altında.
+                                                  if (canControl &&
+                                                      !beforeWindow &&
+                                                      !ended)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 6,
+                                                          ),
+                                                      child: _MatchFlowBar(
+                                                        match: m,
+                                                        part: _FlowPart.next,
+                                                        canUndo:
+                                                            canManageLeague,
+                                                        onAction: (action) =>
+                                                            _runPhaseAction(
+                                                              m,
+                                                              action,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                ],
                                               ),
                                       ),
                                     ),
