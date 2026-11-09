@@ -45,13 +45,16 @@ class AdminPanelAccess {
 
 /// Ana sayfada sponsor şeridinin altındaki ince geçiş şeridi.
 class AdminPanelStrip extends StatelessWidget {
-  const AdminPanelStrip({super.key});
+  const AdminPanelStrip({super.key, this.leagueId});
+
+  /// Ana sayfada seçili turnuva; panel bu turnuvayla açılır.
+  final String? leagueId;
 
   @override
   Widget build(BuildContext context) => Material(
     color: const Color(0xFF0F2E25),
     child: InkWell(
-      onTap: () => AdminPanelScreen.open(context),
+      onTap: () => AdminPanelScreen.open(context, leagueId: leagueId),
       child: Container(
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -91,11 +94,17 @@ class AdminPanelAutoOpen {
 
   static bool _done = false;
 
-  static void maybeOpen(BuildContext context, AppSessionState s) {
+  static void maybeOpen(
+    BuildContext context,
+    AppSessionState s, {
+    String? leagueId,
+  }) {
     if (_done || !AdminPanelAccess.visible(s)) return;
     _done = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.mounted) AdminPanelScreen.open(context);
+      if (context.mounted) {
+        AdminPanelScreen.open(context, leagueId: leagueId);
+      }
     });
   }
 }
@@ -121,14 +130,18 @@ class _Scope {
 enum _Embed { ok, disabled, missing, unknown }
 
 class AdminPanelScreen extends StatefulWidget {
-  const AdminPanelScreen({super.key});
+  const AdminPanelScreen({super.key, this.leagueId});
 
-  static Future<void> open(BuildContext context) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      settings: const RouteSettings(name: 'AdminPanelScreen'),
-      builder: (_) => const AdminPanelScreen(),
-    ),
-  );
+  /// Açılışta seçilecek turnuva (ana sayfada seçili olan); yetki yoksa ilki.
+  final String? leagueId;
+
+  static Future<void> open(BuildContext context, {String? leagueId}) =>
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'AdminPanelScreen'),
+          builder: (_) => AdminPanelScreen(leagueId: leagueId),
+        ),
+      );
 
   @override
   State<AdminPanelScreen> createState() => _AdminPanelScreenState();
@@ -229,7 +242,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       if (!mounted) return;
       setState(() {
         _scopes = list;
-        _scope = list.isEmpty ? null : list.first;
+        _scope = list.isEmpty
+            ? null
+            : list.firstWhere(
+                (e) => e.leagueId == widget.leagueId,
+                orElse: () => list.first,
+              );
         // Bölge sorumlusu tek bölgedeyse o bölgeye sabitlenir.
         final s = _scope;
         _regionId = s != null && !s.canAll && s.regions.length == 1
