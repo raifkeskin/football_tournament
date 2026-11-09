@@ -34,7 +34,7 @@ typedef _Season = ({
 class _Op {
   _Op(Map r)
     : at = DateTime.tryParse('${r['at'] ?? ''}')?.toLocal(),
-      esame = r['kind'] == 'esame',
+      kind = '${r['kind'] ?? ''}',
       pro = '${r['model'] ?? ''}'.contains('pro'),
       home = shortTeamName('${r['home_name'] ?? ''}'),
       away = shortTeamName('${r['away_name'] ?? ''}'),
@@ -42,7 +42,8 @@ class _Op {
       tl = (r['cost_try'] as num?)?.toDouble() ?? 0;
 
   final DateTime? at;
-  final bool esame;
+  final String kind;
+  bool get esame => kind == 'esame';
   final bool pro;
   final String home;
   final String away;
@@ -297,6 +298,41 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
     }
   }
 
+  /// Maç öncesi / sonrası haberi: kapalı, Flash ya da Pro.
+  Future<void> _pickNewsMode(String key, String title) async {
+    final current = '${_settings?[key] ?? 'off'}';
+    final picked = await showAdminOptionPicker<String>(
+      context: context,
+      title: title,
+      items: const ['off', 'flash', 'pro'],
+      labelBuilder: (m) => switch (m) {
+        'pro' => 'Pro · daha uzun ve akıcı, yaklaşık 4–5 kat pahalı',
+        'flash' => 'Flash · uzun düşünür, ucuz (önerilen)',
+        _ => 'Kapalı · haber kurallarla yazılır',
+      },
+      selected: current,
+    );
+    if (picked == null || picked == current) return;
+    await _setOption(key, picked);
+  }
+
+  Widget _newsModeRow(String key, IconData icon, String label) {
+    final m = '${_settings?[key] ?? 'off'}';
+    return AdminSelectRow(
+      icon: icon,
+      label: label,
+      value: switch (m) {
+        'pro' => 'Gemini Pro',
+        'flash' => 'Gemini Flash',
+        _ => 'Kapalı',
+      },
+      placeholder: '',
+      onTap: _busy || _settings == null
+          ? null
+          : () => _pickNewsMode(key, label),
+    );
+  }
+
   Future<void> _setOption(String key, String value) async {
     setState(() => _busy = true);
     try {
@@ -418,7 +454,11 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
       child: Row(
         children: [
           Icon(
-            o.esame ? Icons.document_scanner_outlined : Icons.movie_outlined,
+            o.esame
+                ? Icons.document_scanner_outlined
+                : o.kind.startsWith('news')
+                ? Icons.newspaper_outlined
+                : Icons.movie_outlined,
             color: kAdminAccent,
             size: 20,
           ),
@@ -428,7 +468,13 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  o.esame ? 'Esame okuma' : 'Gol videosu',
+                  o.esame
+                      ? 'Esame okuma'
+                      : o.kind == 'news_pre'
+                      ? 'Maç öncesi haberi'
+                      : o.kind == 'news_post'
+                      ? 'Maç sonrası haberi'
+                      : 'Gol videosu',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -648,6 +694,23 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
                   value: '${_settings?['ai_esame_read_limit'] ?? 3} okuma',
                   placeholder: '',
                   onTap: _busy || _settings == null ? null : _pickReadLimit,
+                ),
+              ],
+            ),
+          ),
+          AdminFormSection(
+            title: 'Spor editörü haberi',
+            child: AdminFieldGroup(
+              children: [
+                _newsModeRow(
+                  'ai_news_pre_mode',
+                  Icons.event_note_outlined,
+                  'Maç öncesi haberi',
+                ),
+                _newsModeRow(
+                  'ai_news_post_mode',
+                  Icons.sports_soccer_outlined,
+                  'Maç sonrası haberi',
                 ),
               ],
             ),

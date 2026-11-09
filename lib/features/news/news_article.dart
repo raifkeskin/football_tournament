@@ -95,6 +95,8 @@ class NewsArticle {
     if (h.isNotEmpty) a = a.withHeadline(h);
     final body = (n.article ?? '').trim();
     if (body.isNotEmpty) a = a.withBody(body);
+    final deck = (n.deck ?? '').trim();
+    if (deck.isNotEmpty) a = a.withDeck(deck);
     return a;
   }
 
@@ -112,6 +114,17 @@ class NewsArticle {
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList(),
+    home: home,
+    away: away,
+    hs: hs,
+    as: as,
+  );
+
+  NewsArticle withDeck(String d) => NewsArticle(
+    kicker: kicker,
+    headline: headline,
+    deck: d,
+    paragraphs: paragraphs,
     home: home,
     away: away,
     hs: hs,
