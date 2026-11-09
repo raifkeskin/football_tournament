@@ -30,7 +30,7 @@ class _AdminRegistrationsScreenState extends State<AdminRegistrationsScreen> {
     try {
       final r = await Supabase.instance.client.rpc(
         'admin_registrations',
-        params: {'p_limit': 300},
+        params: {'p_limit': 1000},
       );
       if (!mounted) return;
       setState(() {
@@ -108,6 +108,8 @@ class _AdminRegistrationsScreenState extends State<AdminRegistrationsScreen> {
             for (final r in _items)
               if (r['kind'] == _filter) r,
           ];
+    int count(String k) =>
+        k == 'all' ? _items.length : _items.where((r) => r['kind'] == k).length;
     return AdminPageScaffold(
       title: 'Kayıtlar',
       body: RefreshIndicator(
@@ -130,7 +132,20 @@ class _AdminRegistrationsScreenState extends State<AdminRegistrationsScreen> {
                           Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: ChoiceChip(
-                              label: Text(f.$2),
+                              // Sekme adının altında o türdeki kayıt sayısı.
+                              label: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(f.$2),
+                                  Text(
+                                    '${count(f.$1)}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
                               selected: _filter == f.$1,
                               onSelected: (_) => setState(() => _filter = f.$1),
                             ),
