@@ -38,7 +38,6 @@ import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
-import '../services/supabase/supabase_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
@@ -316,7 +315,7 @@ class _TeamInfo extends StatelessWidget {
   }
 }
 
-/// Skorun altında: canlı dakika, İY veya MS.
+/// Skorun üstünde: canlı dakika, İY veya MS (koyu kapsül).
 class _MatchPhaseLabel extends StatelessWidget {
   const _MatchPhaseLabel({required this.match});
 
@@ -351,15 +350,61 @@ class _MatchPhaseLabel extends StatelessWidget {
         const shadows = [
           Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
         ];
-        final label = Text(
-          text,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-            shadows: shadows,
-          ),
-        );
+        // Koyu kapsül: beyaz kalın yazı + durum noktası (canlıda kırmızı,
+        // yanıp söner). Forma rengi ne olursa olsun okunur.
+        final pill =
+            match.status == MatchStatus.live ||
+            match.status == MatchStatus.halftime ||
+            match.status == MatchStatus.finished;
+        final Widget label = !pill
+            ? Text(
+                text,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  shadows: shadows,
+                ),
+              )
+            : Container(
+                padding: const EdgeInsets.fromLTRB(9, 2, 11, 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xD1080C14),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: const Color(0x47FFFFFF)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (match.status == MatchStatus.live &&
+                        match.shootout == null)
+                      const _LiveDot(size: 9)
+                    else
+                      Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: text.length > 6 ? 13 : 18,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
         // Hızlı skorla bitti, olaylar sonradan girilecek.
         if (match.status != MatchStatus.finished || !match.detailsPending) {
           return label;
@@ -389,15 +434,21 @@ class _MatchPhaseLabel extends StatelessWidget {
 
 /// Yetkililere görünen maç akışı düğmesi (başlama düdüğü → İY → 2. yarı →
 /// maç sonu). Son adımı geri alma, alttaki menü düğmesindedir.
+enum _FlowPart { next, tools }
+
 class _MatchFlowBar extends StatefulWidget {
   const _MatchFlowBar({
     required this.match,
     required this.onAction,
+    this.part = _FlowPart.next,
     this.canUndo = false,
   });
 
   final MatchModel match;
   final Future<void> Function(String action) onAction;
+
+  /// Başlıkta yalnız sıradaki adım; alt satırda Geri Al + Sayaç.
+  final _FlowPart part;
 
   /// "Geri Al": son devre adımını geri alır (admin ve kurucu başkan).
   final bool canUndo;
@@ -490,7 +541,10 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
         m.kickoffAt != null &&
         m.extraTimeAt == null &&
         m.shootout == null;
-    if (next == null && !undo) return const SizedBox.shrink();
+    final header = widget.part == _FlowPart.next;
+    if (header ? next == null : (!undo && !clock)) {
+      return const SizedBox.shrink();
+    }
 
     Widget pill({
       required String label,
@@ -499,19 +553,20 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
       required VoidCallback? onTap,
       bool outlined = false,
     }) => SizedBox(
-      height: 32,
+      height: header ? 32 : 40,
       child: Material(
         color: outlined ? Colors.white.withValues(alpha: 0.06) : color,
         shape: StadiumBorder(
           side: outlined
-              ? const BorderSide(color: Colors.white24)
-              : BorderSide.none,
+              ? const BorderSide(color: Colors.white24, width: 1.5)
+              // Başlıkta beyaz kenar: forma rengiyle karışmaz.
+              : const BorderSide(color: Color(0xD9FFFFFF), width: 1.5),
         ),
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: _busy ? null : onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: EdgeInsets.symmetric(horizontal: header ? 12 : 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -525,14 +580,14 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
                     ),
                   )
                 else
-                  Icon(icon, size: 17, color: Colors.white),
-                const SizedBox(width: 5),
+                  Icon(icon, size: header ? 16 : 18, color: Colors.white),
+                const SizedBox(width: 6),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 12.5,
+                    fontSize: header ? 12.5 : 14,
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -543,17 +598,17 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
       ),
     );
 
+    if (header) {
+      return pill(
+        label: next!.label,
+        icon: next.icon,
+        color: next.color,
+        onTap: () => _run(next.action),
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (next != null)
-          pill(
-            label: next.label,
-            icon: next.icon,
-            color: next.color,
-            onTap: () => _run(next.action),
-          ),
-        if (next != null && undo) const SizedBox(width: 6),
         if (undo)
           pill(
             label: 'Geri Al',
@@ -563,7 +618,7 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
             onTap: () => _run('undo'),
           ),
         if (clock) ...[
-          const SizedBox(width: 6),
+          if (undo) const SizedBox(width: 8),
           pill(
             label: 'Sayaç',
             icon: Icons.timer_outlined,
@@ -1394,6 +1449,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             m.status != MatchStatus.finished &&
             m.status != MatchStatus.cancelled;
         final bool canControl = isSuperAdmin && (!needsControl || _hasControl);
+        final ctl = MatchControlBar(
+          key: ValueKey('ctl_${m.id}'),
+          match: m,
+          onChanged: (v) {
+            if (mounted && v != _hasControl) {
+              setState(() => _hasControl = v);
+            }
+          },
+        );
         // Bitmiş/iptal maçta "Geri Al" üst çubukta (sekmelerin üstünde
         // ayrı satır açılmasın).
         final bool ended =
@@ -1676,6 +1740,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                             ? _kickoffBlock(m)
                                             : Column(
                                                 children: [
+                                                  // Dakika / durum skorun
+                                                  // üstünde (koyu kapsül).
+                                                  _MatchPhaseLabel(match: m),
+                                                  const SizedBox(height: 4),
                                                   Text(
                                                     "${m.homeScore} - ${m.awayScore}",
                                                     style: const TextStyle(
@@ -1709,35 +1777,28 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                                         ],
                                                       ),
                                                     ),
-                                                  Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Flexible(
-                                                        child: _MatchPhaseLabel(
-                                                          match: m,
-                                                        ),
+                                                  // Sıradaki adım (Maçı Bitir
+                                                  // vb.) skorun altında.
+                                                  if (canControl &&
+                                                      !beforeWindow &&
+                                                      !ended)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 6,
+                                                          ),
+                                                      child: _MatchFlowBar(
+                                                        match: m,
+                                                        part: _FlowPart.next,
+                                                        canUndo:
+                                                            canManageLeague,
+                                                        onAction: (action) =>
+                                                            _runPhaseAction(
+                                                              m,
+                                                              action,
+                                                            ),
                                                       ),
-                                                      // Geç başlatılan 2. yarı:
-                                                      // dakika düzeltme (admin
-                                                      // ve kurucu başkan).
-                                                      if (canManageLeague &&
-                                                          canControl &&
-                                                          m.status ==
-                                                              MatchStatus
-                                                                  .live &&
-                                                          m.secondHalfAt !=
-                                                              null &&
-                                                          m.extraTimeAt ==
-                                                              null &&
-                                                          m.shootout == null)
-                                                        _SecondHalfMinuteEdit(
-                                                          match: m,
-                                                          onSaved:
-                                                              _triggerRefresh,
-                                                        ),
-                                                    ],
-                                                  ),
+                                                    ),
                                                 ],
                                               ),
                                       ),
@@ -1788,15 +1849,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         fit: canControl
                                             ? FlexFit.loose
                                             : FlexFit.tight,
-                                        child: MatchControlBar(
-                                          key: ValueKey('ctl_${m.id}'),
-                                          match: m,
-                                          onChanged: (v) {
-                                            if (mounted && v != _hasControl) {
-                                              setState(() => _hasControl = v);
-                                            }
-                                          },
-                                        ),
+                                        // Yönetiyorken tek sıra: dar
+                                        // ekranda rozet küçülür, alta inmez.
+                                        child: canControl
+                                            ? FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                alignment: Alignment.centerLeft,
+                                                child: ctl,
+                                              )
+                                            : ctl,
                                       ),
                                     if (canControl &&
                                         !beforeWindow &&
@@ -1808,6 +1869,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           alignment: Alignment.centerRight,
                                           child: _MatchFlowBar(
                                             match: m,
+                                            part: _FlowPart.tools,
                                             canUndo: canManageLeague,
                                             onAction: (action) =>
                                                 _runPhaseAction(m, action),
@@ -8165,7 +8227,9 @@ class _IconTab extends StatelessWidget {
 }
 
 class _LiveDot extends StatefulWidget {
-  const _LiveDot();
+  const _LiveDot({this.size = 8});
+
+  final double size;
 
   @override
   State<_LiveDot> createState() => _LiveDotState();
@@ -8189,146 +8253,12 @@ class _LiveDotState extends State<_LiveDot>
     return FadeTransition(
       opacity: Tween<double>(begin: 0.25, end: 1).animate(_blink),
       child: Container(
-        width: 8,
-        height: 8,
+        width: widget.size,
+        height: widget.size,
         decoration: BoxDecoration(
           color: const Color(0xFFEF4444),
           shape: BoxShape.circle,
           border: Border.all(color: const Color(0xFF111A2E), width: 1.5),
-        ),
-      ),
-    );
-  }
-}
-
-/// Skorun yanındaki küçük kalem: 2. yarı geç başlatıldıysa şu anki dakika
-/// düzeltilir (ör. 31' → 35'); second_half_at buna göre geri alınır.
-class _SecondHalfMinuteEdit extends StatelessWidget {
-  const _SecondHalfMinuteEdit({required this.match, required this.onSaved});
-
-  final MatchModel match;
-  final VoidCallback onSaved;
-
-  Future<void> _edit(BuildContext context) async {
-    final now = MatchClock.liveMinuteParts(match);
-    if (now == null) return;
-    final period = MatchClock.periodOf(match.seasonId);
-    final current = now.minute + (now.added ?? 0);
-    var value = current;
-    final picked = await showDialog<int>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          Widget step(IconData icon, int d) => SizedBox(
-            width: 48,
-            height: 48,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.zero,
-                side: const BorderSide(color: Colors.white24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: () => setLocal(
-                () => value = (value + d).clamp(period + 1, period * 2 + 30),
-              ),
-              child: Icon(icon),
-            ),
-          );
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: adminDialogDecoration(),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const AdminDialogHeader(
-                    icon: Icons.timer_outlined,
-                    title: '2. yarı dakikası',
-                    subtitle: 'Geç başlatıldıysa şu anki dakikayı ayarla',
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      step(Icons.remove_rounded, -1),
-                      SizedBox(
-                        width: 110,
-                        child: Text(
-                          "$value'",
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 44,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      step(Icons.add_rounded, 1),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  AdminPrimaryButton(
-                    label: 'KAYDET',
-                    onPressed: () => Navigator.pop(ctx, value),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-    if (picked == null || picked == current || !context.mounted) return;
-    // Dakika = period + (şimdi − 2. yarı başlangıcı) + 1.
-    final start = DateTime.now().toUtc().subtract(
-      Duration(minutes: picked - period - 1),
-    );
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final rows = await Supabase.instance.client
-          .from('matches')
-          .update({'second_half_at': start.toIso8601String()})
-          .eq('id', match.id)
-          .select('id');
-      if (rows.isEmpty) throw Exception('yetki yok');
-      SupabaseMatchService.notifyLocalChange(match.id);
-      onSaved();
-      messenger.showSnackBar(
-        SnackBar(content: Text("Dakika $picked' olarak düzeltildi.")),
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Düzeltilemedi: $e')));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(7),
-        onTap: () => _edit(context),
-        child: Container(
-          width: 22,
-          height: 22,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFBBF24).withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(7),
-            border: Border.all(
-              color: const Color(0xFFFBBF24).withValues(alpha: 0.5),
-            ),
-          ),
-          child: const Icon(
-            Icons.edit_rounded,
-            size: 13,
-            color: Color(0xFFFBBF24),
-          ),
         ),
       ),
     );
