@@ -1349,6 +1349,28 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 }
 
 /// Bantla yapıştırılmış, kenarları yırtık gazete küpürü.
+/// Uzatma dakikaları ("70+3"): küpür yazı tipinde artı işareti iri
+/// görünür; o işaret küçültülerek yazılır.
+TextSpan _plusSpans(String text, TextStyle style) {
+  final re = RegExp(r'(?<=\d)\+(?=\d)');
+  final spans = <InlineSpan>[];
+  var last = 0;
+  for (final m in re.allMatches(text)) {
+    if (m.start > last) {
+      spans.add(TextSpan(text: text.substring(last, m.start)));
+    }
+    spans.add(
+      TextSpan(
+        text: '+',
+        style: TextStyle(fontSize: (style.fontSize ?? 15) * 0.62),
+      ),
+    );
+    last = m.end;
+  }
+  if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
+  return TextSpan(style: style, children: spans);
+}
+
 class _Clipping extends StatelessWidget {
   const _Clipping({
     required this.item,
@@ -1357,10 +1379,14 @@ class _Clipping extends StatelessWidget {
     this.maxParagraphs,
     this.tilt = true,
     this.brand = false,
+    this.lineHeight = 1.55,
   });
 
   final NewsItem item;
   final NewsArticle article;
+
+  /// Metin satır aralığı (hikâyede daha sıkı).
+  final double lineHeight;
 
   /// Instagram hikâyesinde üst satırın sağında Lig Masası arması ve adı.
   final bool brand;
@@ -1386,11 +1412,11 @@ class _Clipping extends StatelessWidget {
       if (item.leagueName.isNotEmpty) item.leagueName,
       if (date.isNotEmpty) date,
     ].join(' · ');
-    const body = TextStyle(
+    final body = TextStyle(
       fontFamily: 'OldStandard',
       color: _ink,
       fontSize: 15,
-      height: 1.55,
+      height: lineHeight,
     );
     final paper = ClipPath(
       clipper: _TornClipper(item.id.hashCode),
@@ -1486,8 +1512,8 @@ class _Clipping extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 9),
                 child: maxParagraphs == null
-                    ? SelectableText(p, style: body)
-                    : Text(p, style: body),
+                    ? SelectableText.rich(_plusSpans(p, body))
+                    : Text.rich(_plusSpans(p, body)),
               ),
             const SizedBox(height: 4),
             Container(height: 1, color: _ink.withValues(alpha: 0.35)),
@@ -2196,7 +2222,62 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     ),
   );
 
+  /// Hikâye küpürüne sığacak paragraf sayısı: yazı okunur kalacak (ölçek
+  /// >= 0,66) en çok paragraf; sığmazsa son paragraflar atılır.
+  int _storyParagraphs(double availW, double availH) {
+    final a = widget.article;
+    const baseW = 420.0, pad = 36.0;
+    final tw = baseW - pad;
+    double h(String t, TextStyle st) {
+      final tp = TextPainter(
+        text: _plusSpans(t, st),
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.noScaling,
+      )..layout(maxWidth: tw);
+      return tp.height;
+    }
+
+    const body = TextStyle(
+      fontFamily: 'OldStandard',
+      fontSize: 15,
+      height: 1.42,
+    );
+    final head = h(
+      a.headline,
+      const TextStyle(
+        fontFamily: 'PlayfairDisplay',
+        fontWeight: FontWeight.w900,
+        fontSize: 27,
+        height: 1.08,
+      ),
+    );
+    var fixed = 44.0 + 22 + 6 + head + 21 + 4 + 28 + 10;
+    if (a.home != null && a.away != null) fixed += 12 + 120;
+    if (a.deck.isNotEmpty && a.hs == null) {
+      fixed += 10 + h(a.deck, body.copyWith(fontStyle: FontStyle.italic));
+    }
+    final ph = [for (final p in a.paragraphs) h(p, body) + 9];
+    for (var k = ph.length; k >= 1; k--) {
+      final total = fixed + ph.take(k).fold<double>(0, (x, y) => x + y);
+      final scale = (availH / total).clamp(0.0, availW / baseW);
+      if (scale >= 0.66) return k;
+    }
+    return 1;
+  }
+
   Widget _story(NewsItem n) {
+    return LayoutBuilder(
+      builder: (context, c) => _storyBody(
+        n,
+        _storyParagraphs(
+          c.maxWidth.isFinite ? c.maxWidth - 40 : 350,
+          c.maxHeight.isFinite ? c.maxHeight - 200 - 56 : 438,
+        ),
+      ),
+    );
+  }
+
+  Widget _storyBody(NewsItem n, int paragraphs) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -2231,7 +2312,8 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                 child: _Clipping(
                   item: n,
                   article: widget.article,
-                  maxParagraphs: 2,
+                  maxParagraphs: paragraphs,
+                  lineHeight: 1.42,
                   tilt: false,
                   brand: true,
                 ),
