@@ -10,8 +10,9 @@ import '../features/player/services/player_profile_service.dart';
 import '../features/match/services/youtube_autolink_service.dart';
 import '../features/match/widgets/youtube_find_sheet.dart';
 import '../core/utils/team_name.dart';
+import '../features/admin_panel/duplicate_players_view.dart';
 
-enum _Filter { all, profile, roster, broadcast, news, history }
+enum _Filter { all, profile, roster, broadcast, news, dups, history }
 
 /// Takım sorumlularının kadro talepleri, futbolcuların profil değişiklik
 /// talepleri ve #ligmasasi etiketsiz Instagram gönderileri; admin ve turnuva
@@ -40,6 +41,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   List<ProfileChangeRequest> _history = const [];
   List<YoutubeLinkConflict> _conflicts = const [];
   List<_IgNews> _igNews = const [];
+  int _dupCount = 0;
 
   /// Uyuşmazlık kartındaki maç bilgisi (maç id -> başlık / alt satır).
   Map<String, (String, String)> _conflictMatches = const {};
@@ -55,6 +57,8 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
     _reload();
   }
 
+  bool get _isAdmin => AppSession.of(context).value.isAdmin;
+
   Future<void> _reload() async {
     setState(() => _busy = true);
     try {
@@ -63,6 +67,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         _profiles.listRequests(onlyPending: true),
         _loadConflicts(),
         _loadIgNews(),
+        _isAdmin ? fetchDuplicatePairCount() : Future.value(0),
         if (_filter == _Filter.history)
           _profiles.listRequests(onlyPending: false),
       ]);
@@ -74,8 +79,9 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         _profileRequests = results[1] as List<ProfileChangeRequest>;
         _conflicts = results[2] as List<YoutubeLinkConflict>;
         _igNews = results[3] as List<_IgNews>;
-        if (results.length > 4) {
-          _history = (results[4] as List<ProfileChangeRequest>)
+        _dupCount = results[4] as int;
+        if (results.length > 5) {
+          _history = (results[5] as List<ProfileChangeRequest>)
               .where((r) => r.status != ProfileChangeStatus.pending)
               .toList();
         }
@@ -506,6 +512,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           chip(_Filter.roster, 'Kadro (${_actions.length})'),
           chip(_Filter.broadcast, 'Yayın (${_conflicts.length})'),
           chip(_Filter.news, 'Haber (${_igNews.length})'),
+          if (_isAdmin) chip(_Filter.dups, 'Çift kayıt ($_dupCount)'),
           chip(_Filter.history, 'Geçmiş'),
         ],
       ),
@@ -513,6 +520,13 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   }
 
   Widget _list() {
+    if (_filter == _Filter.dups) {
+      return DuplicatePlayersView(
+        onCount: (n) {
+          if (mounted && n != _dupCount) setState(() => _dupCount = n);
+        },
+      );
+    }
     final List<Widget> cards = switch (_filter) {
       _Filter.all => [
         ..._profileRequests.map(_profileCard),
@@ -524,6 +538,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
       _Filter.roster => _actions.map(_actionCard).toList(),
       _Filter.broadcast => _conflicts.map(_conflictCard).toList(),
       _Filter.news => _igNews.map(_igNewsCard).toList(),
+      _Filter.dups => const <Widget>[],
       _Filter.history => _history.map(_historyCard).toList(),
     };
     if (cards.isEmpty) {
