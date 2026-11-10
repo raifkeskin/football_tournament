@@ -341,3 +341,9 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Oyuncu görüntüsü için fotoğraf izni gibi rıza ve izinsiz oyuncuyu gizleme kuralı.
   - Kamera + mikrofon izni için Play Veri güvenliği, Apple etiketleri ve gizlilik sayfası güncellenmeli.
 - **Sıra:** 1) R2 + yükleme, 2) kayıt düğmesi, 3) etiket popup'ı. Her aşamada önizleme ve onay.
+
+## 33. Avukat onay metinleri (KVKK) — PLAN ONAYI BEKLİYOR (2026-11-10)
+- **Kural:** Uygulamadaki eski onay/aydınlatma metinlerinin hiçbiri kullanılmaz; yalnız avukatın 6 belgesi (Üyelik Sözleşmesi, Üye Aydınlatma, Sporcu Aydınlatma, Sporcu Açık Rıza, Sağlık ve Risk Beyanı, Çerez Aydınlatma) kullanılır.
+- **Veri sorumlusu şimdilik şahıs (Raif Keskin).** Şirket kurulunca DEĞİŞECEK alanlar: ticaret unvanı, MERSİS no, tescilli adres, KEP adresi, e-posta, internet sitesi (üyelik sözleşmesi + 3 aydınlatma + açık rıza + çerez metni başlıkları ve "başvuru yolu" tabloları); sözleşmedeki "Şirket" tanımı; `fan_membership_terms.dart` işletmeci bloğu; gizlilik sayfası; Play Veri güvenliği ve App Store gizlilik/satıcı bilgileri; ileride kartla ödeme için mesafeli satış ve iade metinleri.
+- **Akış:** kayıtta sözleşme + aydınlatma (zorunlu kutu) → kayıttan hemen sonra Sporcu Açık Rıza ekranı (5 ayrı seçim, işaretsiz) → sağlık beyanı turnuva/sezon kadrosuna girişte → web'de çerez bandı. Mevcut kullanıcılara uygulamaya ilk girişte yeni metinler gösterilir.
+- **Karar:** Fotoğraf/boy-kilo görünürlüğü yalnız kayıtlı kullanıcılara (misafir görmez); boy-kilo ayrıca kullanıcı izin verdiyse. Yaş kontrolü yalnız kontenjan kuralı olan turnuvalarda. Reklam çerezi yok.
