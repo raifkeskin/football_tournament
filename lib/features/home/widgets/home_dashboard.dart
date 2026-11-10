@@ -2077,45 +2077,49 @@ class _HomeDashboardState extends State<HomeDashboard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               side(home),
-              SizedBox(
-                width: 92,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    if (live || hasTime)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openMatch(m),
+                child: SizedBox(
+                  width: 92,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 8),
+                      if (live || hasTime)
+                        Text(
+                          live
+                              ? '${m.homeScore} – ${m.awayScore}'
+                              : m.matchTime!.substring(0, 5),
+                          style: _condensed(
+                            size: 30,
+                            color: live ? Colors.white : accent,
+                          ),
+                        )
+                      else
+                        Text('–', style: _condensed(size: 30)),
                       Text(
-                        live
-                            ? '${m.homeScore} – ${m.awayScore}'
-                            : m.matchTime!.substring(0, 5),
-                        style: _condensed(
-                          size: 30,
-                          color: live ? Colors.white : accent,
-                        ),
-                      )
-                    else
-                      Text('–', style: _condensed(size: 30)),
-                    Text(
-                      kTr == null
-                          ? 'Tarih belirlenmedi'
-                          : _daysLong[kTr.weekday - 1],
-                      textAlign: TextAlign.center,
-                      style: _barlow(size: 12, color: DashColors.muted),
-                    ),
-                    // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
-                    if (kTr != null)
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          '${kTr.day} ${_monthsLong[kTr.month - 1]} ${kTr.year}',
-                          maxLines: 1,
-                          style: _barlow(
-                            size: 12,
-                            weight: FontWeight.w700,
-                            color: DashColors.muted,
+                        kTr == null
+                            ? 'Tarih belirlenmedi'
+                            : _daysLong[kTr.weekday - 1],
+                        textAlign: TextAlign.center,
+                        style: _barlow(size: 12, color: DashColors.muted),
+                      ),
+                      // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
+                      if (kTr != null)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '${kTr.day} ${_monthsLong[kTr.month - 1]} ${kTr.year}',
+                            maxLines: 1,
+                            style: _barlow(
+                              size: 12,
+                              weight: FontWeight.w700,
+                              color: DashColors.muted,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               side(away),
@@ -2142,6 +2146,24 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ],
             ),
           ],
+          // Takımlara logodan gidilir; maçın kendisine buradan / ortadaki
+          // saat bloğundan.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _openMatch(m),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Maç detayı ›',
+                textAlign: TextAlign.center,
+                style: _barlow(
+                  size: 12.5,
+                  weight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
           const SizedBox(height: 10),
