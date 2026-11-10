@@ -63,11 +63,25 @@ class _Pair {
     : a = _Rec(Map<String, dynamic>.from(m['a'] as Map)),
       b = _Rec(Map<String, dynamic>.from(m['b'] as Map)),
       sameSeason = m['same_season'] == true,
+      transferOpen = m['transfer_open'] == true,
+      shared = [
+        for (final x in (m['shared'] as List? ?? const []))
+          (
+            aTeam: '${x['a_team']}',
+            bTeam: '${x['b_team']}',
+          ),
+      ],
       bothAccounts = m['both_accounts'] == true;
 
   final _Rec a;
   final _Rec b;
   final bool sameSeason;
+
+  /// Çakışan sezonların hepsinde kadro değişikliği dönemi açık (transfer).
+  final bool transferOpen;
+
+  /// Aynı sezonda iki kayıttaki takım adları (a kaydı, b kaydı).
+  final List<({String aTeam, String bTeam})> shared;
   final bool bothAccounts;
 
   /// Aynı kişi olma ihtimali yüksekse büyük (sıralama için).
@@ -277,6 +291,9 @@ class _MergeSheetState extends State<_MergeSheet> {
   _Rec? _keep;
   bool _busy = false;
 
+  /// Aynı sezon çakışmasında takım kaydı silinecek kayıttan kalsın mı.
+  bool _teamFromDrop = false;
+
   _Rec get _drop => _keep == widget.pair.a ? widget.pair.b : widget.pair.a;
 
   Future<void> _merge() async {
@@ -290,6 +307,7 @@ class _MergeSheetState extends State<_MergeSheet> {
           'p_keep': _keep!.id,
           'p_drop': _drop.id,
           'p_force': pair.sameSeason,
+          'p_team_from_drop': pair.sameSeason && _teamFromDrop,
         },
       );
       if (!mounted) return;
@@ -325,6 +343,55 @@ class _MergeSheetState extends State<_MergeSheet> {
         SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
     }
+  }
+
+  String _teamsOf(_Rec r) {
+    final isA = r == widget.pair.a;
+    return widget.pair.shared.map((x) => isA ? x.aTeam : x.bTeam).join(', ');
+  }
+
+  Widget _teamChoice() {
+    Widget opt(bool fromDrop, _Rec r) {
+      final sel = _teamFromDrop == fromDrop;
+      return InkWell(
+        onTap: _busy ? null : () => setState(() => _teamFromDrop = fromDrop),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Icon(
+                sel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                color: sel ? kAdminAccent : Colors.white38,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _teamsOf(r),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Bu sezonda hangi takımda kalsın?',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        opt(false, _keep!),
+        opt(true, _drop),
+      ],
+    );
   }
 
   Widget _option(_Rec r) {
@@ -437,12 +504,18 @@ class _MergeSheetState extends State<_MergeSheet> {
               'birleştirilemez; "Farklı kişiler" diyebilirsiniz.',
               const Color(0xFFF87171),
             )
+          else if (pair.sameSeason && pair.transferOpen)
+            _note(
+              'Transfer dönemi açık: bu kişi sezon içinde takım değiştirmiş '
+              'olabilir. Birleştirirseniz tek takımda kalır; hangisinde '
+              'kalacağını aşağıdan seçin.',
+              const Color(0xFF7DD3FC),
+            )
           else if (pair.sameSeason)
             _note(
-              'Dikkat: bu iki kayıt aynı sezonda farklı takımlarda. Aynı kişi '
-              'iki takımda aynı anda oynayamaz. Birleştirirseniz seçtiğiniz '
-              'kaydın takımı kalır, diğerinin o sezondaki takımı kadrodan '
-              'çıkar.',
+              'Dikkat: bu iki kayıt aynı sezonda farklı takımlarda ve transfer '
+              'dönemi kapalı. Aynı kişi iki takımda oynayamaz. Birleştirirseniz '
+              'tek takımda kalır; hangisinde kalacağını aşağıdan seçin.',
               const Color(0xFFFCD34D),
             ),
           if (blocked || pair.sameSeason) const SizedBox(height: 10),
@@ -457,6 +530,10 @@ class _MergeSheetState extends State<_MergeSheet> {
             ),
           ],
           const SizedBox(height: 14),
+          if (pair.sameSeason && !blocked && _keep != null) ...[
+            _teamChoice(),
+            const SizedBox(height: 10),
+          ],
           if (_keep != null && !blocked)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
