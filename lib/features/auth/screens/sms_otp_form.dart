@@ -1,3 +1,4 @@
+import '../../../core/utils/sms_code_autofill.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -50,8 +51,14 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
   int _resendLeft = 0;
   Timer? _timer;
 
+  void _fillCode(String code) {
+    if (!mounted || _sentTo == null) return;
+    _codeController.text = code;
+  }
+
   @override
   void dispose() {
+    SmsCodeAutofill.stop();
     _timer?.cancel();
     _phoneController.dispose();
     _codeController.dispose();
@@ -106,6 +113,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
             _sentTo = raw10;
             _codeController.clear();
             _startResendTimer();
+            SmsCodeAutofill.listen(_fillCode);
           case SmsOtpSendOutcome.tooSoon:
             _error = 'Yeni kod için biraz bekleyin.';
           case SmsOtpSendOutcome.tooMany:
