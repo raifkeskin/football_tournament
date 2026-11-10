@@ -212,7 +212,7 @@ begin
     v_template := coalesce(nullif(v_template, ''),
       case when v_kind = 'reset'
         then 'Lig Masası şifre yenileme için doğrulama kodunuz: {kod}. Kodu kimseyle paylaşmayın.'
-        else 'Lig Masası ilk şifre belirleme için doğrulama kodunuz: {kod}. Kodu kimseyle paylaşmayın.'
+        else 'Lig Masası Futbolcu kaydınız için doğrulama kodunuz: {kod}. Kodu kimseyle paylaşmayın.'
       end);
     if coalesce(v_key, '') = '' or coalesce(v_hash, '') = '' or coalesce(v_sender, '') = '' then
       return 'not_configured';
