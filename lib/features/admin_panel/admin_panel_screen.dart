@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/app_session.dart';
+import '../media_credits/match_crew_sheet.dart';
+import '../media_credits/media_credit.dart';
 import '../../core/services/app_settings.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/services/active_tournament.dart';
@@ -326,6 +328,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         _checkEmbed(m['youtube_url'] as String?);
       }
       _loadEnler();
+      _loadCrew(list);
     } catch (_) {
       _failed();
     }
@@ -1485,6 +1488,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             () => _media(id, liveLink: true),
             color: broken ? _red : _greenText,
           ),
+          _crewCell(m, MediaCreditKind.broadcast),
+        ),
+        _pairDivider(),
+        _pair(
           _cell(
             'HAKEM',
             referee.isEmpty ? 'warn' : 'ok',
@@ -1492,6 +1499,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             referee.isEmpty ? 'Ata' : 'Değiştir',
             () => _referee(id),
           ),
+          _crewCell(m, MediaCreditKind.photo),
         ),
         _pairDivider(),
         _pair(
@@ -1533,6 +1541,57 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         ),
         _primary('Maçı Yönet', Icons.sports_rounded, () => _openMatch(id)),
       ],
+    );
+  }
+
+  // ---- Medya ekibi (yayıncı / fotoğrafçı) ----
+
+  /// Maç → o maçta görünen kişi adları (tür başına).
+  Map<String, Map<MediaCreditKind, List<String>>> _crew = {};
+
+  Future<void> _loadCrew(List<Map<String, dynamic>> list) async {
+    final s = _scope;
+    if (s == null || list.isEmpty) return;
+    try {
+      final pool = await MediaCreditFeed.fetch(s.leagueId);
+      final rows = await _sb
+          .from('matches')
+          .select('id, media_crew_custom, match_media_crew(credit_id)')
+          .inFilter('id', [for (final m in list) '${m['id']}']);
+      final out = <String, Map<MediaCreditKind, List<String>>>{};
+      for (final r in rows) {
+        final crew = (
+          custom: r['media_crew_custom'] == true,
+          ids: {
+            for (final x in (r['match_media_crew'] as List? ?? const []))
+              (x as Map)['credit_id'].toString(),
+          },
+        );
+        out['${r['id']}'] = {
+          for (final k in MediaCreditKind.values)
+            k: [for (final c in MatchMediaCrew.resolve(pool, crew, k)) c.name],
+        };
+      }
+      if (mounted) setState(() => _crew = out);
+    } catch (_) {}
+  }
+
+  Future<void> _editCrew(String id, MediaCreditKind kind) async {
+    final m = await _model(id);
+    if (m == null || !mounted) return;
+    await showMatchCrewSheet(context, m, kind: kind);
+    _loadMatches();
+  }
+
+  Widget _crewCell(Map m, MediaCreditKind kind) {
+    final id = '${m['id']}';
+    final names = _crew[id]?[kind] ?? const <String>[];
+    return _cell(
+      kind.label.toUpperCase(),
+      names.isEmpty ? 'warn' : 'ok',
+      names.isEmpty ? 'Atanmadı' : names.join(', '),
+      names.isEmpty ? 'Ata' : 'Değiştir',
+      () => _editCrew(id, kind),
     );
   }
 
