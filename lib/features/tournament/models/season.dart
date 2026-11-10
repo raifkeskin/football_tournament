@@ -23,6 +23,9 @@ class Season {
     this.isDoubleRound = false,
     this.trackGoalMinutes = true,
     this.assistantReferees = true,
+    this.liveStreamEnabled = true,
+    this.broadcasterEnabled = true,
+    this.photographerEnabled = true,
     this.requireVerifiedId = false,
     this.verifiedIdMode = 'any',
     this.goalkeeperAddAnytime = false,
@@ -59,6 +62,12 @@ class Season {
 
   /// Maçlarda yan (yardımcı) hakem seçilir mi? Halısahada tek hakem: kapalı.
   final bool assistantReferees;
+
+  /// Medya sekmesi: sezonda canlı yayın çekiliyor mu / yayıncı / fotoğrafçı
+  /// var mı. Kapalıysa Yönetim Panelinde ilgili alan hiç gösterilmez.
+  final bool liveStreamEnabled;
+  final bool broadcasterEnabled;
+  final bool photographerEnabled;
 
   /// Onaylı kimlik zorunlu mu? Açıksa kimliği çipten doğrulanmamış oyuncu
   /// esameye eklenemez (sunucu da engeller).
@@ -146,6 +155,18 @@ class Season {
         v('assistantReferees', 'assistant_referees_enabled'),
         fallback: true,
       ),
+      liveStreamEnabled: boolFrom(
+        v('liveStreamEnabled', 'live_stream_enabled'),
+        fallback: true,
+      ),
+      broadcasterEnabled: boolFrom(
+        v('broadcasterEnabled', 'broadcaster_enabled'),
+        fallback: true,
+      ),
+      photographerEnabled: boolFrom(
+        v('photographerEnabled', 'photographer_enabled'),
+        fallback: true,
+      ),
       verifiedIdMode: (v('verifiedIdMode', 'verified_id_mode') ?? 'any')
           .toString(),
       requireVerifiedId: boolFrom(
@@ -204,6 +225,9 @@ class Season {
       'is_double_round': isDoubleRound,
       'track_goal_minutes': trackGoalMinutes,
       'assistant_referees_enabled': assistantReferees,
+      'live_stream_enabled': liveStreamEnabled,
+      'broadcaster_enabled': broadcasterEnabled,
+      'photographer_enabled': photographerEnabled,
       'require_verified_id': requireVerifiedId,
       'verified_id_mode': verifiedIdMode,
       'goalkeeper_add_anytime': goalkeeperAddAnytime,
@@ -245,6 +269,9 @@ class Season {
         'isDoubleRound': isDoubleRound,
         'trackGoalMinutes': trackGoalMinutes,
         'assistantReferees': assistantReferees,
+        'liveStreamEnabled': liveStreamEnabled,
+        'broadcasterEnabled': broadcasterEnabled,
+        'photographerEnabled': photographerEnabled,
         'requireVerifiedId': requireVerifiedId,
         'verifiedIdMode': verifiedIdMode,
         'goalkeeperAddAnytime': goalkeeperAddAnytime,
