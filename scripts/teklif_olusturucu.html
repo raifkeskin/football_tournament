@@ -138,6 +138,7 @@ footer { color: var(--muted); font-size: .86rem; border-top: 1px solid var(--lin
         <label>Maç başı ücret (TL) <input id="price" type="number" min="0" step="50" value="500"></label>
         <label>Liste fiyatı (TL) <input id="list" type="number" min="0" step="50" value="1000"></label>
       </div>
+      <label class="check"><input type="checkbox" id="showList" checked> Lansman fiyatı ve liste fiyatını göster</label>
       <p class="hint">Liste fiyatı 0 veya maç başı ücrete eşitse indirim gösterilmez.</p>
       <label>Mevcut maç başı toplam gider (TL)
         <input id="cost" type="number" min="0" step="50" value="18350"></label>
@@ -176,7 +177,7 @@ function render() {
   if (cups === 'gold' && n < 4) cups = 'none';
   const price = Math.max(0, parseInt($('price').value) || 0);
   const listRaw = Math.max(0, parseInt($('list').value) || 0);
-  const list = listRaw > price ? listRaw : 0;
+  const list = $('showList').checked && listRaw > price ? listRaw : 0;
   const cost = Math.max(0, parseInt($('cost').value) || 0);
 
   $('customBox').hidden = cups !== 'custom';
@@ -253,7 +254,7 @@ function render() {
       <p class="lead">${multi ? esc(gList.join(' ve ')) + ' turnuvalarının' : 'Turnuvanın'} fikstürü, puan durumu, kadroları, canlı maç akışı ve paylaşılabilir afişleri tek uygulamada. Ücret oynanan maç başına hesaplanır ve turnuvanın mevcut maç bütçesine tek bir kalem olarak eklenir.</p>
     </header>
     <section><div class="figures">
-      <div class="fig main"><span class="v num">${tl(price)}</span><span class="l">maç başı uygulama ücreti</span><span class="s">${list ? 'Lansman fiyatı · liste ' + tl(list) : '&nbsp;'}</span></div>
+      <div class="fig main"><span class="v num">${tl(price)}</span><span class="l">maç başı uygulama, kurulum ve destek ücreti</span><span class="s">${list ? 'Lansman fiyatı · liste ' + tl(list) : '&nbsp;'}</span></div>
       <div class="fig"><span class="v num">${tl(half)}</span><span class="l">takım başına, maç başı</span><span class="s">${cost ? 'Maç ücretine +' + pct(price / cost * 100) : '&nbsp;'}</span></div>
       <div class="fig"><span class="v num">${tl(total)}</span><span class="l">${multi ? g + ' turnuva, sezon toplamı' : 'sezon toplamı'}</span><span class="s">${totalM} maç${list ? ' · liste fiyatıyla ' + tl(totalM * list) : ''}</span></div>
     </div></section>
