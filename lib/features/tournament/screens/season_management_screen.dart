@@ -189,6 +189,9 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
     var assistantReferees = season?.assistantReferees ?? true;
+    var liveStreamEnabled = season?.liveStreamEnabled ?? true;
+    var broadcasterEnabled = season?.broadcasterEnabled ?? true;
+    var photographerEnabled = season?.photographerEnabled ?? true;
     var verifiedIdMode = season?.verifiedIdMode ?? 'any';
     var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
     var rollingSubs = season?.rollingSubs ?? false;
@@ -288,6 +291,9 @@ class SeasonManagementScreen extends StatelessWidget {
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
         assistantReferees: assistantReferees,
+        liveStreamEnabled: liveStreamEnabled,
+        broadcasterEnabled: broadcasterEnabled,
+        photographerEnabled: photographerEnabled,
         requireVerifiedId: verifiedIdMode != 'any',
         verifiedIdMode: verifiedIdMode,
         goalkeeperAddAnytime: goalkeeperAddAnytime,
@@ -438,7 +444,7 @@ class SeasonManagementScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: AdminFormTabs(
-                labels: const ['Genel', 'Maç', 'Gruplar'],
+                labels: const ['Genel', 'Maç', 'Gruplar', 'Medya'],
                 selected: tab,
                 onChanged: saving ? null : (i) => setSheetState(() => tab = i),
               ),
@@ -645,6 +651,43 @@ class SeasonManagementScreen extends StatelessWidget {
                                   : 'Her eşleşme tek maç',
                               isDoubleRound,
                               (v) => setSheetState(() => isDoubleRound = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (tab == 3)
+                      AdminFormSection(
+                        title: 'Medya',
+                        child: AdminFieldGroup(
+                          children: [
+                            switchRow(
+                              Icons.live_tv_rounded,
+                              'Canlı Yayın',
+                              liveStreamEnabled
+                                  ? 'Maçlar yayınlanır: yayın linki istenir'
+                                  : 'Yayın yok: panelde yayın linki gösterilmez',
+                              liveStreamEnabled,
+                              (v) => setSheetState(() => liveStreamEnabled = v),
+                            ),
+                            switchRow(
+                              Icons.mic_external_on_outlined,
+                              'Yayıncı',
+                              broadcasterEnabled
+                                  ? 'Maçlara yayıncı atanır'
+                                  : 'Yayıncı yok: panelde gösterilmez',
+                              broadcasterEnabled,
+                              (v) =>
+                                  setSheetState(() => broadcasterEnabled = v),
+                            ),
+                            switchRow(
+                              Icons.photo_camera_outlined,
+                              'Fotoğrafçı',
+                              photographerEnabled
+                                  ? 'Maçlara fotoğrafçı atanır'
+                                  : 'Fotoğrafçı yok: panelde gösterilmez',
+                              photographerEnabled,
+                              (v) =>
+                                  setSheetState(() => photographerEnabled = v),
                             ),
                           ],
                         ),

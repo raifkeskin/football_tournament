@@ -293,6 +293,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   /// Turnuvada maç önü haberi otomatik mi (kapalıysa panelde "kapalı" yazar).
   bool _autoPreview = true;
 
+  /// Sezon Medya sekmesi: kapalıysa ilgili alan kartta hiç görünmez.
+  bool _liveOn = true, _bcastOn = true, _photoOn = true;
+
   Future<void> _loadMatches() async {
     _loadIbraz();
     final s = _scope;
@@ -317,6 +320,21 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
             .eq('id', s.leagueId)
             .maybeSingle();
         _autoPreview = lg?['auto_preview_news'] != false;
+      } catch (_) {}
+      try {
+        final ss = await _sb
+            .from('seasons')
+            .select(
+              'live_stream_enabled, broadcaster_enabled, photographer_enabled',
+            )
+            .eq('league_id', s.leagueId)
+            .eq('is_active', true);
+        if (ss.isNotEmpty) {
+          bool any(String k) => ss.any((r) => r[k] != false);
+          _liveOn = any('live_stream_enabled');
+          _bcastOn = any('broadcaster_enabled');
+          _photoOn = any('photographer_enabled');
+        }
       } catch (_) {}
       if (!mounted) return;
       setState(() {
@@ -1454,7 +1472,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         referee.isNotEmpty &&
         pitch.isNotEmpty &&
         '${m['time'] ?? ''}'.isNotEmpty &&
-        _streamOk(m);
+        (!_liveOn || _streamOk(m));
     if (ready && !_expanded.contains(id)) {
       return _summary(
         m,
@@ -1478,29 +1496,30 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       ),
       children: [
         _esameBand(m),
-        _pairDivider(),
-        _pair(
-          _cell(
-            'YAYIN LİNKİ',
-            url.isEmpty ? 'warn' : (broken ? 'bad' : 'ok'),
-            url.isEmpty ? 'Yok' : (broken ? 'İzlenemiyor' : 'Eklendi'),
-            url.isEmpty ? 'Ekle' : 'Değiştir',
-            () => _media(id, liveLink: true),
-            color: broken ? _red : _greenText,
-          ),
-          _crewCell(m, MediaCreditKind.broadcast),
-        ),
-        _pairDivider(),
-        _pair(
-          _cell(
-            'HAKEM',
-            referee.isEmpty ? 'warn' : 'ok',
-            referee.isEmpty ? 'Atanmadı' : referee,
-            referee.isEmpty ? 'Ata' : 'Değiştir',
-            () => _referee(id),
-          ),
-          _crewCell(m, MediaCreditKind.photo),
-        ),
+        ..._mediaRows([
+          [
+            if (_liveOn)
+              _cell(
+                'YAYIN LİNKİ',
+                url.isEmpty ? 'warn' : (broken ? 'bad' : 'ok'),
+                url.isEmpty ? 'Yok' : (broken ? 'İzlenemiyor' : 'Eklendi'),
+                url.isEmpty ? 'Ekle' : 'Değiştir',
+                () => _media(id, liveLink: true),
+                color: broken ? _red : _greenText,
+              ),
+            if (_bcastOn) _crewCell(m, MediaCreditKind.broadcast),
+          ],
+          [
+            _cell(
+              'HAKEM',
+              referee.isEmpty ? 'warn' : 'ok',
+              referee.isEmpty ? 'Atanmadı' : referee,
+              referee.isEmpty ? 'Ata' : 'Değiştir',
+              () => _referee(id),
+            ),
+            if (_photoOn) _crewCell(m, MediaCreditKind.photo),
+          ],
+        ]),
         _pairDivider(),
         _pair(
           _cell(
@@ -1528,8 +1547,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 : (_autoPreview
                       ? 'Otomatik · maç günü 09:00'
                       : 'Otomatik kapalı'),
-            null,
-            null,
+            news ? null : 'Oluştur',
+            news ? null : () => _createPreviewNews(id),
           ),
           _cell(
             isAdmin ? 'MAÇ ÖNÜ AFİŞ / VİDEO' : 'MAÇ ÖNÜ AFİŞİ',
@@ -1542,6 +1561,31 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         _primary('Maçı Yönet', Icons.sports_rounded, () => _openMatch(id)),
       ],
     );
+  }
+
+  /// Satırlar (1-2 hücre): boş satır atlanır, tek hücre tam genişlik olur.
+  List<Widget> _mediaRows(List<List<Widget>> rows) => [
+    for (final r in rows)
+      if (r.isNotEmpty) ...[
+        _pairDivider(),
+        r.length == 1 ? r.first : _pair(r[0], r[1]),
+      ],
+  ];
+
+  /// Maç önü haberini elle oluşturur (otomatik kapalı ya da vakit gelmemiş).
+  Future<void> _createPreviewNews(String id) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _sb.rpc('create_preview_news', params: {'p_match_id': id});
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Maç önü haberi oluşturuldu.')),
+      );
+      _loadMatches();
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Haber oluşturulamadı.')),
+      );
+    }
   }
 
   // ---- Medya ekibi (yayıncı / fotoğrafçı) ----
