@@ -288,6 +288,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     } catch (_) {}
   }
 
+  /// Turnuvada maç önü haberi otomatik mi (kapalıysa panelde "kapalı" yazar).
+  bool _autoPreview = true;
+
   Future<void> _loadMatches() async {
     _loadIbraz();
     final s = _scope;
@@ -304,6 +307,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         for (final r in (raw as List? ?? const []))
           if (r is Map) Map<String, dynamic>.from(r),
       ];
+      if (!mounted) return;
+      try {
+        final lg = await _sb
+            .from('leagues')
+            .select('auto_preview_news')
+            .eq('id', s.leagueId)
+            .maybeSingle();
+        _autoPreview = lg?['auto_preview_news'] != false;
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _matches = list;
@@ -1118,7 +1130,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   /// Maç detayı gibi başlık: takım renkleri geçişi, logolar, ortada saat
   /// (canlıda / maç sonunda skor).
-  Widget _head(Map m, {String? right, Color? rightColor, bool score = false}) {
+  Widget _head(
+    Map m, {
+    String? right,
+    Color? rightColor,
+    bool score = false,
+    VoidCallback? onTap,
+    bool compact = false,
+  }) {
     final region = (m['region'] as String?) ?? '';
     final d = DateTime.tryParse('${m['date'] ?? ''}');
     const days = [
@@ -1183,8 +1202,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+    final head = Container(
+      padding: EdgeInsets.fromLTRB(10, compact ? 8 : 12, 10, compact ? 8 : 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -1227,9 +1246,22 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+              // Üst banda dokununca maç detayı açılır; soluk ok yalnız bunu
+              // hatırlatır.
+              if (onTap != null) ...[
+                if (right != null) const SizedBox(width: 10),
+                const Text(
+                  'Maç detayı ›',
+                  style: TextStyle(
+                    color: Color(0xB3FFFFFF),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: compact ? 4 : 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1276,6 +1308,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         ],
       ),
     );
+    return onTap == null ? head : InkWell(onTap: onTap, child: head);
   }
 
   /// Kontrol satırı: durum işareti, metin, sağda eylem.
@@ -1330,85 +1363,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         onPressed: onTap,
         child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
       );
-
-  Widget _pill(String label, VoidCallback onTap, {bool filled = true}) =>
-      SizedBox(
-        height: 36,
-        child: filled
-            ? FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFF59E0B),
-                  foregroundColor: const Color(0xFF1A1204),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-                onPressed: onTap,
-                child: Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              )
-            : OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _amber,
-                  side: const BorderSide(color: Color(0xFFF59E0B)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-                onPressed: onTap,
-                child: Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-      );
-
-  Widget _esameRows(Map m) {
-    final need = _n(m, 'need_xi');
-    Widget team(bool home) {
-      final xi = _n(m, home ? 'xi_home' : 'xi_away');
-      final name = '${m[home ? 'home' : 'away'] ?? ''}';
-      if (xi >= need) {
-        return _row(
-          'ok',
-          'Esame · $name',
-          sub: '$xi/$need',
-          trailing: _link('Düzenle', () => _openEsame(m, home, scan: false)),
-        );
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _row(
-            'warn',
-            'Esame · $name',
-            sub: xi == 0 ? 'girilmedi' : 'İlk 11 $xi/$need',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 24, bottom: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _pill(
-                    'Elle gir',
-                    () => _openEsame(m, home, scan: false),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _pill(
-                    'Kağıttan okut',
-                    () => _openEsame(m, home, scan: true),
-                    filled: false,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(children: [team(true), team(false)]);
-  }
 
   Widget _streamRow(Map m, {required String okText}) {
     final url = ((m['youtube_url'] as String?) ?? '').trim();
@@ -1505,43 +1459,198 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         'Esame, hakem, yayın, saat ve saha tamam',
       );
     }
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    final url = ((m['youtube_url'] as String?) ?? '').trim();
+    final emb = url.isEmpty ? null : _embedCache[url];
+    final broken = emb == _Embed.disabled || emb == _Embed.missing;
+    final time = '${m['time'] ?? ''}'.trim();
+    final news = m['preview_news'] == true;
     return _shell(
-      head: _head(m, right: postponed ? 'ERTELENDİ' : null, rightColor: _amber),
+      head: _head(
+        m,
+        right: postponed ? 'ERTELENDİ' : null,
+        rightColor: _amber,
+        onTap: () => _openMatch(id),
+        compact: true,
+      ),
       children: [
-        _esameRows(m),
-        _row(
-          referee.isEmpty ? 'warn' : 'ok',
-          referee.isEmpty ? 'Hakem atanmadı' : 'Hakem',
-          sub: referee.isEmpty ? null : referee,
-          trailing: _link(
+        _esameBand(m),
+        _pairDivider(),
+        _pair(
+          _cell(
+            'YAYIN LİNKİ',
+            url.isEmpty ? 'warn' : (broken ? 'bad' : 'ok'),
+            url.isEmpty ? 'Yok' : (broken ? 'İzlenemiyor' : 'Eklendi'),
+            url.isEmpty ? 'Ekle' : 'Değiştir',
+            () => _media(id, liveLink: true),
+            color: broken ? _red : _greenText,
+          ),
+          _cell(
+            'HAKEM',
+            referee.isEmpty ? 'warn' : 'ok',
+            referee.isEmpty ? 'Atanmadı' : referee,
             referee.isEmpty ? 'Ata' : 'Değiştir',
             () => _referee(id),
           ),
         ),
-        _streamRow(m, okText: 'Yayın linki eklendi'),
-        _row(
-          (m['time'] ?? '').toString().isEmpty ? 'warn' : 'ok',
-          'Maç saati',
-          sub: (m['time'] ?? '').toString().isEmpty
-              ? 'belirlenmedi'
-              : '${m['time']}',
-          trailing: _link('Değiştir', () => _schedule(id)),
+        _pairDivider(),
+        _pair(
+          _cell(
+            'MAÇ SAATİ',
+            time.isEmpty ? 'warn' : 'ok',
+            time.isEmpty ? 'Belirlenmedi' : time,
+            'Değiştir',
+            () => _schedule(id),
+          ),
+          _cell(
+            'SAHA',
+            pitch.isEmpty ? 'warn' : 'ok',
+            pitch.isEmpty ? 'Belirlenmedi' : pitch,
+            'Değiştir',
+            () => _schedule(id),
+          ),
         ),
-        _row(
-          pitch.isEmpty ? 'warn' : 'ok',
-          'Saha',
-          sub: pitch.isEmpty ? 'belirlenmedi' : pitch,
-          trailing: _link('Değiştir', () => _schedule(id)),
+        _pairDivider(),
+        _pair(
+          _cell(
+            'MAÇ ÖNÜ HABERİ',
+            news ? 'ok' : 'none',
+            news
+                ? 'Yayında'
+                : (_autoPreview
+                      ? 'Otomatik · maç günü 09:00'
+                      : 'Otomatik kapalı'),
+            null,
+            null,
+          ),
+          _cell(
+            isAdmin ? 'MAÇ ÖNÜ AFİŞ / VİDEO' : 'MAÇ ÖNÜ AFİŞİ',
+            'none',
+            isAdmin ? 'Afiş / Video' : 'Afiş',
+            'Paylaş',
+            () => _share(m),
+          ),
         ),
-        _row(
-          m['preview_news'] == true ? 'ok' : 'none',
-          'Maç önü haberi',
-          sub: m['preview_news'] == true ? 'yayında' : 'henüz yok',
-        ),
-        _row('none', 'Maç afişi', trailing: _link('Paylaş', () => _share(m))),
         _primary('Maçı Yönet', Icons.sports_rounded, () => _openMatch(id)),
       ],
     );
+  }
+
+  // ---- Maç öncesi: esame bandı ve çift satırlar ----
+
+  static const _hair = Color(0x14FFFFFF);
+
+  Widget _pairDivider() => const Divider(height: 1, thickness: 1, color: _hair);
+
+  /// Sığdığı kadar yan yana: dar ekran ya da büyük yazıda alt alta geçer.
+  Widget _pair(Widget a, Widget b) => LayoutBuilder(
+    builder: (context, c) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      if (c.maxWidth >= 300 * scale) {
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: a),
+              const VerticalDivider(width: 1, thickness: 1, color: _hair),
+              Expanded(child: b),
+            ],
+          ),
+        );
+      }
+      return Column(children: [a, _pairDivider(), b]);
+    },
+  );
+
+  /// Etiket + durum + (sağda) eylem yazısı; hücrenin tamamına dokunulur.
+  Widget _cell(
+    String label,
+    String state,
+    String value,
+    String? action,
+    VoidCallback? onTap, {
+    Color color = _greenText,
+  }) {
+    final (mark, mc) = switch (state) {
+      'ok' => ('✓ ', _greenText),
+      'warn' => ('! ', _amber),
+      'bad' => ('! ', _red),
+      _ => ('○ ', _mid),
+    };
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: _mid,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text.rich(
+                    TextSpan(
+                      text: mark,
+                      style: TextStyle(color: mc, fontWeight: FontWeight.w900),
+                      children: [
+                        TextSpan(
+                          text: value,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            if (action != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                action,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// İki takımın esame durumu tek bantta; her yarı kendi takımının esamesini
+  /// açar (girilmişse düzenleme, eksikse giriş).
+  Widget _esameBand(Map m) {
+    final need = _n(m, 'need_xi');
+    Widget half(bool home) {
+      final xi = _n(m, home ? 'xi_home' : 'xi_away');
+      final name = shortTeamName('${m[home ? 'home' : 'away'] ?? ''}');
+      final done = xi >= need;
+      return _cell(
+        name.toUpperCase(),
+        done ? 'ok' : 'warn',
+        done ? 'Esame $xi/$need' : (xi == 0 ? 'Esame yok' : 'İlk 11 $xi/$need'),
+        done ? 'Düzenle' : 'Ekle',
+        () => _openEsame(m, home, scan: false),
+      );
+    }
+
+    return _pair(half(true), half(false));
   }
 
   Widget _liveCard(Map m) {

@@ -329,3 +329,15 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Forma numarası filigranı yalnız numara biliniyorsa çıkıyor.
   - Zemin, takım rengi koyuysa (yeşil/lacivert) donuk görünüyor.
 - **Ne zaman:** Kapışma afişiyle birlikte, telefonda dekupe hazır olunca.
+
+## 32. Uygulamadan kamerayla maç önü röportajı — SONRA (2026-11-10)
+- **İstek:** Yönetim Paneli maç öncesi kartında her takım için ayrı "Maç önü röportajı" satırı. Düğmeye basınca kamera açılır, kayıt başlar; kayıt o takımın o maçı için kaydedilir. Bitince açılan popup'ta konuşan kişiler etiketlenir.
+- **Hazır olanlar:** `camera` ve `video_player` paketleri, `videos` tablosu (`team_id`), kişi etiketi (`video_players`, en çok 3), takım sayfası Medya sekmesi.
+- **Eksik olan:** Video depolama. Röportajlar şimdiye kadar Instagram bağlantısıyla geliyordu. MP4 yüklemek için Cloudflare R2 + yükleme işlevi gerekir (indirme ücretsiz; ~115 GB/ay/turnuva trafik hesabı yüzünden R2 seçildi).
+- **Öneri:**
+  - Kayıt en çok 60-90 sn, telefonda 720p'ye sıkıştırılır (dakika başı ~10-15 MB).
+  - Yetki: admin, kurucu, bölge sorumlusu (takım sorumlusu değil).
+  - İlk aşamada yalnız Android + iOS uygulaması; web'de kamera kalitesi zayıf.
+  - Oyuncu görüntüsü için fotoğraf izni gibi rıza ve izinsiz oyuncuyu gizleme kuralı.
+  - Kamera + mikrofon izni için Play Veri güvenliği, Apple etiketleri ve gizlilik sayfası güncellenmeli.
+- **Sıra:** 1) R2 + yükleme, 2) kayıt düğmesi, 3) etiket popup'ı. Her aşamada önizleme ve onay.
