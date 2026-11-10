@@ -1,3 +1,4 @@
+import '../../../core/utils/sms_code_autofill.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,6 +100,7 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
   @override
   void dispose() {
     _c.removeListener(_onController);
+    SmsCodeAutofill.stop();
     _timer?.cancel();
     _phone.dispose();
     _code.dispose();
@@ -157,6 +159,9 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
         _code.clear();
         _startTimer();
         _c._changed();
+        SmsCodeAutofill.listen((code) {
+          if (mounted) _code.text = code;
+        });
       } else {
         setState(() => _error = RegistrationService.message(r));
       }
