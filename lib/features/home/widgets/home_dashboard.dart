@@ -2150,27 +2150,28 @@ class _HomeDashboardState extends State<HomeDashboard> {
             Row(
               children: [
                 Expanded(
-                  child: _cardButton(
-                    label: 'Esame',
-                    icon: esameOpen
-                        ? Icons.assignment_outlined
-                        : Icons.lock_clock_rounded,
-                    accent: accent,
-                    onPressed: esameOpen
-                        ? () => _esameChoice(m, managedTeamId, myName)
-                        : null,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: _cardButton(
+                      label: 'Esame',
+                      icon: esameOpen
+                          ? Icons.assignment_outlined
+                          : Icons.lock_clock_rounded,
+                      accent: accent,
+                      onPressed: esameOpen
+                          ? () => _esameChoice(m, managedTeamId, myName)
+                          : null,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _HomePollButton(
-                    key: ValueKey('poll-${m.id}-$managedTeamId'),
-                    matchId: m.id,
-                    teamId: managedTeamId,
-                    accent: accent,
-                    onOpenRoster: () =>
-                        _pollSheet(m, managedTeamId, myName, rivalName),
-                  ),
+                // Anket kapanınca bu düğme kalkar, Esame tam genişliğe yayılır.
+                _HomePollButton(
+                  key: ValueKey('poll-${m.id}-$managedTeamId'),
+                  matchId: m.id,
+                  teamId: managedTeamId,
+                  accent: accent,
+                  onOpenRoster: () =>
+                      _pollSheet(m, managedTeamId, myName, rivalName),
                 ),
               ],
             ),
@@ -2774,6 +2775,8 @@ class _HomePollButtonState extends State<_HomePollButton> {
   @override
   Widget build(BuildContext context) {
     final active = _active;
+    // Anket kapandıysa (ya da hiç açılmadan süresi geçtiyse) düğme gösterilmez.
+    if (_closed || _expired) return const SizedBox.shrink();
     final style = FilledButton.styleFrom(
       backgroundColor: active == true
           ? Colors.transparent
@@ -2789,33 +2792,40 @@ class _HomePollButtonState extends State<_HomePollButton> {
         ),
       ),
     );
-    return SizedBox(
-      height: 38,
-      child: FilledButton.icon(
-        style: style,
-        onPressed: active == null || _busy || _expired
-            ? null
-            : active || _closed
-            ? widget.onOpenRoster
-            : _start,
-        icon: Icon(
-          active == true ? Icons.how_to_reg_rounded : Icons.campaign_outlined,
-          size: 17,
-        ),
-        label: Text(
-          _closed
-              ? 'Anket kapandı · $_yes evet'
-              : _expired
-              ? 'Anket kapalı'
-              : active == true
-              ? 'Anket · $_yes evet'
-              : 'Anketi Başlat',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontFamily: 'Barlow',
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: SizedBox(
+          height: 38,
+          child: FilledButton.icon(
+            style: style,
+            onPressed: active == null || _busy || _expired
+                ? null
+                : active || _closed
+                ? widget.onOpenRoster
+                : _start,
+            icon: Icon(
+              active == true
+                  ? Icons.how_to_reg_rounded
+                  : Icons.campaign_outlined,
+              size: 17,
+            ),
+            label: Text(
+              _closed
+                  ? 'Anket kapandı · $_yes evet'
+                  : _expired
+                  ? 'Anket kapalı'
+                  : active == true
+                  ? 'Anket · $_yes evet'
+                  : 'Anketi Başlat',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Barlow',
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ),
       ),
