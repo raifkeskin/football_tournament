@@ -4,6 +4,7 @@ import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../match/models/match.dart';
 import '../match/utils/season_match_settings.dart';
+import 'admin_referees_screen.dart';
 import 'referee_service.dart';
 
 /// Maç detayı › "Hakem Ata": orta hakem ve (sezonda açıksa) iki yardımcı,
@@ -55,6 +56,11 @@ class _MatchRefereePickerState extends State<_MatchRefereePicker> {
     } catch (e) {
       if (mounted) setState(() => _error = RefereeService.message(e));
     }
+  }
+
+  Future<void> _addReferee() async {
+    final ok = await showRefereeAddForm(context, widget.match.leagueId);
+    if (ok && mounted) await _load();
   }
 
   String? _name(String? id) =>
@@ -126,13 +132,20 @@ class _MatchRefereePickerState extends State<_MatchRefereePicker> {
         child: Center(child: CircularProgressIndicator()),
       );
     } else if (list.isEmpty) {
-      content = const Padding(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Text(
-          'Turnuvanın hakem listesi boş. Kurucu başkan Yönetim Paneli › '
-          'Hakemler ekranından hakem ekleyince burada seçilebilir.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: kAdminMuted, height: 1.4),
+      content = Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Turnuvanın hakem listesi boş.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: kAdminMuted, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            AdminPrimaryButton(label: 'HAKEM EKLE', onPressed: _addReferee),
+          ],
         ),
       );
     } else {
@@ -178,8 +191,16 @@ class _MatchRefereePickerState extends State<_MatchRefereePicker> {
                   ],
                 ],
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _saving ? null : _addReferee,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Hakem Ekle'),
+                ),
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
                 child: Text(
                   _assistants
                       ? 'Yalnız bu turnuvanın hakem listesindekiler seçilir. '

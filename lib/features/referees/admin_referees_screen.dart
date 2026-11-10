@@ -322,6 +322,15 @@ class _RefereeRow extends StatelessWidget {
   }
 }
 
+/// Hakem ekleme popup'ı (başka ekranlardan, ör. Hakem Ata). Eklenince true.
+Future<bool> showRefereeAddForm(BuildContext context, String leagueId) async {
+  final saved = await showAdminPopup<String>(
+    context: context,
+    builder: (_) => _RefereeForm(leagueId: leagueId),
+  );
+  return saved != null;
+}
+
 /// Hakem ekle / düzenle. Eklerken havuzda aynı telefon ya da aynı ad varsa
 /// yeni kayıt yerine mevcudu bağlamak önerilir.
 class _RefereeForm extends StatefulWidget {
