@@ -1,3 +1,4 @@
+import '../../core/widgets/otp_countdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -37,6 +38,7 @@ class _PasswordChangeBodyState extends State<_PasswordChangeBody> {
   final _pass1 = TextEditingController();
   final _pass2 = TextEditingController();
   bool _sent = false;
+  int _codeSerial = 0;
   bool _busy = false;
   String? _error;
 
@@ -68,6 +70,7 @@ class _PasswordChangeBodyState extends State<_PasswordChangeBody> {
         _busy = false;
         if (r == 'sent') {
           _sent = true;
+          _codeSerial++;
         } else {
           _error = _message(r);
         }
@@ -199,6 +202,7 @@ class _PasswordChangeBodyState extends State<_PasswordChangeBody> {
                         ],
                       ),
                     ),
+                    OtpCountdown(key: ValueKey(_codeSerial)),
                     AdminFormSection(
                       title: 'Yeni şifre',
                       child: AdminFieldGroup(
