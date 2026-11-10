@@ -349,13 +349,14 @@ button:disabled{opacity:.5;cursor:default}
     ctx.fillText('LİG MASASI', W / 2, y); y += 14 * U;
     ctx.fillStyle = '#c9d0de'; ctx.font = bodyFont(4.2 * U);
     ctx.fillText('Canlı skor, kadro ve yayın linki uygulamada', W / 2, y); y += 10 * U;
-    var bw = 60 * U;
-    if (scene.appStore) { var h1 = bw * scene.appStore.height / scene.appStore.width; ctx.drawImage(scene.appStore, W / 2 - bw / 2, y, bw, h1); y += h1 + 3 * U; }
-    if (scene.googlePlay) {
-      var h2 = bw * scene.googlePlay.height / scene.googlePlay.width, gw = bw * .78, gh = h2 * .78;
-      ctx.globalAlpha = p * .45; ctx.drawImage(scene.googlePlay, W / 2 - gw / 2, y, gw, gh); ctx.globalAlpha = p;
-      ctx.fillStyle = '#aab3c4'; ctx.font = bodyFont(3.6 * U, 700); ctx.fillText('Google Play · Yakında', W / 2, y + gh + 1.6 * U); y += gh + 9 * U;
-    }
+    // İki mağaza rozeti aynı yükseklikte, tam görünür.
+    var bh = 17.8 * U;
+    [scene.appStore, scene.googlePlay].forEach(function (im) {
+      if (!im) return;
+      var iw = bh * im.width / im.height;
+      ctx.drawImage(im, W / 2 - iw / 2, y, iw, bh); y += bh + 3 * U;
+    });
+    y += 3 * U;
     ctx.fillStyle = '#8d97ab'; ctx.font = bodyFont(3.8 * U); ctx.fillText('ligmasasi.com/indir', W / 2, y + 2 * U);
     ctx.restore();
   }
