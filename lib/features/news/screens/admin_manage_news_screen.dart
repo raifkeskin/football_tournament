@@ -971,6 +971,27 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                     color: Colors.white70,
                     onTap: () => _openNewsForm(item: doc),
                   ),
+                ] else if (doc.autoKind == 'week_awards' &&
+                    (AppSession.of(context).value.isAdmin ||
+                        AppSettings.weekAwardsEnabled.value)) ...[
+                  // Haftanın Enleri bülteni: o haftanın ekranı açılır.
+                  const SizedBox(width: 6),
+                  AdminSmallAction(
+                    icon: Icons.edit_outlined,
+                    tooltip: 'Düzenle',
+                    color: Colors.white70,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        settings: const RouteSettings(name: 'WeekAwardsScreen'),
+                        builder: (_) => WeekAwardsScreen(
+                          tournaments: _tournaments,
+                          initialLeagueId: doc.tournamentId,
+                          initialRegionId: doc.regionId,
+                          initialWeek: doc.week,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
                 const SizedBox(width: 6),
                 AdminSmallAction(
