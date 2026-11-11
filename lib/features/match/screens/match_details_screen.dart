@@ -7610,23 +7610,7 @@ class _DetailEventTile extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: align,
       children: [
-        if (clip == null)
-          name
-        else
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: align == CrossAxisAlignment.start
-                ? [
-                    Flexible(child: name),
-                    const SizedBox(width: 6),
-                    _clipButton(),
-                  ]
-                : [
-                    _clipButton(),
-                    const SizedBox(width: 6),
-                    Flexible(child: name),
-                  ],
-          ),
+        name,
         if (sub.isNotEmpty)
           Text(
             sub,
@@ -7644,27 +7628,34 @@ class _DetailEventTile extends StatelessWidget {
     );
   }
 
-  /// Gol kesitini oynatan küçük video ikonu.
-  Widget _clipButton() {
+  /// Gol kesitini oynatan geniş şerit: satırın dış kenarında (ev sahibinde en
+  /// solda, deplasmanda en sağda) durur, oyuncu adından ayrıdır; böylece
+  /// oynat düğmesine basarken oyuncu kartı açılmaz.
+  Widget _clipStrip() {
     final c = clip!;
     return Builder(
-      builder: (context) => InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () => openYoutubeClip(
-          context,
-          videoId: c.videoId,
-          startSec: c.startSec,
-          endSec: c.endSec,
-          clipUrl: c.clipUrl,
-          storyUrl: c.storyUrl,
-          title: title.isEmpty ? 'Gol' : "$minute' $title",
-        ),
-        child: const Padding(
-          padding: EdgeInsets.all(2),
-          child: Icon(
-            Icons.play_circle_fill_rounded,
-            size: 20,
-            color: Color(0xFF10B981),
+      builder: (context) => Material(
+        color: const Color(0xFF10B981).withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => openYoutubeClip(
+            context,
+            videoId: c.videoId,
+            startSec: c.startSec,
+            endSec: c.endSec,
+            clipUrl: c.clipUrl,
+            storyUrl: c.storyUrl,
+            title: title.isEmpty ? 'Gol' : "$minute' $title",
+          ),
+          child: const SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              Icons.play_arrow_rounded,
+              size: 28,
+              color: Color(0xFF34D399),
+            ),
           ),
         ),
       ),
@@ -7791,13 +7782,25 @@ class _DetailEventTile extends StatelessWidget {
                   Expanded(
                     child: isHome
                         ? Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Flexible(
-                                child: _titleBlock(CrossAxisAlignment.end),
+                              if (clip != null) ...[
+                                _clipStrip(),
+                                const SizedBox(width: 8),
+                              ],
+                              Expanded(
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Flexible(
+                                      child: _titleBlock(
+                                        CrossAxisAlignment.end,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    icon,
+                                  ],
+                                ),
                               ),
-                              const SizedBox(width: 4),
-                              icon,
                             ],
                           )
                         : const SizedBox.shrink(),
@@ -7830,11 +7833,23 @@ class _DetailEventTile extends StatelessWidget {
                         ? const SizedBox.shrink()
                         : Row(
                             children: [
-                              icon,
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: _titleBlock(CrossAxisAlignment.start),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    icon,
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: _titleBlock(
+                                        CrossAxisAlignment.start,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              if (clip != null) ...[
+                                const SizedBox(width: 8),
+                                _clipStrip(),
+                              ],
                             ],
                           ),
                   ),
