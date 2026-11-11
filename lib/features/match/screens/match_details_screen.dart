@@ -3478,6 +3478,32 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         return Column(
           children: [
             ...header,
+            // Toplu indirme: şimdilik yalnız admin, yalnız uygulamada.
+            if (!kIsWeb && session.isAdmin && shown.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                  child: TextButton.icon(
+                    onPressed: _bulkBusy ? null : () => _downloadAll(shown),
+                    icon: _bulkBusy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white70,
+                            ),
+                          )
+                        : const Icon(Icons.download_rounded, size: 18),
+                    label: Text(
+                      _bulkBusy
+                          ? 'İndiriliyor $_bulkDone / ${shown.length}'
+                          : 'Tümünü indir (${shown.length})',
+                    ),
+                  ),
+                ),
+              ),
             if (showFilter)
               SizedBox(
                 height: 48,
@@ -3525,6 +3551,53 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         );
       },
     );
+  }
+
+  bool _bulkBusy = false;
+  int _bulkDone = 0;
+
+  /// Görünen fotoğrafları sırayla galeriye kaydeder (en çok 100).
+  Future<void> _downloadAll(List<MatchMediaModel> list) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final items = list.take(100).toList();
+    setState(() {
+      _bulkBusy = true;
+      _bulkDone = 0;
+    });
+    var failed = 0;
+    try {
+      if (!await Gal.hasAccess(toAlbum: false)) {
+        await Gal.requestAccess(toAlbum: false);
+      }
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      for (var i = 0; i < items.length; i++) {
+        if (!mounted) return;
+        try {
+          final res = await http.get(Uri.parse(items[i].url));
+          if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+          await Gal.putImageBytes(res.bodyBytes, name: 'ligmasasi_${stamp}_$i');
+        } catch (_) {
+          failed++;
+        }
+        if (mounted) setState(() => _bulkDone = i + 1);
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            failed == 0
+                ? '${items.length} fotoğraf galeriye kaydedildi.'
+                : '${items.length - failed} fotoğraf kaydedildi, '
+                      '$failed indirilemedi.',
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Fotoğraflar kaydedilemedi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _bulkBusy = false);
+    }
   }
 
   Widget _filterChip(String label, int count, String? teamId) {
