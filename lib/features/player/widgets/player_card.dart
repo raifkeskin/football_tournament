@@ -1110,6 +1110,8 @@ class _PlayerCardState extends State<PlayerCard> {
     // Sezon başına oynadığı takım(lar); bu sezonun armaları için id ve logo.
     final teamsBySeason = <String, List<String>>{};
     final teamIdBySeason = <String, String>{};
+    // Transfer döneminde aynı sezonda iki takımın kadrosunda olanlar için.
+    final extraActiveTeams = <String, Set<String>>{};
     final teamName = <String, String>{};
     final teamLogo = <String, String>{};
     final teamShort = <String, String>{};
@@ -1141,6 +1143,9 @@ class _PlayerCardState extends State<PlayerCard> {
         final list = teamsBySeason.putIfAbsent(sid, () => []);
         if (!list.contains(n)) list.add(n);
         // Sezon içinde takım değiştirdiyse güncel (aktif) kayıt.
+        if (l['is_active'] != false) {
+          extraActiveTeams.putIfAbsent(sid, () => {}).add(tid);
+        }
         if (l['is_active'] != false || !teamIdBySeason.containsKey(sid)) {
           teamIdBySeason[sid] = tid;
         }
@@ -1365,6 +1370,10 @@ class _PlayerCardState extends State<PlayerCard> {
         teamIdBySeason[sid] ?? '',
         totalsBySeason[sid] ?? const _StatTotals(),
       );
+      for (final tid in extraActiveTeams[sid] ?? const <String>{}) {
+        if (tid == teamIdBySeason[sid]) continue;
+        addCareer(sid, tid, const _StatTotals());
+      }
     }
     final careerRows = career.values.toList()
       ..sort((a, b) {
