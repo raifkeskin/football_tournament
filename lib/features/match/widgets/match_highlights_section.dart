@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -1003,7 +1004,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       );
       await _refresh();
     } catch (e) {
-      _snack('Kaydedilemedi: $e');
+      _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
     }
   }
 
@@ -1067,7 +1068,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         if (updated != null) _play(updated);
       }
     } catch (e) {
-      _snack('Kaydedilemedi: $e');
+      _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _busy.remove(h.id));
     }

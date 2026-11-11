@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/table_feed.dart';
@@ -363,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await showAdminInfoDialog(
         context: context,
         title: 'Turnuva açılamadı',
-        message: e.toString().replaceFirst('Exception: ', ''),
+        message: friendlyErrorText(e),
       );
       return;
     }

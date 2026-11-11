@@ -1,4 +1,5 @@
 import '../widgets/quick_event_entry.dart';
+import '../../../core/utils/friendly_error.dart';
 import '../widgets/quick_score_dialog.dart';
 import '../../../core/services/active_tournament.dart';
 
@@ -5647,7 +5648,7 @@ class _AutoMotmTeamState extends State<_AutoMotmTeam> {
         const SnackBar(content: Text('Maçın adamı kaydedildi.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

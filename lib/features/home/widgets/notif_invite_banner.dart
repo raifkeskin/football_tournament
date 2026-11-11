@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -208,7 +209,7 @@ class _InviteSheetState extends State<_InviteSheet> {
       );
     } catch (e) {
       if (mounted) setState(() => _busy = false);
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
     }
   }
 

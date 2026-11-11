@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
@@ -511,7 +512,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
     }
   }
 
@@ -1105,7 +1106,7 @@ Future<void> showPlayerQuickEvent(
     await ServiceLocator.matchService.addMatchEvent(event);
     _showSaved(messenger, event);
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+    messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
   }
 }
 

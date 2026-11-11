@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/friendly_error.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../models/match.dart';
 import 'match_insights.dart';
@@ -411,7 +412,7 @@ class _MomentSheetState extends State<_MomentSheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+        ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
