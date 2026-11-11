@@ -149,13 +149,15 @@ class SuspendedPoster extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFEF2B2B),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white, width: 2.5),
-        boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 18)],
+        border: Border.all(color: Colors.white, width: 5),
+        boxShadow: const [
+          BoxShadow(color: Color(0xCC000000), blurRadius: 22, offset: Offset(0, 10)),
+          BoxShadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 3)),
+        ],
       ),
     ),
   );
 
-  /// Fotoğraflı hâlde kırmızı; fotoğrafsızda koyu bordo (kırmızı kart öne çıksın).
   Widget _hero({required double height, required Widget child}) => ClipPath(
     clipper: _DiagonalClipper(),
     child: Container(
@@ -164,9 +166,7 @@ class SuspendedPoster extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: data.withPhoto
-              ? const [_red, Color(0xFF7F1D1D)]
-              : const [Color(0xFF3B0A0A), Color(0xFF12060A)],
+          colors: const [_red, Color(0xFF7F1D1D)],
         ),
       ),
       child: child,
