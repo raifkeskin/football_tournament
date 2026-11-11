@@ -74,9 +74,13 @@ class VideoItem {
     this.logoUrl = '',
     this.teamId,
     this.players = const [],
+    this.createdAt,
   });
 
   final String? teamId;
+
+  /// Eklenme zamanı (kutucukta tarih olarak gösterilir).
+  final DateTime? createdAt;
 
   /// Etiketlenen futbolcular (haber verisinden; listelerde boş).
   final List<VideoTag> players;
@@ -137,6 +141,9 @@ class VideoItem {
       coverUrl: (r['cover_url'] ?? '').toString().trim(),
       logoUrl: (league['logo_url'] ?? '').toString().trim(),
       teamId: r['team_id']?.toString(),
+      createdAt: DateTime.tryParse(
+        (r['created_at'] ?? '').toString(),
+      )?.toLocal(),
     );
   }
 
@@ -497,6 +504,21 @@ class VideoTile extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (item.createdAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          _dmy(item.createdAt!),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: large ? 11 : 9.5,
+                            fontWeight: FontWeight.w600,
+                            shadows: const [
+                              Shadow(color: Colors.black, blurRadius: 4),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -506,6 +528,9 @@ class VideoTile extends StatelessWidget {
       ),
     );
   }
+
+  static String _dmy(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
 }
 
 /// Videoları tam ekranda oynatır; yana kaydırınca listedeki diğer video.

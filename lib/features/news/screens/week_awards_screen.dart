@@ -10,6 +10,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/insights/match_insights.dart';
+import '../../videos/videos.dart' show isInstagramPostUrl;
 import '../../tournament/models/league.dart';
 import '../week_awards.dart';
 import '../widgets/week_awards_cards.dart';
@@ -19,7 +20,19 @@ import '../widgets/week_awards_cards.dart';
 /// bültende yer alacağına her hafta kendisi karar verir; seçim bir sonraki
 /// haftaya hatırlanır. Adaylar maç puanından önerilir (week_award_pool).
 class WeekAwardsScreen extends StatefulWidget {
-  const WeekAwardsScreen({super.key, required this.tournaments});
+  const WeekAwardsScreen({
+    super.key,
+    required this.tournaments,
+    this.initialLeagueId,
+    this.initialRegionId,
+    this.initialWeek,
+  });
+
+  /// Haber yönetiminden "düzenle" ile açılırken: turnuva, bölge ve hafta
+  /// seçili gelir.
+  final String? initialLeagueId;
+  final String? initialRegionId;
+  final int? initialWeek;
 
   /// Kullanıcının yönetebildiği turnuvalar.
   final List<League> tournaments;
@@ -141,12 +154,37 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.tournaments.isNotEmpty) _pickLeague(widget.tournaments.first.id);
+    _initRegion = widget.initialRegionId;
+    _initWeek = widget.initialWeek;
+    final first =
+        widget.tournaments
+            .where((l) => l.id == widget.initialLeagueId)
+            .firstOrNull ??
+        widget.tournaments.firstOrNull;
+    if (first != null) _pickLeague(first.id);
+  }
+
+  String? _initRegion;
+  int? _initWeek;
+
+  /// Enlerin altındaki Instagram bağlantı alanları ve kayıtlı değerleri.
+  final Map<AwardKind, TextEditingController> _ig = {};
+  final Map<AwardKind, String> _igSaved = {};
+  TextEditingController _igCtl(AwardKind k) =>
+      _ig.putIfAbsent(k, () => TextEditingController());
+
+  static String _igClean(String v) {
+    final t = v.trim();
+    if (t.isEmpty) return '';
+    return (t.startsWith('http') ? t : 'https://$t').split('?').first;
   }
 
   @override
   void dispose() {
     _scroll.dispose();
+    for (final c in _ig.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -235,8 +273,24 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
         ];
         _loading = false;
       });
+      final initRegion = _initRegion;
+      final initWeek = _initWeek;
+      _initRegion = null;
+      _initWeek = null;
+      if (initRegion != null && (_regions.containsKey(initRegion)) && mounted) {
+        setState(() => _regionId = initRegion);
+      } else if ((widget.initialRegionId ?? '').isEmpty &&
+          widget.initialWeek != null &&
+          full &&
+          mounted) {
+        setState(() => _regionId = null);
+      }
       final weeks = _weeks;
-      if (weeks.isNotEmpty) _pickWeek(weeks.last);
+      if (weeks.isNotEmpty) {
+        _pickWeek(
+          initWeek != null && weeks.contains(initWeek) ? initWeek : weeks.last,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -500,6 +554,10 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
 
     _pick.clear();
     _photo.clear();
+    _igSaved.clear();
+    for (final c in _ig.values) {
+      c.text = '';
+    }
     if (restore && prev != null) {
       final saved = WeekAwards.fromJson(prev);
       if (saved.hasEleven) {
@@ -526,6 +584,10 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
           _ => a.person?.id,
         };
         _photo[a.kind] = a.photo;
+        if (a.instagramUrl.isNotEmpty) {
+          _igSaved[a.kind] = a.instagramUrl;
+          _igCtl(a.kind).text = a.instagramUrl;
+        }
       }
     } else {
       _autoEleven();
@@ -757,6 +819,14 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
   }
 
   WeekAward? _award(AwardKind k) {
+    final a = _awardBase(k);
+    if (a == null) return null;
+    final ig = _igClean(_ig[k]?.text ?? '');
+    if (ig.isEmpty) return a;
+    return WeekAward.fromJson({...a.toJson(), 'instagram_url': ig});
+  }
+
+  WeekAward? _awardBase(AwardKind k) {
     final key = _pick[k];
     if (key == null) return null;
     final photo = _photo[k] ?? '';
@@ -870,6 +940,12 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
     for (final k in AwardKind.values) {
       if (_enabled.contains(k.key) && _award(k) == null) {
         return '${k.full} seçilmedi.';
+      }
+      final ig = (_ig[k]?.text ?? '').trim();
+      if (_enabled.contains(k.key) &&
+          ig.isNotEmpty &&
+          !isInstagramPostUrl(ig)) {
+        return '${k.full}: Instagram gönderisi ya da Reels bağlantısı gir.';
       }
     }
     return null;
@@ -1080,6 +1156,56 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
 
   // ---- Yayın ------------------------------------------------------------
 
+  /// Yayınlanmış bültende yalnız Instagram bağlantıları kaydedilir.
+  Future<void> _saveInstagramOnly() async {
+    final sid = _seasonId;
+    final week = _week;
+    if (sid == null || week == null) return;
+    final changes = <String, String>{};
+    for (final k in AwardKind.values) {
+      if (!_enabled.contains(k.key)) continue;
+      final raw = (_ig[k]?.text ?? '').trim();
+      if (raw.isNotEmpty && !isInstagramPostUrl(raw)) {
+        _snack('${k.full}: Instagram gönderisi ya da Reels bağlantısı gir.');
+        return;
+      }
+      final v = _igClean(raw);
+      if (v != (_igSaved[k] ?? '')) changes[k.key] = v;
+    }
+    if (changes.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      var q = _sb
+          .from('news')
+          .select('id')
+          .eq('season_id', sid)
+          .eq('auto_kind', 'week_awards')
+          .eq('week', week);
+      q = _regionId == null
+          ? q.isFilter('region_id', null)
+          : q.eq('region_id', _regionId!);
+      final row = await q.maybeSingle();
+      if (row == null) throw Exception('Bülten bulunamadı.');
+      for (final e in changes.entries) {
+        await _sb.rpc(
+          'set_week_award_instagram',
+          params: {'p_news_id': row['id'], 'p_kind': e.key, 'p_url': e.value},
+        );
+      }
+      if (!mounted) return;
+      _snack('Instagram videoları kaydedildi.');
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      final msg = e is PostgrestException ? e.message : '$e';
+      _snack('Kaydedilemedi: $msg');
+    }
+  }
+
   Future<void> _publish() async {
     final sid = _seasonId;
     final week = _week;
@@ -1155,10 +1281,16 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
       bottomBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
         child: AdminPrimaryButton(
-          label: _exists ? 'Bülteni güncelle' : 'Bülteni yayınla',
+          label: _locked
+              ? 'Instagram videolarını kaydet'
+              : _exists
+              ? 'Bülteni güncelle'
+              : 'Bülteni yayınla',
           busy: _saving,
-          onPressed: !ready || _saving || _uploading || _locked
+          onPressed: !ready || _saving || _uploading
               ? null
+              : _locked
+              ? _saveInstagramOnly
               : _publish,
         ),
       ),
@@ -1247,7 +1379,7 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
             if (_exists)
               _Hint(
                 _locked
-                    ? 'Bu haftanın bülteni yayınlandı; yayınlanan bülten değiştirilmez.'
+                    ? 'Bu haftanın bülteni yayınlandı; yalnız Instagram videoları eklenip değiştirilebilir.'
                     : 'Bu haftanın bülteni yayınlandı. Değiştirip yeniden yayınlarsan haber güncellenir.',
                 color: kAdminAmber,
               ),
@@ -1455,6 +1587,33 @@ class _WeekAwardsScreenState extends State<WeekAwardsScreen> {
                 style: TextStyle(color: kAdminMuted, fontSize: 12),
               ),
             ),
+          if (key != null) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _igCtl(k),
+              enabled: !_saving,
+              keyboardType: TextInputType.url,
+              style: const TextStyle(color: Colors.white, fontSize: 13.5),
+              cursorColor: kAdminAccent,
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(
+                  Icons.camera_alt_outlined,
+                  size: 18,
+                  color: kAdminMuted,
+                ),
+                hintText:
+                    'Instagram videosu (isteğe bağlı) · instagram.com/reel/…',
+                hintStyle: const TextStyle(color: kAdminMuted, fontSize: 12.5),
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.25),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
           if (canPhoto) ...[
             const SizedBox(height: 10),
             SizedBox(
