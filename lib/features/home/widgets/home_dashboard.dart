@@ -2748,7 +2748,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                             [
                               d.teams[top[i].teamId]?.name ?? '',
                               if (penalty && top[i].total > top[i].goals)
-                                '${top[i].total} maçlık ceza',
+                                '${top[i].total} maçlık ceza · ${top[i].goals} maç kaldı',
                             ].where((e) => e.isNotEmpty).join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -2760,11 +2760,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
                     Text('${top[i].goals}', style: _condensed(size: 24)),
                     const SizedBox(width: 4),
                     SizedBox(
-                      width: penalty ? 58 : 30,
+                      width: 30,
                       child: Text(
-                        penalty && top[i].total > top[i].goals
-                            ? 'maç kaldı'
-                            : unit,
+                        unit,
                         style: _barlow(size: 11, color: DashColors.muted),
                       ),
                     ),
