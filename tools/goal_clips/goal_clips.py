@@ -651,7 +651,7 @@ if __name__ == '__main__':
     try:
         fd = os.open(lock, os.O_CREAT | os.O_EXCL)
     except FileExistsError:
-        # Önceki çalışma sürüyor (ya da yarım kaldı; 30 dk sonra kilit düşer).
+        # Önceki çalışma sürüyor (ya da yarım kaldı; 90 dk sonra kilit düşer).
         if datetime.datetime.now().timestamp() - os.path.getmtime(lock) < 5400:
             sys.exit(0)
         os.remove(lock)
