@@ -23,6 +23,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -39,6 +40,7 @@ DRIVE_ROOTS = glob.glob(os.path.expanduser(
 BREW = '/opt/homebrew/bin'
 LEAD, LENGTH = 0, 20  # özetteki başlangıç (gol - 12 sn) → 20 sn: golden 12 sn önce, 8 sn sonra
 MAX_TRIES = 3
+PAUSE_SEC = 120  # kesitler arası bekleme (saniye)
 
 
 def log(*a):
@@ -619,7 +621,10 @@ def main():
     clips = json.loads(raw) if raw else []
     if not clips:
         return
-    for c in clips:
+    for i, c in enumerate(clips):
+        if i:
+            # YouTube art arda indirmeleri bot sanıp engelleyebiliyor.
+            time.sleep(PAUSE_SEC)
         name = f"{c['minute']}' {c.get('scorer') or ''} · {short(c['home'])}-{short(c['away'])}"
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -647,7 +652,7 @@ if __name__ == '__main__':
         fd = os.open(lock, os.O_CREAT | os.O_EXCL)
     except FileExistsError:
         # Önceki çalışma sürüyor (ya da yarım kaldı; 30 dk sonra kilit düşer).
-        if datetime.datetime.now().timestamp() - os.path.getmtime(lock) < 1800:
+        if datetime.datetime.now().timestamp() - os.path.getmtime(lock) < 5400:
             sys.exit(0)
         os.remove(lock)
         fd = os.open(lock, os.O_CREAT | os.O_EXCL)
