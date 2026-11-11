@@ -798,7 +798,14 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
         context: context,
         title: 'Talep gönderilemedi',
         message:
-            msg.contains('pending_actions_one_open_per_player') ||
+            msg.contains('başka bir takımın kadrosunda') ||
+                msg.contains('league_team_players_player_id_league_id_key')
+            ? '$name bu sezonda başka bir takımın kadrosunda. Bir oyuncu '
+                  'aynı turnuvanın aynı sezonunda yalnız tek takımda yer '
+                  'alabilir; önce o takımın kadrosundan çıkarılmalı. '
+                  'Transfer dönemi açıkken ve çift takım izni verildiyse '
+                  'iki takımda da yer alabilir.'
+            : msg.contains('pending_actions_one_open_per_player') ||
                 msg.contains('23505')
             ? '$name için zaten onay bekleyen bir talep var.'
             : msg.replaceFirst('Exception: ', '').trim(),
