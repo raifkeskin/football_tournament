@@ -43,6 +43,7 @@ import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
 import 'unscheduled_matches_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
+import '../../identity/identity_service.dart';
 import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
@@ -1626,6 +1627,46 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _alert('Cezalısın: ${d.activePenaltyMatches} maç daha oynayamazsın.'),
           const SizedBox(height: 12),
         ],
+        // Turnuva çipli kimlik istiyorsa: oyuncuya ve takım sorumlusuna uyarı.
+        if (session.user != null)
+          FutureBuilder<Map<String, dynamic>>(
+            future: IdentityService.myWarnings(),
+            builder: (context, snap) {
+              final w = snap.data ?? const <String, dynamic>{};
+              final mine = [
+                for (final x in (w['player'] as List? ?? const []))
+                  if ('${x['league']}' == widget.league.name) x,
+              ];
+              final teams = [
+                for (final x in (w['teams'] as List? ?? const []))
+                  if ('${x['league']}' == widget.league.name) x,
+              ];
+              if (mine.isEmpty && teams.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (mine.isNotEmpty) ...[
+                    _alert(
+                      'Mavi tik gerekli: ${widget.league.name} turnuvasında '
+                      'kimliği çipli okutulmayan oyuncu esameye yazılamaz. '
+                      'Kimliğini okutmak için takım sorumlunla görüş.',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  for (final t in teams) ...[
+                    _alert(
+                      '${t['team']}: ${(t['players'] as List).length} '
+                      'oyuncunun mavi tiki yok '
+                      '(${(t['players'] as List).take(3).join(', ')}'
+                      '${(t['players'] as List).length > 3 ? '…' : ''}). '
+                      'Esameye yazılamazlar; kadrodan kimlik okutun.',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              );
+            },
+          ),
         if (isOwner && pendingHere > 0) ...[
           // Dokununca ceza onayları ekranı, ana sayfada seçili turnuva,
           // sezon ve grupla süzülmüş olarak.

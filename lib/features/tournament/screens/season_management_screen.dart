@@ -193,6 +193,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var broadcasterEnabled = season?.broadcasterEnabled ?? true;
     var photographerEnabled = season?.photographerEnabled ?? true;
     var verifiedIdMode = season?.verifiedIdMode ?? 'any';
+    var verifiedIdRoster = season?.verifiedIdRoster ?? 'off';
     var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
     var rollingSubs = season?.rollingSubs ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
@@ -296,6 +297,7 @@ class SeasonManagementScreen extends StatelessWidget {
         photographerEnabled: photographerEnabled,
         requireVerifiedId: verifiedIdMode != 'any',
         verifiedIdMode: verifiedIdMode,
+        verifiedIdRoster: verifiedIdRoster,
         goalkeeperAddAnytime: goalkeeperAddAnytime,
         rollingSubs: rollingSubs,
         transferStartDate: transferStartDate,
@@ -609,6 +611,35 @@ class SeasonManagementScreen extends StatelessWidget {
                                   );
                                   if (v != null) {
                                     setSheetState(() => verifiedIdMode = v);
+                                  }
+                                },
+                              ),
+                            if (showIdentity && verifiedIdMode != 'any')
+                              AdminSelectRow(
+                                icon: Icons.how_to_reg_outlined,
+                                label: 'Kadroya Eklemede Kimlik',
+                                value: switch (verifiedIdRoster) {
+                                  'warn' => 'Uyar',
+                                  'block' => 'Onaysız eklenemez',
+                                  _ => 'Kapalı',
+                                },
+                                placeholder: 'Kapalı',
+                                onTap: () async {
+                                  final v = await showAdminOptionPicker<String>(
+                                    context: context,
+                                    title: 'Kadroya Eklemede Kimlik',
+                                    items: const ['off', 'warn', 'block'],
+                                    selected: verifiedIdRoster,
+                                    labelBuilder: (k) => switch (k) {
+                                      'warn' =>
+                                        'Uyar (onaysız oyuncu eklenebilir)',
+                                      'block' =>
+                                        'Onaysız oyuncu kadroya eklenemez',
+                                      _ => 'Kapalı (kimlik yalnız esamede aranır)',
+                                    },
+                                  );
+                                  if (v != null) {
+                                    setSheetState(() => verifiedIdRoster = v);
                                   }
                                 },
                               ),
