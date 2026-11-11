@@ -738,6 +738,39 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
     if (!_checkOpen()) return;
     final id = '${p['id']}';
     final name = '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim();
+    // Bu sezon başka bir takımın kadrosundaysa: transfer et / vazgeç.
+    var transfer = false;
+    try {
+      final cur = await _sb
+          .from('season_team_players')
+          .select('team_id, teams(name)')
+          .eq('season_id', _target.seasonId)
+          .eq('player_id', id)
+          .eq('is_active', true)
+          .neq('team_id', _target.teamId)
+          .limit(1);
+      if (cur.isNotEmpty) {
+        final from = '${(cur.first['teams'] as Map?)?['name'] ?? 'başka bir takım'}';
+        if (!mounted) return;
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Transfer',
+          message: _isAdmin
+              ? '$name şu an $from kadrosunda. Transfer edilirse $from '
+                    'kadrosundan çıkarılıp bu takıma eklenir. Geçmiş gol ve '
+                    'maçları $from adına kalır.'
+              : '$name şu an $from kadrosunda. Transfer talebi bölge '
+                    'sorumlusuna gider; onaylanınca $from kadrosundan çıkıp '
+                    'bu takıma geçer.',
+          confirmLabel: _isAdmin ? 'TRANSFER ET' : 'TALEP GÖNDER',
+          cancelLabel: 'VAZGEÇ',
+          destructive: false,
+          icon: Icons.swap_horiz_rounded,
+        );
+        if (!ok || !mounted) return;
+        transfer = true;
+      }
+    } catch (_) {}
     final jersey = await _askJersey(name);
     if (jersey == null || !mounted) return;
     final number = int.tryParse(jersey);
@@ -776,6 +809,7 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
             'player_id': id,
             'player_name': name,
             'jersey_number': ?number,
+            if (transfer) 'transfer': true,
           },
         );
       }
