@@ -3451,6 +3451,32 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString();
+      if (msg.contains('players_phone_uq')) {
+        setState(() => _saving = false);
+        String who = 'başka bir futbolcuya';
+        try {
+          final o = await Supabase.instance.client.rpc(
+            'player_phone_owner',
+            params: {'p_phone': _rawPhone()},
+          );
+          if (o is Map) {
+            final teams = (o['teams'] as List? ?? const []).join(', ');
+            final bd = '${o['birth_date'] ?? ''}';
+            who =
+                '${o['name']}${bd.isEmpty ? '' : ' (${bd.split('-').reversed.join('.')})'}'
+                '${teams.isEmpty ? '' : ' · $teams'} adlı futbolcuya';
+          }
+        } catch (_) {}
+        if (!mounted) return;
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Telefon zaten kayıtlı',
+          message:
+              'Bu numara $who ait. Aynı kişiyse yeni kayıt açmayın; '
+              'mevcut kaydı kadroya ekleyin.',
+        );
+        return;
+      }
       // Düzenlemede ad/soyad/doğum tarihi başka bir kayıtla çakışırsa da.
       final text =
           msg.contains(kPlayerAlreadyRegistered) ||
