@@ -3783,13 +3783,12 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
           : () => Navigator.of(context).push(
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'PhotoGalleryScreen'),
-                builder: (_) =>
-                    _PhotoGalleryScreen(
-                      photos: list,
-                      initialIndex: i,
-                      leagueId: widget.match.leagueId,
-                      matchId: widget.match.id,
-                    ),
+                builder: (_) => _PhotoGalleryScreen(
+                  photos: list,
+                  initialIndex: i,
+                  leagueId: widget.match.leagueId,
+                  matchId: widget.match.id,
+                ),
               ),
             ),
       onLongPress: widget.isSuperAdmin && selection == null
@@ -6954,7 +6953,7 @@ class _DetailTabView extends StatelessWidget {
                   : type == 'goal' && isOwnGoal
                   ? 'Kendi Kalesine'
                   : type == 'goal' && assist.isNotEmpty
-                  ? 'Asist: $assist'
+                  ? assist
                   : type == 'second_yellow'
                   ? 'Çift sarıdan ihraç'
                   : type == 'penalty_missed'
@@ -7587,25 +7586,45 @@ class _DetailEventTile extends StatelessWidget {
     final cancelled = type == 'goal_cancelled' || type == 'red_card_cancelled';
     // Ad tek satırda tam görünür (Kadro sekmesindeki gibi); yalnız sığmayan
     // çok uzun ad, alana sığacak kadar küçülür.
-    final name = FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: align == CrossAxisAlignment.end
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
-      child: Text(
-        title.isEmpty ? '-' : title,
-        maxLines: 1,
-        style: TextStyle(
-          fontSize: 13,
-          height: 1.15,
-          fontWeight: FontWeight.w700,
-          color: cancelled ? const Color(0xFF94A3B8) : null,
-          decoration: cancelled ? TextDecoration.lineThrough : null,
-          decorationColor: const Color(0xFFDC2626),
-          decorationThickness: 2,
-        ),
+    final wrapName = clip != null && type == 'goal';
+    final nameText = Text(
+      title.isEmpty ? '-' : title,
+      maxLines: wrapName ? 2 : 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: align == CrossAxisAlignment.end
+          ? TextAlign.right
+          : TextAlign.left,
+      style: TextStyle(
+        fontSize: 13,
+        height: 1.15,
+        fontWeight: FontWeight.w700,
+        color: cancelled ? const Color(0xFF94A3B8) : null,
+        decoration: cancelled ? TextDecoration.lineThrough : null,
+        decorationColor: const Color(0xFFDC2626),
+        decorationThickness: 2,
       ),
     );
+    final name = wrapName
+        ? nameText
+        : FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: align == CrossAxisAlignment.end
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+            child: Text(
+              title.isEmpty ? '-' : title,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.15,
+                fontWeight: FontWeight.w700,
+                color: cancelled ? const Color(0xFF94A3B8) : null,
+                decoration: cancelled ? TextDecoration.lineThrough : null,
+                decorationColor: const Color(0xFFDC2626),
+                decorationThickness: 2,
+              ),
+            ),
+          );
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: align,
@@ -7647,7 +7666,7 @@ class _DetailEventTile extends StatelessWidget {
             title: title.isEmpty ? 'Gol' : "$minute' $title",
           ),
           child: const SizedBox(
-            width: 46,
+            width: 40,
             child: Center(
               child: Icon(
                 Icons.play_arrow_rounded,
@@ -7678,7 +7697,7 @@ class _DetailEventTile extends StatelessWidget {
                   strip,
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+                      padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
                       child: content,
                     ),
                   ),
@@ -7686,7 +7705,7 @@ class _DetailEventTile extends StatelessWidget {
               : [
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+                      padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
                       child: content,
                     ),
                   ),
