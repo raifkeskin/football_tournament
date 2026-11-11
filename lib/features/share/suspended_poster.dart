@@ -14,6 +14,7 @@ class SuspendedPosterRow {
     required this.teamLogo,
     required this.reason,
     required this.remaining,
+    this.total = 0,
     this.photoUrl = '',
   });
 
@@ -26,6 +27,10 @@ class SuspendedPosterRow {
 
   /// Kalan ceza maçı.
   final int remaining;
+
+  /// Verilen toplam ceza maçı (0: bilinmiyor). Kalandan büyükse afişte
+  /// "KALAN CEZA" ve toplam yazılır.
+  final int total;
 
   /// Profil fotoğrafı (dekupe ya da düz); boşsa silüet.
   final String photoUrl;
@@ -213,7 +218,10 @@ class SuspendedPoster extends StatelessWidget {
                 children: [
                   Text('${r.remaining} MAÇ', style: _cond(st.pick(68, 54))),
                   const SizedBox(height: 2),
-                  Text('CEZA', style: _cond(st.pick(26, 22), spacing: 3)),
+                  Text(
+                    r.total > r.remaining ? 'KALAN CEZA' : 'CEZA',
+                    style: _cond(st.pick(26, 22), spacing: 3),
+                  ),
                 ],
               ),
             ),
@@ -229,12 +237,19 @@ class SuspendedPoster extends StatelessWidget {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          // Fotoğrafsızda kart bandın altına taşar: isim kartın altında başlar.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            data.withPhoto ? 8 : 8 + heroH * 0.12,
+            16,
+            0,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               FittedBox(
                 fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
                 child: Text(r.name.trUpper, style: _cond(st.pick(40, 32))),
               ),
               const SizedBox(height: 8),
@@ -246,7 +261,12 @@ class SuspendedPoster extends StatelessWidget {
                   color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(r.reason.trUpper, style: _cond(15, spacing: 1)),
+                child: Text(
+                  r.total > r.remaining
+                      ? '${r.reason.trUpper} · ${r.total} MAÇLIK CEZA'
+                      : r.reason.trUpper,
+                  style: _cond(15, spacing: 1),
+                ),
               ),
             ],
           ),
