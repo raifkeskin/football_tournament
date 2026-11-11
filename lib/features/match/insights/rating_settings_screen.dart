@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/widgets/admin_form.dart';
@@ -87,7 +88,7 @@ class _RatingSettingsScreenState extends State<RatingSettingsScreen> {
         const SnackBar(content: Text('Puanlama ayarları kaydedildi.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/utils/friendly_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -842,7 +843,7 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
             : msg.contains('pending_actions_one_open_per_player') ||
                 msg.contains('23505')
             ? '$name için zaten onay bekleyen bir talep var.'
-            : msg.replaceFirst('Exception: ', '').trim(),
+            : friendlyErrorText(msg),
       );
     }
   }

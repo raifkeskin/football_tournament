@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/utils/friendly_error.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../match/models/match.dart';
@@ -114,7 +115,7 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        _snack('Kaydedilemedi: $e');
+        _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
       }
     }
   }

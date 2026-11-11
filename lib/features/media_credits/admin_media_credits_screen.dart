@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/friendly_error.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -152,7 +153,7 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
       await MediaDirectory.makeDefault(leagueId, c);
       await _loadCredits();
     } catch (e) {
-      _snack('Kaydedilemedi: $e');
+      _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -741,7 +742,7 @@ class _MediaCreditFormState extends State<MediaCreditForm> {
       MediaCreditFeed.notifyChanged(widget.leagueId);
       if (mounted) Navigator.of(context).pop(created ?? old);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
       if (mounted) setState(() => _saving = false);
     }
   }

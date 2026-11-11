@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/utils/friendly_error.dart';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
@@ -679,7 +680,7 @@ class _FormationTabState extends State<FormationTab>
       setState(() => _saveFailed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Kaydedilemedi: $e'),
+          content: Text('Kaydedilemedi: ${friendlyErrorText(e)}'),
           backgroundColor: Colors.redAccent,
         ),
       );
