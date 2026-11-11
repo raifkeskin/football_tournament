@@ -653,6 +653,14 @@ class _StatsTabsState extends State<_StatsTabs> {
   /// Cezalı afişi: tek kişide tekli, birden çok kişide liste afişi.
   Future<void> _shareSuspended(List<_Suspended> rows) async {
     if (rows.isEmpty) return;
+    final withPhoto = await showAdminOptionPicker<bool>(
+      context: context,
+      title: 'Afiş türü',
+      items: const [true, false],
+      labelBuilder: (v) => v ? 'Fotoğraflı' : 'Fotoğrafsız',
+      emptyText: '',
+    );
+    if (withPhoto == null || !mounted) return;
     final client = Supabase.instance.client;
     final groupId = widget.groupId;
     final (league, season, groups) = await (
@@ -660,7 +668,7 @@ class _StatsTabsState extends State<_StatsTabs> {
           ? Future<Map<String, dynamic>?>.value()
           : client
                 .from('leagues')
-                .select('name')
+                .select('name, logo_url')
                 .eq('id', widget.leagueId!)
                 .maybeSingle()
                 .catchError((_) => null),
@@ -691,6 +699,8 @@ class _StatsTabsState extends State<_StatsTabs> {
               .trim();
     final data = SuspendedPosterData(
       leagueName: (league?['name'] ?? '').toString(),
+      leagueLogo: (league?['logo_url'] ?? '').toString(),
+      withPhoto: withPhoto,
       subtitle: [
         (season?['name'] ?? '').toString().trim(),
         groupName,
@@ -698,6 +708,7 @@ class _StatsTabsState extends State<_StatsTabs> {
       rows: [
         for (final r in rows)
           SuspendedPosterRow(
+            photoUrl: r.player?.photoUrl ?? '',
             name: r.name,
             team: widget.teamById[r.teamId]?.name ?? '',
             teamLogo: widget.teamById[r.teamId]?.logoUrl ?? '',
@@ -711,6 +722,10 @@ class _StatsTabsState extends State<_StatsTabs> {
       fileName: rows.length == 1 ? 'ceza_bildirimi' : 'cezalilar_listesi',
       title: rows.length == 1 ? 'Ceza bildirimi' : 'Cezalılar listesi',
       formats: const [PosterFormat.post, PosterFormat.story],
+      imageUrls: [
+        data.leagueLogo,
+        for (final r in data.rows) ...[r.teamLogo, if (withPhoto) r.photoUrl],
+      ].where((u) => u.trim().isNotEmpty).toList(),
       poster: SuspendedPoster(data: data),
     );
   }
