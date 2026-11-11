@@ -3427,12 +3427,6 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   // Altta sağdaki menü düğmesi son kartı örtmesin.
                   padding: const EdgeInsets.only(bottom: 104),
                   children: [
-                    if (hasStream)
-                      MediaCreditChip(
-                        leagueId: widget.match.leagueId,
-                        kind: MediaCreditKind.broadcast,
-                        matchId: widget.match.id,
-                      ),
                     MatchHighlightsStrip(
                       match: widget.match,
                       homeName: widget.homeName,
@@ -3455,38 +3449,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         }
         final header = <Widget>[
           switcher,
-          if (photos.isNotEmpty || albums.isNotEmpty)
-            MediaCreditChip(
-              leagueId: widget.match.leagueId,
-              kind: MediaCreditKind.photo,
-              matchId: widget.match.id,
-            ),
           for (final a in albums) _albumCard(context, a),
-          if (widget.isSuperAdmin)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.photo_outlined,
-                    size: 16,
-                    color: Colors.white54,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    AppSettings.matchPhotosUnlimited
-                        ? 'Fotoğraflar ${photos.length}'
-                        : 'Fotoğraflar ${photos.length} / '
-                              '${AppSettings.matchPhotoLimit.value}',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ];
         if (photos.isEmpty) {
           return Column(
@@ -3748,7 +3711,12 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'PhotoGalleryScreen'),
                 builder: (_) =>
-                    _PhotoGalleryScreen(photos: list, initialIndex: i),
+                    _PhotoGalleryScreen(
+                      photos: list,
+                      initialIndex: i,
+                      leagueId: widget.match.leagueId,
+                      matchId: widget.match.id,
+                    ),
               ),
             ),
       onLongPress: widget.isSuperAdmin && selection == null
@@ -3834,10 +3802,17 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
 /// Tam ekran galeri: sağa-sola kaydırma, yakınlaştırma, "3 / 24" sayacı ve
 /// varsa açıklama.
 class _PhotoGalleryScreen extends StatefulWidget {
-  const _PhotoGalleryScreen({required this.photos, required this.initialIndex});
+  const _PhotoGalleryScreen({
+    required this.photos,
+    required this.initialIndex,
+    required this.leagueId,
+    required this.matchId,
+  });
 
   final List<MatchMediaModel> photos;
   final int initialIndex;
+  final String leagueId;
+  final String matchId;
 
   @override
   State<_PhotoGalleryScreen> createState() => _PhotoGalleryScreenState();
@@ -4033,18 +4008,36 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
               ),
             ),
           ),
-          if (caption.isNotEmpty)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                child: Text(
-                  caption,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+          SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (caption.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: Center(
+                      child: Text(
+                        caption,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Fotoğrafçı kredisi: ızgarada değil, yalnız büyük görünümde.
+                MediaCreditChip(
+                  leagueId: widget.leagueId,
+                  kind: MediaCreditKind.photo,
+                  matchId: widget.matchId,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                 ),
-              ),
+              ],
             ),
+          ),
         ],
       ),
     );
