@@ -307,6 +307,7 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
                 foot: foot,
                 height: height,
                 weight: weight,
+                chipless: card.chipless,
               ),
         ),
       ),

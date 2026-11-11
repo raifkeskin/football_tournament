@@ -24,7 +24,11 @@ class IdentityVerifyScreen extends StatefulWidget {
     this.registration = false,
     this.rosterTarget,
     this.targets,
+    this.allowChipless = true,
   });
+
+  /// Çip okunamazsa arka yüzdeki bilgiyle (turuncu tik) devam edilebilir.
+  final bool allowChipless;
 
   final String? expectedPlayerId;
   final String? expectedName;
@@ -64,13 +68,20 @@ class IdentityVerifyScreen extends StatefulWidget {
   final bool registration;
 
   /// Kayıt Ol akışı: kimlik okunur, çipteki bilgiler döner. Vazgeçilirse null.
-  static Future<IdCardData?> readForRegistration(BuildContext context) =>
-      Navigator.of(context).push<IdCardData>(
-        MaterialPageRoute(
-          settings: const RouteSettings(name: 'IdentityRegisterScreen'),
-          builder: (_) => const IdentityVerifyScreen(registration: true),
-        ),
-      );
+  /// [allowChipless]: çip okunamazsa arka yüzle devam edilebilir (telefon
+  /// değiştirme gibi güvenlik gerektiren akışlarda false).
+  static Future<IdCardData?> readForRegistration(
+    BuildContext context, {
+    bool allowChipless = true,
+  }) => Navigator.of(context).push<IdCardData>(
+    MaterialPageRoute(
+      settings: const RouteSettings(name: 'IdentityRegisterScreen'),
+      builder: (_) => IdentityVerifyScreen(
+        registration: true,
+        allowChipless: allowChipless,
+      ),
+    ),
+  );
 
   static Future<bool?> open(
     BuildContext context, {
@@ -104,6 +115,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   double? _progress;
   bool _busy = false;
   int _count = 0;
+
+  /// Çip okuma başarısızlık sayısı (her biri 3 iç denemeyle).
+  int _chipFails = 0;
 
   /// Kadroda okutma: sıradaki oyuncu ve son okumanın sonucu.
   int _ti = 0;
@@ -206,6 +220,57 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     });
   }
 
+  /// Kart bilgisi hazır (çipten ya da çipsiz): profil aranır / karşılaştırılır.
+  Future<void> _afterCard(IdCardData card) async {
+    if (widget.registration) {
+      Navigator.of(context).pop(card);
+      return;
+    }
+    if (widget.targets case final ts?) {
+      setState(() {
+        _card = card;
+        _status = 'Profille karşılaştırılıyor…';
+      });
+      final r = await IdentityService.verifyFor(ts[_ti], card);
+      if (!mounted) return;
+      setState(() {
+        _scan = r;
+        if (r.kind == 'ok' && !r.already) _count++;
+      });
+      return;
+    }
+    setState(() {
+      _card = card;
+      _status = 'Profil aranıyor…';
+    });
+    final list = await IdentityService.candidates(
+      firstName: card.firstName,
+      lastName: card.lastName,
+      birthDate: card.birthDate,
+      tc: card.tc,
+    );
+    if (!mounted) return;
+    setState(() {
+      _candidates = list;
+      _status = null;
+      final done = list.where((c) => c.matchKind == 'tc').firstOrNull;
+      if (done != null) _verifiedId = done.playerId;
+    });
+  }
+
+  /// Çip okunamadı: arka yüzdeki bilgiyle devam (turuncu tik, onay yok).
+  Future<void> _continueChipless() async {
+    final key = _key;
+    if (key == null || !key.canGoChipless) return;
+    final card = await showDialog<IdCardData>(
+      context: context,
+      builder: (_) => _ChiplessDialog(key_: key),
+    );
+    if (card == null || !mounted) return;
+    setState(() => _error = null);
+    await _afterCard(card);
+  }
+
   Future<void> _readChip() async {
     final key = _key;
     if (key == null) return;
@@ -232,42 +297,14 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         },
       );
       if (!mounted) return;
-      if (widget.registration) {
-        Navigator.of(context).pop(card);
-        return;
-      }
-      if (widget.targets case final ts?) {
-        setState(() {
-          _card = card;
-          _status = 'Profille karşılaştırılıyor…';
-        });
-        final r = await IdentityService.verifyFor(ts[_ti], card);
-        if (!mounted) return;
-        setState(() {
-          _scan = r;
-          if (r.kind == 'ok' && !r.already) _count++;
-        });
-        return;
-      }
-      setState(() {
-        _card = card;
-        _status = 'Profil aranıyor…';
-      });
-      final list = await IdentityService.candidates(
-        firstName: card.firstName,
-        lastName: card.lastName,
-        birthDate: card.birthDate,
-        tc: card.tc,
-      );
-      if (!mounted) return;
-      setState(() {
-        _candidates = list;
-        _status = null;
-        final done = list.where((c) => c.matchKind == 'tc').firstOrNull;
-        if (done != null) _verifiedId = done.playerId;
-      });
+      await _afterCard(card);
     } on IdCardError catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _chipFails++;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = IdentityService.errorText(e));
     } finally {
@@ -352,6 +389,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         lastName: card.lastName,
         birthDate: card.birthDate,
         tc: card.tc,
+        chipless: card.chipless,
       );
       if (!mounted) return;
       setState(() {
@@ -753,6 +791,17 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
               label: const Text('Tekrar dene'),
             ),
           ),
+          if (widget.allowChipless &&
+              _chipFails >= 1 &&
+              (_key?.canGoChipless ?? false))
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _busy ? null : _continueChipless,
+                icon: const Icon(Icons.badge_outlined),
+                label: const Text('Çipsiz devam et'),
+              ),
+            ),
         ],
       ],
     ),
@@ -1692,6 +1741,174 @@ class _DateFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: t,
       selection: TextSelection.collapsed(offset: t.length),
+    );
+  }
+}
+
+/// Çip okunamazsa: arka yüzden okunan TC ve doğum tarihi değişmez; ad ve
+/// soyadda yalnız Türkçe harfler düzeltilebilir (harf sadeleştirilince
+/// kimlikteki yazımla aynı olmalı).
+class _ChiplessDialog extends StatefulWidget {
+  const _ChiplessDialog({required this.key_});
+
+  final IdCardKey key_;
+
+  @override
+  State<_ChiplessDialog> createState() => _ChiplessDialogState();
+}
+
+class _ChiplessDialogState extends State<_ChiplessDialog> {
+  late final _first = TextEditingController(
+    text: _title(widget.key_.mrzFirstName),
+  );
+  late final _last = TextEditingController(
+    text: _title(widget.key_.mrzLastName),
+  );
+  String? _error;
+
+  /// "SIMSEK" -> "Simsek" (harfleri kullanıcı düzeltir).
+  static String _title(String s) => s
+      .toLowerCase()
+      .split(' ')
+      .where((w) => w.isNotEmpty)
+      .map((w) => w[0].toUpperCase() + w.substring(1))
+      .join(' ');
+
+  @override
+  void dispose() {
+    _first.dispose();
+    _last.dispose();
+    super.dispose();
+  }
+
+  void _ok() {
+    final f = _first.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final l = _last.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (idFold(f) != idFold(widget.key_.mrzFirstName) ||
+        idFold(l) != idFold(widget.key_.mrzLastName)) {
+      setState(
+        () => _error =
+            'Ad soyad kimlikle uyuşmuyor. Yalnız Türkçe harfleri '
+            '(Ş, İ, Ğ, Ü, Ö, Ç) düzeltebilirsiniz.',
+      );
+      return;
+    }
+    Navigator.pop(
+      context,
+      IdCardData(
+        firstName: f,
+        lastName: l,
+        birthDate: widget.key_.birthDate,
+        tc: widget.key_.mrzTc,
+        chipless: true,
+      ),
+    );
+  }
+
+  String get _bd {
+    final d = widget.key_.birthDate;
+    return '${d.day.toString().padLeft(2, '0')}.'
+        '${d.month.toString().padLeft(2, '0')}.${d.year}';
+  }
+
+  Widget _locked(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        suffixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+        labelStyle: const TextStyle(color: kAdminMuted),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.03),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      child: Text(
+        value,
+        style: const TextStyle(color: Colors.white70, fontSize: 16),
+      ),
+    ),
+  );
+
+  Widget _field(TextEditingController c, String label) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: TextField(
+      controller: c,
+      textCapitalization: TextCapitalization.words,
+      style: const TextStyle(color: Colors.white, fontSize: 16),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: kAdminMuted),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.05),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = widget.key_.mrzTc;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: adminDialogDecoration(),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Bilgilerini kontrol et',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Çip okunamadı; bilgiler kimliğin arka yüzünden okundu. '
+                'Profilinde turuncu tik görünür, çip okunursa mavi olur.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: kAdminMuted, fontSize: 12.5),
+              ),
+              const SizedBox(height: 14),
+              _locked(
+                'TC Kimlik No',
+                '${tc.substring(0, 3)} ••• ••• ${tc.substring(9)}',
+              ),
+              _locked('Doğum tarihi', _bd),
+              _field(_first, 'Ad'),
+              _field(_last, 'Soyad'),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: Color(0xFFFCA5A5),
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+              AdminPrimaryButton(label: 'DEVAM', onPressed: _ok),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Vazgeç'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -273,6 +273,7 @@ class IdentityService {
     required String lastName,
     required DateTime birthDate,
     required String tc,
+    bool chipless = false,
   }) async {
     await _sb.rpc(
       'identity_verify',
@@ -282,6 +283,7 @@ class IdentityService {
         'p_last': lastName,
         'p_birth': _date(birthDate),
         'p_tc': tc,
+        if (chipless) 'p_chipless': true,
       },
     );
     _cache[playerId] = true;
@@ -301,6 +303,7 @@ class IdentityService {
         'p_last': card.lastName,
         'p_birth': _date(card.birthDate),
         'p_tc': card.tc,
+        if (card.chipless) 'p_chipless': true,
       },
     );
     final m = Map<String, dynamic>.from(r as Map);
@@ -340,6 +343,7 @@ class IdentityService {
         'p_player_id': playerId,
         'p_jersey': int.tryParse((jersey ?? '').trim()),
         'p_display': display,
+        if (card.chipless) 'p_chipless': true,
       },
     );
     final m = Map<String, dynamic>.from(r as Map);
