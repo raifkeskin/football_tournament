@@ -265,52 +265,54 @@ def story_overlay(c, out, logos, zoom=1.0):
     # hikâyeyi paylaşır, asist yapanın adı da görünür).
     assist = (c.get('assist') or '').upper() if c.get('scorer') else ''
     minute = f"{c['minute']}+{c['added']}'" if c.get('added') else f"{c['minute']}'"
-    ctext(1290, 'GOL!', font('BarlowCondensed-ExtraBoldItalic.ttf', 160), GOLD)
+    ctext(1282, 'GOL!', font('BarlowCondensed-ExtraBoldItalic.ttf', 128), GOLD)
     who = f"{minute}  {c['scorer']}" if c.get('scorer') else f"{minute}  {short(c['team'])}"
-    fo = font('BarlowCondensed-ExtraBold.ttf', 72 if assist else 76)
+    fo = font('BarlowCondensed-ExtraBold.ttf', 56 if assist else 60)
     if d.textlength(who, font=fo) > W - 80:
-        fo = font('BarlowCondensed-ExtraBold.ttf', 60)
-    ctext(1458 if assist else 1470, who, fo, WHITE)
+        fo = font('BarlowCondensed-ExtraBold.ttf', 48)
+    ctext(1412 if assist else 1424, who, fo, WHITE)
     if assist:
         GREEN = (52, 211, 153, 255)
-        tag, tf = 'ASİST', font('BarlowCondensed-ExtraBold.ttf', 34)
-        nf = font('BarlowCondensed-ExtraBold.ttf', 44)
+        tag, tf = 'ASİST', font('BarlowCondensed-ExtraBold.ttf', 28)
+        nf = font('BarlowCondensed-ExtraBold.ttf', 36)
         tw, nw = d.textlength(tag, font=tf), d.textlength(assist, font=nf)
         x = (W - (tw + 28 + 16 + nw)) / 2
-        y = 1534
-        d.rounded_rectangle((x, y + 4, x + tw + 28, y + 50), 10, outline=GREEN, width=3)
-        d.text((x + 14, y + 8), tag, font=tf, fill=GREEN)
+        y = 1486
+        d.rounded_rectangle((x, y + 3, x + tw + 28, y + 41), 9, outline=GREEN, width=3)
+        d.text((x + 14, y + 5), tag, font=tf, fill=GREEN)
         d.text((x + tw + 28 + 16, y), assist, font=nf, fill=MUTED)
 
     # Golle gelen skor: iki takımın logosu arasında; golü atan tarafın
     # sayısı altın rengi.
-    sf = font('BarlowCondensed-ExtraBold.ttf', 92)
+    sf = font('BarlowCondensed-ExtraBold.ttf', 74)
     hs, as_ = str(c['rh']), str(c['ra'])
     dash = ' - '
     w_h, w_d, w_a = (d.textlength(t, font=sf) for t in (hs, dash, as_))
     total = w_h + w_d + w_a
     x = (W - total) / 2
-    y = 1590 if assist else 1565
-    pad = 26
-    d.rounded_rectangle((x - 110 - pad, y - 4, x + total + 110 + pad, y + 112),
-                        radius=58, fill=(11, 18, 32, 190), outline=(226, 184, 69, 140), width=2)
-    logo(logos['home'], x - 60, y + 54, 76)
-    logo(logos['away'], x + total + 60, y + 54, 76)
+    y = 1548 if assist else 1530
+    pad = 22
+    d.rounded_rectangle((x - 92 - pad, y - 4, x + total + 92 + pad, y + 92),
+                        radius=48, fill=(11, 18, 32, 190), outline=(226, 184, 69, 140), width=2)
+    logo(logos['home'], x - 50, y + 44, 62)
+    logo(logos['away'], x + total + 50, y + 44, 62)
     d.text((x, y), hs, font=sf, fill=GOLD if c['side'] == 'home' else WHITE)
     d.text((x + w_h, y), dash, font=sf, fill=MUTED)
     d.text((x + w_h + w_d, y), as_, font=sf, fill=GOLD if c['side'] == 'away' else WHITE)
 
-    # Lig Masası imzası
-    fb = font('BarlowCondensed-ExtraBold.ttf', 62)
-    tw = d.textlength('LİG MASASI', font=fb)
-    x0 = (W - (90 + 16 + tw)) / 2
-    logo(APP_LOGO, x0 + 45, 1757, 90)
-    d.text((x0 + 106, 1720), 'LİG MASASI', font=fb, fill=WHITE)
-
+    # B: alt imza yok; filigran videonun köşesinde (logo + yazı)
     # Video köşe filigranı: maç görüntüsünün sağ alt köşesi (make ile aynı yer).
     vh = 1080 * zoom * 9 / 16
     bottom = (H + vh) / 2 if zoom == 1 else 545 + (735 + vh) / 2
-    logo(APP_LOGO, W - 22 - 39, bottom - 18 - 39, 78, alpha=0.9)
+    # Ortada: logo + LİG MASASI, videonun alt kenarında
+    fw = font('BarlowCondensed-ExtraBold.ttf', 46)
+    tt = 'LİG MASASI'
+    tw2 = d.textlength(tt, font=fw)
+    gx = (W - (78 + 14 + tw2)) / 2
+    cy = bottom - 20 - 39
+    logo(APP_LOGO, gx + 39, cy, 78, alpha=0.92)
+    d.text((gx + 92 + 2, cy - 26 + 2), tt, font=fw, fill=(0, 0, 0, 150))
+    d.text((gx + 92, cy - 26), tt, font=fw, fill=(255, 255, 255, 235))
     im.save(out)
 
 
