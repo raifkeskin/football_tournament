@@ -7666,11 +7666,11 @@ class _DetailEventTile extends StatelessWidget {
             title: title.isEmpty ? 'Gol' : "$minute' $title",
           ),
           child: const SizedBox(
-            width: 40,
+            width: 38,
             child: Center(
               child: Icon(
                 Icons.play_arrow_rounded,
-                size: 28,
+                size: 26,
                 color: Color(0xFF34D399),
               ),
             ),
@@ -7730,11 +7730,13 @@ class _DetailEventTile extends StatelessWidget {
     } else {
       switch (type) {
         case 'goal':
+          // Video kartında isme yer açmak için top küçük.
+          final ballSize = clip != null ? 13.0 : 18.0;
           icon = isOwnGoal
-              ? const BallIcon(tint: BallTint.red)
+              ? BallIcon(size: ballSize, tint: BallTint.red)
               : isPenalty
               ? const _PenaltyGoalIcon()
-              : const BallIcon();
+              : BallIcon(size: ballSize);
           break;
         case 'yellow_card':
           icon = const RefereeCardIcon.yellow();
@@ -7846,7 +7848,7 @@ class _DetailEventTile extends StatelessWidget {
                                           CrossAxisAlignment.end,
                                         ),
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 3),
                                       icon,
                                     ],
                                   ),
