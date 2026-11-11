@@ -198,6 +198,9 @@ class _Scorer {
   final String teamId;
   final String photoUrl;
   int goals = 0;
+
+  /// Cezalı listesinde: verilen toplam ceza maçı (goals = kalan).
+  int total = 0;
 }
 
 /// Panonun tek seferde okunan verisi.
@@ -214,6 +217,7 @@ class _DashData {
     required this.myTeamIds,
     required this.scorers,
     required this.assisters,
+    required this.suspended,
     required this.totalGoals,
     required this.activePenaltyMatches,
     required this.pendingPenalties,
@@ -231,6 +235,9 @@ class _DashData {
   final Set<String> myTeamIds;
   final List<_Scorer> scorers;
   final List<_Scorer> assisters;
+
+  /// Cezası süren oyuncular (goals = kalan maç, total = toplam ceza).
+  final List<_Scorer> suspended;
   final int totalGoals;
 
   /// Oyuncunun süren cezası (kalan maç); yoksa 0.
@@ -631,7 +638,31 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 .eq('season_id', seasonId)
                 .eq('status', 'pending')
           : none(),
+      // Süren onaylı cezalar (ana sayfada "Cezalılar").
+      _sb
+          .from('player_penalties')
+          .select(
+            'player_id, remaining_matches, match_count, '
+            'players(name, surname, photo_url)',
+          )
+          .eq('season_id', seasonId)
+          .eq('status', 'approved')
+          .eq('is_active', true),
     ]);
+    final suspended = (r[8] as List?) ?? const [];
+    var suspRoster = const <dynamic>[];
+    if (suspended.isNotEmpty) {
+      try {
+        suspRoster = await _sb
+            .from('season_team_players')
+            .select('player_id, team_id')
+            .eq('season_id', seasonId)
+            .eq('is_active', true)
+            .inFilter('player_id', [
+              for (final x in suspended) x['player_id'].toString(),
+            ]);
+      } catch (_) {}
+    }
     return {
       'season': season,
       'season_teams': r[0],
@@ -643,6 +674,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
       'my_penalties': r[6],
       'pending': (r[7] as List).length,
       'pending_rows': r[7],
+      'suspended': suspended,
+      'susp_roster': suspRoster,
     };
   }
 
@@ -743,6 +776,32 @@ class _HomeDashboardState extends State<HomeDashboard> {
       for (final r in (raw['my_player_teams'] as List? ?? const []))
         r['team_id'].toString(),
     };
+    final suspTeam = <String, String>{
+      for (final r in (raw['susp_roster'] as List? ?? const []))
+        r['player_id'].toString(): r['team_id'].toString(),
+    };
+    final suspended = <_Scorer>[];
+    for (final r in (raw['suspended'] as List? ?? const [])) {
+      final pl = (r['players'] as Map?) ?? const {};
+      final pid = r['player_id'].toString();
+      final total = (r['match_count'] as num?)?.toInt() ?? 0;
+      final left = (r['remaining_matches'] as num?)?.toInt() ?? total;
+      if (left <= 0) continue;
+      suspended.add(
+        _Scorer(
+            pid,
+            [
+              (pl['name'] ?? '').toString().trim(),
+              (pl['surname'] ?? '').toString().trim(),
+            ].where((e) => e.isNotEmpty).join(' '),
+            suspTeam[pid] ?? '',
+            (pl['photo_url'] ?? '').toString(),
+          )
+          ..goals = left
+          ..total = total,
+      );
+    }
+    suspended.sort((a, b) => b.goals.compareTo(a.goals));
     var activePenalty = 0;
     for (final p in (raw['my_penalties'] as List? ?? const [])) {
       activePenalty +=
@@ -771,6 +830,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       myTeamIds: myTeams,
       scorers: ranked(scorerMap),
       assisters: ranked(assistMap),
+      suspended: suspended,
       totalGoals: totalGoals,
       activePenaltyMatches: activePenalty,
       pendingPenalties: (raw['pending'] as num?)?.toInt() ?? 0,
@@ -1601,6 +1661,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
         : list;
     final scorers = leadersInGroup(d.scorers);
     final assisters = leadersInGroup(d.assisters);
+    final suspendedHere = leadersInGroup(d.suspended);
     // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
     // cezalar (maçsız elle girilen ceza her grupta sayılır).
     final matchGroup = {for (final m in d.matches) m.id: m.groupId};
@@ -1791,6 +1852,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
             () => openHub(TournamentHubTab.stats),
           ),
           _leaders(d, assisters, 'asist'),
+        ],
+        if (suspendedHere.isNotEmpty) ...[
+          _sectionHeader(
+            'CEZALILAR',
+            'İstatistik',
+            () => openHub(TournamentHubTab.stats),
+          ),
+          _leaders(d, suspendedHere, 'maç', limit: 5, penalty: true),
         ],
         if (lastWeekMatches.isNotEmpty) ...[
           _sectionHeader(
@@ -2634,8 +2703,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   /// İlk 3 oyuncu: fotoğrafı varsa fotoğraf, yoksa baş harf; dokununca
   /// oyuncu kartı.
-  Widget _leaders(_DashData d, List<_Scorer> list, String unit) {
-    final top = list.take(3).toList();
+  Widget _leaders(
+    _DashData d,
+    List<_Scorer> list,
+    String unit, {
+    int limit = 3,
+    bool penalty = false,
+  }) {
+    final top = list.take(limit).toList();
     return _card(
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
       child: Column(
@@ -2670,7 +2745,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
                             style: _barlow(size: 14, weight: FontWeight.w700),
                           ),
                           Text(
-                            d.teams[top[i].teamId]?.name ?? '',
+                            [
+                              d.teams[top[i].teamId]?.name ?? '',
+                              if (penalty && top[i].total > top[i].goals)
+                                '${top[i].total} maçlık ceza',
+                            ].where((e) => e.isNotEmpty).join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: _barlow(size: 12, color: DashColors.muted),
@@ -2681,9 +2760,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
                     Text('${top[i].goals}', style: _condensed(size: 24)),
                     const SizedBox(width: 4),
                     SizedBox(
-                      width: 30,
+                      width: penalty ? 58 : 30,
                       child: Text(
-                        unit,
+                        penalty && top[i].total > top[i].goals
+                            ? 'maç kaldı'
+                            : unit,
                         style: _barlow(size: 11, color: DashColors.muted),
                       ),
                     ),

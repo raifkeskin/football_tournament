@@ -714,6 +714,7 @@ class _StatsTabsState extends State<_StatsTabs> {
             teamLogo: widget.teamById[r.teamId]?.logoUrl ?? '',
             reason: r.reason,
             remaining: r.remaining,
+            total: r.penalty.matchCount,
           ),
       ],
     );
@@ -2378,6 +2379,7 @@ class _Suspended {
 
   String get name => (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
   int get remaining => penalty.remainingMatches ?? penalty.matchCount;
+  int get total => penalty.matchCount;
 
   String get reason => switch (penalty.kind) {
     'red_card' => 'Kırmızı kart',
@@ -2431,14 +2433,6 @@ class _SuspendedBoard extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 10),
-          child: Text(
-            'Cezası süren oyuncular takımlarının sıradaki maçlarında '
-            'oynayamaz.',
-            style: TextStyle(color: _muted, fontSize: 12),
-          ),
-        ),
         for (final r in rows)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
@@ -2521,6 +2515,8 @@ class _SuspendedRow extends StatelessWidget {
                             [
                               if (team != null) team!.name,
                               row.reason,
+                              if (row.total > row.remaining)
+                                '${row.total} maçlık ceza',
                             ].join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -2543,7 +2539,9 @@ class _SuspendedRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${row.remaining} maç',
+                  row.total > row.remaining
+                      ? '${row.remaining} maç kaldı'
+                      : '${row.remaining} maç',
                   style: const TextStyle(
                     color: Color(0xFFFCA5A5),
                     fontSize: 12,
