@@ -71,6 +71,7 @@ class _Pair {
             bTeam: '${x['b_team']}',
           ),
       ],
+      kind = '${m['kind'] ?? 'name'}',
       bothAccounts = m['both_accounts'] == true;
 
   final _Rec a;
@@ -83,6 +84,9 @@ class _Pair {
   /// Aynı sezonda iki kayıttaki takım adları (a kaydı, b kaydı).
   final List<({String aTeam, String bTeam})> shared;
   final bool bothAccounts;
+
+  /// name: aynı ad, phone: aynı telefon, similar: benzer ad + aynı doğum yılı.
+  final String kind;
 
   /// Aynı kişi olma ihtimali yüksekse büyük (sıralama için).
   int get score {
@@ -254,7 +258,7 @@ class _PairCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    a.name,
+                    pair.b.name == a.name ? a.name : '${a.name} / ${pair.b.name}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
@@ -264,6 +268,10 @@ class _PairCard extends StatelessWidget {
                 ),
                 if (pair.sameSeason)
                   _badge('AYNI SEZON', const Color(0xFFF87171))
+                else if (pair.kind == 'phone')
+                  _badge('AYNI TELEFON', const Color(0xFF60A5FA))
+                else if (pair.kind == 'similar')
+                  _badge('BENZER AD', const Color(0xFFA78BFA))
                 else if (pair.a.placeholder || pair.b.placeholder)
                   _badge('01.01 VAR', const Color(0xFFFCD34D)),
               ],
