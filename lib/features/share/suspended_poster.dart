@@ -149,10 +149,9 @@ class SuspendedPoster extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFEF2B2B),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white, width: 5),
+        border: Border.all(color: Colors.white, width: 3),
         boxShadow: const [
-          BoxShadow(color: Color(0xCC000000), blurRadius: 22, offset: Offset(0, 10)),
-          BoxShadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 3)),
+          BoxShadow(color: Color(0x80000000), blurRadius: 14, offset: Offset(0, 6)),
         ],
       ),
     ),
@@ -194,6 +193,7 @@ class SuspendedPoster extends StatelessWidget {
     return Column(
       children: [
         Stack(
+          clipBehavior: Clip.none,
           children: [
             _hero(
               height: heroH,
@@ -217,12 +217,14 @@ class SuspendedPoster extends StatelessWidget {
                 ],
               ),
             ),
+            // Fotoğrafsızda kart, kırmızı alan ile koyu alanın ortasında durur:
+            // yarısı üst bantta, yarısı alt bantta.
             Positioned(
-              right: 8,
-              bottom: heroH * 0.12,
+              right: data.withPhoto ? 8 : size.width * 0.12,
+              bottom: data.withPhoto ? heroH * 0.12 : -heroH * 0.06,
               child: data.withPhoto
                   ? _photo(r.photoUrl, size.width * 0.5, heroH * 0.82)
-                  : _redCard(heroH * 0.5),
+                  : _redCard(heroH * 0.52),
             ),
           ],
         ),
