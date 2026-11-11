@@ -188,7 +188,20 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   /// Haber ekleme / düzenleme için ortak popup ([item] null ise ekleme).
   Future<void> _openNewsForm({NewsItem? item}) async {
     final isEdit = item != null;
-    final controller = TextEditingController(text: item?.content ?? '');
+    // Eski haberde başlık ayrı tutulmaz: ilk satır (≤70) başlık sayılır.
+    final rawContent = (item?.content ?? '').trim();
+    final nlAt = rawContent.indexOf('\n');
+    final oldTitle = (item?.headline ?? '').trim().isNotEmpty
+        ? item!.headline!.trim()
+        : (nlAt > 0 && nlAt <= 70 ? rawContent.substring(0, nlAt).trim() : '');
+    final titleController = TextEditingController(text: oldTitle);
+    var bodyText = rawContent;
+    if (oldTitle.isNotEmpty && rawContent.startsWith(oldTitle)) {
+      bodyText = rawContent.substring(oldTitle.length).trim();
+    }
+    final controller = TextEditingController(text: bodyText);
+    const kickers = ['DUYURU', 'TRANSFER', 'MAÇ GÜNÜ', 'GENEL'];
+    var kicker = kickers.contains(item?.kicker) ? item!.kicker! : 'DUYURU';
     final linkController = TextEditingController(text: item?.linkUrl ?? '');
     // Fotoğraflar (en fazla 5): kayıtlı adresler ve yeni seçilen dosyalar,
     // gösterim sırasıyla. İlki kapak olur.
@@ -282,7 +295,18 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     }
 
     Future<void> save(BuildContext ctx, StateSetter setLocal) async {
-      final text = controller.text.trim();
+      final title = titleController.text.trim();
+      final body = controller.text.trim();
+      if (title.isEmpty) {
+        _snack('Haber başlığı boş geçilemez.');
+        return;
+      }
+      if (title.length > 70) {
+        _snack('Başlık en fazla 70 karakter olabilir.');
+        return;
+      }
+      // Eski sürümler için içerik: başlık + boş satır + metin.
+      final text = body.isEmpty ? title : '$title\n\n$body';
       if (text.isEmpty) {
         _snack('Lütfen bir haber metni girin.');
         return;
@@ -333,6 +357,8 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             publishUntil: publishUntil,
             regionId: formRegionId,
             linkUrl: link.isEmpty ? null : link,
+            headline: title,
+            kicker: kicker,
           );
         } else {
           await _leagueService.addNews(
@@ -343,6 +369,8 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             publishUntil: publishUntil,
             regionId: formRegionId,
             linkUrl: link.isEmpty ? null : link,
+            headline: title,
+            kicker: kicker,
           );
         }
         // Formdan kaldırılan eski fotoğraflar depodan da silinir.
@@ -579,6 +607,46 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                               color: Color(0xFF94A3B8),
                               fontSize: 12,
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: titleController,
+                            enabled: !saving,
+                            maxLength: 70,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Haber Başlığı',
+                              helperText: 'Kısa ve net · en fazla 70 karakter',
+                              filled: true,
+                              fillColor: Colors.black.withValues(alpha: 0.3),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: kAdminAccent,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              for (final k in kickers)
+                                ChoiceChip(
+                                  label: Text(k),
+                                  selected: kicker == k,
+                                  onSelected: saving
+                                      ? null
+                                      : (_) => setLocal(() => kicker = k),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 16),
                           TextField(

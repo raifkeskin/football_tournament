@@ -91,6 +91,8 @@ abstract class ILeagueService {
     DateTime? publishUntil,
     String? regionId,
     String? linkUrl,
+    String? headline,
+    String? kicker,
   });
 
   Future<void> setNewsPublished({
@@ -107,6 +109,8 @@ abstract class ILeagueService {
     DateTime? publishUntil,
     String? regionId,
     String? linkUrl,
+    String? headline,
+    String? kicker,
   });
 
   Future<void> deleteNews({required String newsId});

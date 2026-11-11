@@ -667,7 +667,7 @@ class SupabaseLeagueService implements ILeagueService {
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id, '
-      'auto_kind, match_id, week, auto_data, link_url, headline, article, deck, pending_until, '
+      'auto_kind, match_id, week, auto_data, link_url, kicker, headline, article, deck, pending_until, '
       'reactions, comment_count, poll, pinned_at';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
@@ -794,6 +794,9 @@ class SupabaseLeagueService implements ILeagueService {
       deck: (r['deck'] ?? '').toString().trim().isEmpty
           ? null
           : r['deck'].toString().trim(),
+      kicker: (r['kicker'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['kicker'].toString().trim(),
       headline: (r['headline'] ?? '').toString().trim().isEmpty
           ? null
           : r['headline'].toString().trim(),
@@ -888,6 +891,7 @@ class SupabaseLeagueService implements ILeagueService {
       'auto_data',
       'link_url',
       'pinned_at',
+      'kicker',
       'headline',
       'article',
       'deck',
@@ -1082,6 +1086,8 @@ class SupabaseLeagueService implements ILeagueService {
     DateTime? publishUntil,
     String? regionId,
     String? linkUrl,
+    String? headline,
+    String? kicker,
   }) async {
     final tId = tournamentId.trim();
     final text = content.trim();
@@ -1110,6 +1116,8 @@ class SupabaseLeagueService implements ILeagueService {
         'publish_until': publishUntil?.toUtc().toIso8601String(),
         'region_id': regionId,
         'link_url': ?linkUrl,
+        if ((headline ?? '').trim().isNotEmpty) 'headline': headline!.trim(),
+        if ((kicker ?? '').isNotEmpty) 'kicker': kicker,
       });
       AppConfig.sqlLogResult(table: 'news', operation: 'INSERT', count: 1);
     } catch (e) {
@@ -1150,6 +1158,8 @@ class SupabaseLeagueService implements ILeagueService {
     DateTime? publishUntil,
     String? regionId,
     String? linkUrl,
+    String? headline,
+    String? kicker,
   }) async {
     final id = newsId.trim();
     if (id.isEmpty) return;
@@ -1169,6 +1179,8 @@ class SupabaseLeagueService implements ILeagueService {
             'publish_until': publishUntil?.toUtc().toIso8601String(),
             'region_id': regionId,
             'link_url': linkUrl,
+            'headline': (headline ?? '').trim().isEmpty ? null : headline!.trim(),
+            'kicker': (kicker ?? '').isEmpty ? null : kicker,
           })
           .eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);
