@@ -41,7 +41,7 @@ extension NewsItemKind on NewsItem {
     if (autoKind == 'interviews') return 'RÖPORTAJ';
     if (autoKind == 'video') return 'VİDEO';
     if (isInstagram) return 'INSTAGRAM';
-    return 'DUYURU';
+    return (kicker ?? '').isNotEmpty ? kicker! : 'DUYURU';
   }
 }
 
@@ -635,7 +635,7 @@ class NewsArticle {
     final title = nl > 0 && nl <= 140 ? t.substring(0, nl).trim() : t;
     final body = nl > 0 && nl <= 140 ? t.substring(nl + 1).trim() : '';
     return NewsArticle(
-      kicker: 'DUYURU',
+      kicker: (n.kicker ?? '').isNotEmpty ? n.kicker! : 'DUYURU',
       headline: title,
       paragraphs: body
           .split(RegExp(r'\n\s*\n'))

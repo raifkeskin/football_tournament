@@ -42,6 +42,7 @@ class NewsItem {
     this.week,
     this.autoData,
     this.linkUrl,
+    this.kicker,
     this.headline,
     this.article,
     this.deck,
@@ -68,6 +69,9 @@ class NewsItem {
 
   /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
   final String? linkUrl;
+
+  /// Elle yazılan haberin tür etiketi (DUYURU, TRANSFER, MAÇ GÜNÜ, GENEL).
+  final String? kicker;
 
   /// Sorumlunun düzenlediği manşet; null ise kurallarla yazılan başlık.
   final String? headline;
