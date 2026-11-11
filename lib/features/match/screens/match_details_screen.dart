@@ -1745,7 +1745,34 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       child: Padding(
                                         padding: const EdgeInsets.only(top: 24),
                                         child: showKickoff
-                                            ? _kickoffBlock(m)
+                                            // Başlamamış maçta da sıradaki adım
+                                            // (Başlama Düdüğü) görünür.
+                                            ? Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  _kickoffBlock(m),
+                                                  if (canControl &&
+                                                      !beforeWindow &&
+                                                      !ended)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 6,
+                                                          ),
+                                                      child: _MatchFlowBar(
+                                                        match: m,
+                                                        part: _FlowPart.next,
+                                                        canUndo:
+                                                            canManageLeague,
+                                                        onAction: (action) =>
+                                                            _runPhaseAction(
+                                                              m,
+                                                              action,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              )
                                             // Skor logoların hizasında; dakika / durum
                                             // kapsülü skorun altında.
                                             : Column(
@@ -5648,7 +5675,9 @@ class _AutoMotmTeamState extends State<_AutoMotmTeam> {
         const SnackBar(content: Text('Maçın adamı kaydedildi.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
