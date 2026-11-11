@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_colors.dart';
+import '../../../core/services/app_session.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_name_band.dart';
@@ -103,6 +104,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// Sezon kuralı: any / chip / chip_ibraz.
   String _idMode = 'any';
   Set<String> _verified = const {};
+
+  /// Admin'in bu sezon kimlik istisnası verdiği oyuncular (yırtık kart vb.).
+  Set<String> _exempt = const {};
 
   /// -1: Tümü, 0..3: Kaleci / Defans / Orta Saha / Forvet.
   int _tab = -1;
@@ -330,13 +334,27 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   Future<void> _loadVerified() async {
     try {
       final v = await IdentityService.verifiedAmong(_players.map((p) => p.id));
-      if (mounted) setState(() => _verified = v);
+      Set<String> ex = const {};
+      try {
+        final r = await Supabase.instance.client.rpc(
+          'verified_exempt_list',
+          params: {'p_season': widget.match.seasonId},
+        );
+        ex = {for (final x in (r as List? ?? const [])) '$x'};
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _verified = v;
+          _exempt = ex;
+        });
+      }
     } catch (_) {}
   }
 
   /// Sezon onaylı kimlik istiyor ve oyuncunun kimliği onaylı değil.
   bool _unverified(String id) =>
       _requireId &&
+      !_exempt.contains(id) &&
       (!_verified.contains(id) ||
           (_idMode == 'chip' && IdentityService.isIbraz(id)));
 
@@ -352,6 +370,36 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     await _loadVerified();
     if (mounted && _verified.contains(p.id)) {
       _toast('${p.name} onaylandı; esameye ekleyebilirsiniz.');
+    }
+  }
+
+  /// Admin: bu oyuncuya bu sezon için kimlik istisnası verir (sebep sorulur).
+  Future<void> _grantExempt(PlayerModel p) async {
+    final reason = await showAdminTextInputDialog(
+      context: context,
+      title: 'Kimlik istisnası',
+      icon: Icons.verified_outlined,
+      label: 'Sebep (ör. yırtık kart)',
+      fieldIcon: Icons.edit_note_rounded,
+      subtitle:
+          '${p.name} bu sezon kimliği onaylanmadan da esameye ve kadroya '
+          'yazılabilir.',
+    );
+    if (reason == null || !mounted) return;
+    try {
+      await Supabase.instance.client.rpc(
+        'admin_set_verified_exempt',
+        params: {
+          'p_player': p.id,
+          'p_season': widget.match.seasonId,
+          'p_exempt': true,
+          'p_reason': reason,
+        },
+      );
+      await _loadVerified();
+      if (mounted) _toast('${p.name} için istisna verildi.');
+    } catch (e) {
+      if (mounted) _toast('İstisna verilemedi: $e');
     }
   }
 
@@ -2077,6 +2125,12 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           if (_ageRules.hasMatchLimits && _isQuota(p))
             _tag('KONTENJAN ${AgeRules.birthYearOf(p.birthDate)}', _gold),
           const SizedBox(width: 6),
+          if (noId && AppSession.of(context).value.isAdmin) ...[
+            _addButton('İstisna', _gold, () => _grantExempt(p)),
+            const SizedBox(width: 4),
+          ],
+          if (_exempt.contains(p.id) && AppSession.of(context).value.isAdmin)
+            _tag('İSTİSNA', _gold),
           if (noId)
             kIsWeb
                 ? _tag('KİMLİK ONAYSIZ', _mid)
