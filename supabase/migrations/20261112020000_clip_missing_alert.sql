@@ -14,7 +14,7 @@ declare
   v_admins uuid[] := (select array_agg(user_id) from public.admins where user_id is not null);
   r record;
 begin
-  if v_admins is null then
+  if v_admins is null or public.telegram_quiet_now() then
     return;
   end if;
   for r in
