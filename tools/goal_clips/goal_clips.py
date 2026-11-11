@@ -129,7 +129,7 @@ select json_agg(json_build_object(
   'id', h.id, 'match_id', h.match_id, 'video_id', h.video_id,
   'start', h.start_sec, 'minute', h.minute, 'added', h.added_minute,
   'week', h.week, 'date', h.match_date,
-  'league', l.name, 'league_logo', l.logo_url,
+  'league', l.name, 'league_logo', l.logo_url, 'league_id', h.league_id,
   'home', ht.name, 'away', at.name,
   'home_logo', ht.logo_url, 'away_logo', at.logo_url,
   'home_color', ht.first_color, 'away_color', at.first_color,
@@ -303,6 +303,42 @@ def story_overlay(c, out, logos, zoom=1.0):
     d.text((x + w_h + w_d, y), as_, font=sf, fill=GOLD if c['side'] == 'away' else WHITE)
 
     # B: alt imza yok; filigran videonun köşesinde (logo + yazı)
+    # Sponsor bandı: beyaz şerit, ana sponsorlar büyük, alt sponsorlar küçük.
+    sp = c.get('sponsor_logos') or {}
+    mains, subs = sp.get('main', [])[:3], sp.get('sub', [])[:5]
+    if mains or subs:
+        x0, x1, y1 = 40, W - 40, 1868
+        mh, sh = 86, 38
+        y0 = y1 - 16 - (mh + 14 if mains else 0) - (sh + 8 if subs else 0)
+        d.rounded_rectangle((x0, y0, x1, y1), 28, fill=(255, 255, 255, 255))
+
+        def fit(path, bw, bh):
+            lg = Image.open(path).convert('RGBA')
+            lg.thumbnail((bw, bh), Image.LANCZOS)
+            return lg
+
+        y = y0 + 12
+        if mains:
+            ml = [fit(pth, 300, mh) for pth in mains]
+            gap = 70
+            tot = sum(l.width for l in ml) + gap * (len(ml) - 1)
+            x = (W - tot) // 2
+            for l in ml:
+                im.alpha_composite(l, (x, y + (mh - l.height) // 2))
+                x += l.width + gap
+            y += mh + 8
+        if mains and subs:
+            d.line((x0 + 40, y, x1 - 40, y), fill=(226, 232, 240, 255), width=2)
+            y += 8
+        if subs:
+            sl = [fit(pth, 160, sh) for pth in subs]
+            gap = 46
+            tot = sum(l.width for l in sl) + gap * (len(sl) - 1)
+            x = (W - tot) // 2
+            for l in sl:
+                im.alpha_composite(l, (x, y + (sh - l.height) // 2))
+                x += l.width + gap
+
     # Video köşe filigranı: maç görüntüsünün sağ alt köşesi (make ile aynı yer).
     vh = 1080 * zoom * 9 / 16
     bottom = (H + vh) / 2 if zoom == 1 else 545 + (735 + vh) / 2
@@ -364,6 +400,17 @@ def make(c, tmp, fmt=FMT_HQ, crf='17', preset='slow', zoom=1.18):
     logos = {k: fetch(c.get(f'{k}_logo') if k != 'league' else c.get('league_logo'),
                       os.path.join(tmp, f'{k}.png'))
              for k in ('league', 'home', 'away')}
+    c['sponsor_logos'] = {'main': [], 'sub': []}
+    try:
+        raw = psql("select coalesce(json_agg(json_build_object('t', tier, 'u', logo_url) "
+                   "order by (tier = 'main') desc, sort_order), '[]') from public.sponsors "
+                   f"where league_id = {q(c['league_id'])} and is_active and coalesce(logo_url, '') <> ''")
+        for i, sp in enumerate(json.loads(raw or '[]')):
+            pth = fetch(sp['u'], os.path.join(tmp, f'sp{i}.png'))
+            if pth:
+                c['sponsor_logos']['main' if sp['t'] == 'main' else 'sub'].append(pth)
+    except Exception as e:
+        log('sponsor logoları alınamadı:', str(e)[-120:])
     ov, ovw = os.path.join(tmp, 'story.png'), os.path.join(tmp, 'wide.png')
     story_overlay(c, ov, logos, zoom)
     wide_overlay(ovw)
