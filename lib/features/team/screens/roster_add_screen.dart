@@ -772,6 +772,36 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
         transfer = true;
       }
     } catch (_) {}
+    // Sezon kimlik kuralı: onaysız oyuncu için uyarı ya da engel (admin hariç).
+    if (!_isAdmin) {
+      final chk = await IdentityService.rosterCheck(_target.seasonId, id);
+      if (!mounted) return;
+      if (chk == 'block') {
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Kadroya eklenemez',
+          message:
+              '$name kimliğini çipli okutmadığı için bu turnuvanın bu '
+              'sezonunda kadroya eklenemez. Önce kimlik doğrulaması '
+              'yapılmalı.',
+        );
+        return;
+      }
+      if (chk == 'warn') {
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Kimlik onaylı değil',
+          message:
+              '$name kimliğini çipli okutmamış. Eklenebilir, ancak onaylanmazsa '
+              'bu turnuvada esameye yazılamaz.',
+          confirmLabel: 'YİNE DE EKLE',
+          cancelLabel: 'VAZGEÇ',
+          destructive: false,
+          icon: Icons.verified_outlined,
+        );
+        if (!ok || !mounted) return;
+      }
+    }
     final jersey = await _askJersey(name);
     if (jersey == null || !mounted) return;
     final number = int.tryParse(jersey);

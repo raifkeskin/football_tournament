@@ -28,6 +28,7 @@ class Season {
     this.photographerEnabled = true,
     this.requireVerifiedId = false,
     this.verifiedIdMode = 'any',
+    this.verifiedIdRoster = 'off',
     this.goalkeeperAddAnytime = false,
     this.rollingSubs = false,
   });
@@ -76,6 +77,9 @@ class Season {
   /// Kadroya kimler yazılabilir: any (hepsi), chip (yalnız çip onaylı),
   /// chip_ibraz (çip + ibraz onaylı).
   final String verifiedIdMode;
+
+  /// Kadroya eklemede kimlik kuralı (mod 'any' değilse): off, warn, block.
+  final String verifiedIdRoster;
 
   /// Kaleci istisnası: lig başladıktan sonra transfer dönemi dışında da ana
   /// mevkisi kaleci olan oyuncu kadroya eklenebilir (sunucu da uygular).
@@ -169,6 +173,8 @@ class Season {
       ),
       verifiedIdMode: (v('verifiedIdMode', 'verified_id_mode') ?? 'any')
           .toString(),
+      verifiedIdRoster:
+          (v('verifiedIdRoster', 'verified_id_roster') ?? 'off').toString(),
       requireVerifiedId: boolFrom(
         v('requireVerifiedId', 'require_verified_id'),
         fallback: false,
@@ -230,6 +236,7 @@ class Season {
       'photographer_enabled': photographerEnabled,
       'require_verified_id': requireVerifiedId,
       'verified_id_mode': verifiedIdMode,
+      'verified_id_roster': verifiedIdRoster,
       'goalkeeper_add_anytime': goalkeeperAddAnytime,
       'rolling_subs': rollingSubs,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
@@ -274,6 +281,7 @@ class Season {
         'photographerEnabled': photographerEnabled,
         'requireVerifiedId': requireVerifiedId,
         'verifiedIdMode': verifiedIdMode,
+        'verifiedIdRoster': verifiedIdRoster,
         'goalkeeperAddAnytime': goalkeeperAddAnytime,
         'rollingSubs': rollingSubs,
         'teamsPerGroup': teamsPerGroup,

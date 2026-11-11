@@ -221,6 +221,29 @@ class IdentityService {
 
   /// Tek oyuncu sorusu: aynı anda gelen sorular (ör. kadro listesindeki
   /// satırlar) tek sorguda toplanır.
+  /// Sezonun kadroya eklemede kimlik kuralı: ok | warn | block.
+  static Future<String> rosterCheck(String seasonId, String playerId) async {
+    try {
+      final r = await _sb.rpc(
+        'identity_roster_check',
+        params: {'p_season': seasonId, 'p_player': playerId},
+      );
+      return (r ?? 'ok').toString();
+    } catch (_) {
+      return 'ok';
+    }
+  }
+
+  /// Ana sayfa uyarıları: {player: [...], teams: [...]}.
+  static Future<Map<String, dynamic>> myWarnings() async {
+    try {
+      final r = await _sb.rpc('my_identity_warnings');
+      return Map<String, dynamic>.from(r as Map);
+    } catch (_) {
+      return const {};
+    }
+  }
+
   static Future<bool> isVerified(String playerId) async {
     if (_fresh(playerId)) return _cache[playerId]!;
     _batch.add(playerId);
