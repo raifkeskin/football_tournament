@@ -91,6 +91,7 @@ class RegistrationService {
     String? foot,
     int? height,
     int? weight,
+    bool chipless = false,
   }) async {
     String two(int v) => v.toString().padLeft(2, '0');
     final r = await _sb.rpc(
@@ -109,6 +110,7 @@ class RegistrationService {
         'p_foot': foot,
         'p_height': height,
         'p_weight': weight,
+        if (chipless) 'p_chipless': true,
       },
     );
     return (r ?? '').toString();
@@ -128,6 +130,8 @@ class RegistrationService {
     String? foot,
     int? height,
     int? weight,
+    // Okutmadan kayıtta kullanılmaz; registerPlayer ile aynı çağrı biçimi için.
+    bool chipless = false,
   }) async {
     String two(int v) => v.toString().padLeft(2, '0');
     final r = await _sb.rpc(

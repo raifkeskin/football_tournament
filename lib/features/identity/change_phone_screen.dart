@@ -49,7 +49,10 @@ class _ChangePhoneScreenState extends State<ChangePhoneScreen> {
       : RegistrationService.message(code);
 
   Future<void> _readCard() async {
-    final card = await IdentityVerifyScreen.readForRegistration(context);
+    final card = await IdentityVerifyScreen.readForRegistration(
+      context,
+      allowChipless: false,
+    );
     if (card == null || !mounted) return;
     setState(() {
       _busy = true;
