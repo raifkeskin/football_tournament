@@ -351,6 +351,7 @@ class VideoTile extends StatelessWidget {
     this.onLongPress,
     this.caption,
     this.large = false,
+    this.compact = false,
   });
 
   final VideoItem item;
@@ -361,8 +362,134 @@ class VideoTile extends StatelessWidget {
   final String? caption;
   final bool large;
 
+  /// Yatay küçük kutu: ortada takım arması, altında ad ve tarih.
+  final bool compact;
+
+  Widget _compactTile() {
+    final c = item.kind.color;
+    final logo = item.teamLogo.isNotEmpty ? item.teamLogo : item.logoUrl;
+    const shadow = [Shadow(color: Colors.black, blurRadius: 4)];
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(c, const Color(0xFF0F172A), 0.45)!,
+                const Color(0xFF0F172A),
+              ],
+            ),
+          ),
+          child: Stack(
+            children: [
+              if (item.coverUrl.isNotEmpty)
+                Positioned.fill(
+                  child: WebSafeImage(url: item.coverUrl, fit: BoxFit.cover),
+                ),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF58529), Color(0xFFDD2A7B)],
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_rounded,
+                    size: 10,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              if (item.pinned)
+                const Positioned(
+                  right: 26,
+                  top: 6,
+                  child: Icon(
+                    Icons.push_pin_rounded,
+                    size: 14,
+                    color: Color(0xFFFBBF24),
+                  ),
+                ),
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: Color(0x8C000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (logo.isNotEmpty)
+                        WebSafeImage(
+                          url: logo,
+                          width: 38,
+                          height: 38,
+                          fit: BoxFit.contain,
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.label,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                          shadows: shadow,
+                        ),
+                      ),
+                      if (item.createdAt != null)
+                        Text(
+                          _dmy(item.createdAt!),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            shadows: shadow,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (compact) return _compactTile();
     final c = item.kind.color;
     return Material(
       color: Colors.transparent,

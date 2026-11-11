@@ -522,15 +522,15 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
             const SizedBox(height: 10),
           ],
           for (final h in approved)
-            GoalClipCard(
-              title: _clipTitle(
-                h,
-                widget.match,
-                widget.homeName,
-                widget.awayName,
-              ),
-              scorer: _scorers[h.id],
-              description: h.description,
+            GoalClipRow(
+              minute: h.minute != null
+                  ? minuteLabel(h.minute, h.addedMinute)
+                  : '',
+              name:
+                  _scorers[h.id]?.name ??
+                  _teamLabel(h, widget.match, widget.homeName, widget.awayName),
+              jersey: _scorers[h.id]?.jersey,
+              home: h.teamId == widget.match.homeTeamId,
               onPlay: () => openYoutubeClip(
                 context,
                 videoId: h.videoId,
@@ -552,6 +552,98 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [main, ...widget.trailing],
+    );
+  }
+}
+
+/// Herkesin gördüğü tek satırlık gol kesiti: takım rengi şeridi, dakika,
+/// golü atan ve "izle" düğmesi.
+class GoalClipRow extends StatelessWidget {
+  const GoalClipRow({
+    super.key,
+    required this.minute,
+    required this.name,
+    required this.jersey,
+    required this.home,
+    required this.onPlay,
+  });
+
+  final String minute;
+  final String name;
+  final int? jersey;
+  final bool home;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final stripe = home ? const Color(0xFFFBBF24) : const Color(0xFF3B82F6);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPlay,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: stripe, width: 3)),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  child: Text(
+                    minute,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const BallIcon(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (jersey != null) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '#$jersey',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
