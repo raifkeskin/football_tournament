@@ -7635,10 +7635,8 @@ class _DetailEventTile extends StatelessWidget {
     final c = clip!;
     return Builder(
       builder: (context) => Material(
-        color: const Color(0xFF10B981).withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(10),
+        color: const Color(0xFF10B981).withValues(alpha: 0.18),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
           onTap: () => openYoutubeClip(
             context,
             videoId: c.videoId,
@@ -7649,14 +7647,51 @@ class _DetailEventTile extends StatelessWidget {
             title: title.isEmpty ? 'Gol' : "$minute' $title",
           ),
           child: const SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(
-              Icons.play_arrow_rounded,
-              size: 28,
-              color: Color(0xFF34D399),
+            width: 46,
+            child: Center(
+              child: Icon(
+                Icons.play_arrow_rounded,
+                size: 28,
+                color: Color(0xFF34D399),
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Gol satırı kart olur: dış kenarında tüm yüksekliği kaplayan oynat şeridi.
+  Widget _clipCard({required bool home, required Widget content}) {
+    final strip = _clipStrip();
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFF131D33),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: home
+              ? [
+                  strip,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+                      child: content,
+                    ),
+                  ),
+                ]
+              : [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+                      child: content,
+                    ),
+                  ),
+                  strip,
+                ],
         ),
       ),
     );
@@ -7781,14 +7816,23 @@ class _DetailEventTile extends StatelessWidget {
                 children: [
                   Expanded(
                     child: isHome
-                        ? Row(
-                            children: [
-                              if (clip != null) ...[
-                                _clipStrip(),
-                                const SizedBox(width: 8),
-                              ],
-                              Expanded(
-                                child: Row(
+                        ? (clip != null
+                              ? _clipCard(
+                                  home: true,
+                                  content: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Flexible(
+                                        child: _titleBlock(
+                                          CrossAxisAlignment.end,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      icon,
+                                    ],
+                                  ),
+                                )
+                              : Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
                                     Flexible(
@@ -7799,10 +7843,7 @@ class _DetailEventTile extends StatelessWidget {
                                     const SizedBox(width: 4),
                                     icon,
                                   ],
-                                ),
-                              ),
-                            ],
-                          )
+                                ))
                         : const SizedBox.shrink(),
                   ),
                   // Rozetle iki yandaki yazı arasında az boşluk; dar tutulur
@@ -7831,10 +7872,22 @@ class _DetailEventTile extends StatelessWidget {
                   Expanded(
                     child: isHome
                         ? const SizedBox.shrink()
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: Row(
+                        : (clip != null
+                              ? _clipCard(
+                                  home: false,
+                                  content: Row(
+                                    children: [
+                                      icon,
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: _titleBlock(
+                                          CrossAxisAlignment.start,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Row(
                                   children: [
                                     icon,
                                     const SizedBox(width: 4),
@@ -7844,14 +7897,7 @@ class _DetailEventTile extends StatelessWidget {
                                       ),
                                     ),
                                   ],
-                                ),
-                              ),
-                              if (clip != null) ...[
-                                const SizedBox(width: 8),
-                                _clipStrip(),
-                              ],
-                            ],
-                          ),
+                                )),
                   ),
                 ],
               ),
