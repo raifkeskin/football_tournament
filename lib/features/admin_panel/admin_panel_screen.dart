@@ -105,7 +105,7 @@ class AdminPanelAutoOpen {
     _done = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (context.mounted) {
-        AdminPanelScreen.open(context, leagueId: leagueId);
+        AdminPanelScreen.open(context, leagueId: leagueId, autoOpened: true);
       }
     });
   }
@@ -132,18 +132,26 @@ class _Scope {
 enum _Embed { ok, disabled, missing, unknown }
 
 class AdminPanelScreen extends StatefulWidget {
-  const AdminPanelScreen({super.key, this.leagueId});
+  const AdminPanelScreen({super.key, this.leagueId, this.autoOpened = false});
 
   /// Açılışta seçilecek turnuva (ana sayfada seçili olan); yetki yoksa ilki.
   final String? leagueId;
 
-  static Future<void> open(BuildContext context, {String? leagueId}) =>
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          settings: const RouteSettings(name: 'AdminPanelScreen'),
-          builder: (_) => AdminPanelScreen(leagueId: leagueId),
-        ),
-      );
+  /// Uygulama açılışında kendiliğinden açıldıysa: gösterilecek kayıt yoksa
+  /// panel kapanır, ana sayfa kalır.
+  final bool autoOpened;
+
+  static Future<void> open(
+    BuildContext context, {
+    String? leagueId,
+    bool autoOpened = false,
+  }) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      settings: const RouteSettings(name: 'AdminPanelScreen'),
+      builder: (_) =>
+          AdminPanelScreen(leagueId: leagueId, autoOpened: autoOpened),
+    ),
+  );
 
   @override
   State<AdminPanelScreen> createState() => _AdminPanelScreenState();
@@ -345,8 +353,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       for (final m in list) {
         _checkEmbed(m['youtube_url'] as String?);
       }
-      _loadEnler();
       _loadCrew(list);
+      await _loadEnler();
+      _leaveIfEmpty();
     } catch (_) {
       _failed();
     }
@@ -446,9 +455,32 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         if (cur == null || e.week > cur.week) latest[e.regionId] = e;
       }
       if (!mounted) return;
-      setState(() => _enler = latest.values.toList());
+      // Bülteni yayınlanan hafta için sekme gösterilmez.
+      setState(
+        () => _enler = [
+          for (final e in latest.values)
+            if (e.newsId == null) e,
+        ],
+      );
     } catch (_) {
       _enlerKey = '';
+    }
+  }
+
+  bool _leaveChecked = false;
+
+  /// Açılışta kendiliğinden açılan panelde hiçbir sekmede kayıt yoksa ana
+  /// sayfaya dönülür (bir kez).
+  void _leaveIfEmpty() {
+    if (!widget.autoOpened || _leaveChecked || !mounted) return;
+    _leaveChecked = true;
+    final empty =
+        !_matches.any(_isPre) &&
+        !_matches.any(_isLive) &&
+        !_matches.any(_isPost) &&
+        (!_showEnler || _enler.isEmpty);
+    if (empty && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      Navigator.of(context).pop();
     }
   }
 
