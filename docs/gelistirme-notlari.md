@@ -347,3 +347,12 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
 - **Veri sorumlusu şimdilik şahıs (Raif Keskin).** Şirket kurulunca DEĞİŞECEK alanlar: ticaret unvanı, MERSİS no, tescilli adres, KEP adresi, e-posta, internet sitesi (üyelik sözleşmesi + 3 aydınlatma + açık rıza + çerez metni başlıkları ve "başvuru yolu" tabloları); sözleşmedeki "Şirket" tanımı; `fan_membership_terms.dart` işletmeci bloğu; gizlilik sayfası; Play Veri güvenliği ve App Store gizlilik/satıcı bilgileri; ileride kartla ödeme için mesafeli satış ve iade metinleri.
 - **Akış:** kayıtta sözleşme + aydınlatma (zorunlu kutu) → kayıttan hemen sonra Sporcu Açık Rıza ekranı (5 ayrı seçim, işaretsiz) → sağlık beyanı turnuva/sezon kadrosuna girişte → web'de çerez bandı. Mevcut kullanıcılara uygulamaya ilk girişte yeni metinler gösterilir.
 - **Karar:** Fotoğraf/boy-kilo görünürlüğü yalnız kayıtlı kullanıcılara (misafir görmez); boy-kilo ayrıca kullanıcı izin verdiyse. Yaş kontrolü yalnız kontenjan kuralı olan turnuvalarda. Reklam çerezi yok.
+
+## 34. Yönetim Paneli: takım bilgileri ve panel içi işlem — SONRA (2026-11-12)
+- **Karar (2026-11-12):** Yönetim Paneli yetkisi olan herkes için panel her açılışta doğrudan açılır ("boş mu" kontrolü ve geri dönüş yok); ana sayfaya geçiş butonla. Kart cezası, haber ve yorum onayları ana sayfadan panele taşınır, bölge sorumlusu da kendi bölgesi için ceza onayını görür. Tek bölgenin sorumlusu yalnız o bölgenin maçlarında işlem yapar; diğer bölgeleri ana sayfada görüntüler, düzenleyemez.
+- **Şimdilik yapılmayacak (bekletilenler):**
+  - Panel içinde onay/işlem yapma: bekleyen onay satırları yalnız sayı gösterir, dokununca mevcut ekrana gider.
+  - Takım bilgileri: takım başına oyuncu sayısı, mavi tikli / turuncu tikli / tiksiz sayıları, kadro asgarisinin altındaki ve kadrosuz takımlar.
+  - Sağlık/KVKK onayı: takım başına onay vermeyen oyuncu sayısı (`consent_status`, `consent_type` hazır). Esame engeli pazar lansmanına kadar ertelenmişti; yalnız bilgi olarak gösterilir.
+  - Cezalı oyuncusu olan takımlar, fotoğraf izni tutulan oyuncu sayısı.
+- **Not:** Takım sayıları tek toplu RPC ile sezon başına bir kez çekilip önbelleğe alınmalı (panel ilk açılışı yavaşlamasın), bölge sorumlusu yalnız kendi bölgesini görmeli, tek tek oyuncu adı yerine sayı gösterilmeli.
