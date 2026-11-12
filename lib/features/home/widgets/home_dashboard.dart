@@ -1728,7 +1728,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
               );
             },
           ),
-        if (isOwner && pendingHere > 0) ...[
+        // Yönetim Paneli açık olanlarda onay uyarıları panelde gösterilir.
+        if (!AdminPanelAccess.visible(session) &&
+            isOwner &&
+            pendingHere > 0) ...[
           // Dokununca ceza onayları ekranı, ana sayfada seçili turnuva,
           // sezon ve grupla süzülmüş olarak.
           _alert(
@@ -1751,7 +1754,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ],
         // Onay bekleyen otomatik haberler: admin, kurucu başkan, bölge
         // sorumlusu (yeni haber ekranları kapalı olsa da).
-        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
+        if (!AdminPanelAccess.visible(session) &&
+            (session.panelLeagueIds?.contains(widget.league.id) ?? true))
           StreamBuilder<List<NewsItem>>(
             stream: ServiceLocator.leagueService.watchNewsFeed(
               leagueId: widget.league.id,
@@ -1777,7 +1781,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
             },
           ),
         // Onay bekleyen yorumlar (haber sorumluları).
-        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
+        if (!AdminPanelAccess.visible(session) &&
+            (session.panelLeagueIds?.contains(widget.league.id) ?? true))
           FutureBuilder<int>(
             future: NewsTalkService.pendingCount(widget.league.id),
             builder: (context, snap) {

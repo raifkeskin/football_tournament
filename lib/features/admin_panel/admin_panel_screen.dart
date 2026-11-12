@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/app_session.dart';
@@ -26,6 +27,10 @@ import '../identity/ibraz_pending_screen.dart';
 import '../news/screens/week_awards_screen.dart';
 import '../news/week_awards.dart';
 import '../tournament/models/league.dart';
+import '../tournament/screens/admin_penalty_management_screen.dart';
+import '../news/news_talk.dart';
+import '../news/screens/news_screens.dart';
+import '../news/widgets/news_talk_widgets.dart';
 import '../match/models/match.dart';
 import '../match/screens/esame_edit_screen.dart';
 import '../match/screens/match_details_screen.dart';
@@ -105,7 +110,7 @@ class AdminPanelAutoOpen {
     _done = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (context.mounted) {
-        AdminPanelScreen.open(context, leagueId: leagueId, autoOpened: true);
+        AdminPanelScreen.open(context, leagueId: leagueId);
       }
     });
   }
@@ -132,26 +137,18 @@ class _Scope {
 enum _Embed { ok, disabled, missing, unknown }
 
 class AdminPanelScreen extends StatefulWidget {
-  const AdminPanelScreen({super.key, this.leagueId, this.autoOpened = false});
+  const AdminPanelScreen({super.key, this.leagueId});
 
   /// Açılışta seçilecek turnuva (ana sayfada seçili olan); yetki yoksa ilki.
   final String? leagueId;
 
-  /// Uygulama açılışında kendiliğinden açıldıysa: gösterilecek kayıt yoksa
-  /// panel kapanır, ana sayfa kalır.
-  final bool autoOpened;
-
-  static Future<void> open(
-    BuildContext context, {
-    String? leagueId,
-    bool autoOpened = false,
-  }) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      settings: const RouteSettings(name: 'AdminPanelScreen'),
-      builder: (_) =>
-          AdminPanelScreen(leagueId: leagueId, autoOpened: autoOpened),
-    ),
-  );
+  static Future<void> open(BuildContext context, {String? leagueId}) =>
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'AdminPanelScreen'),
+          builder: (_) => AdminPanelScreen(leagueId: leagueId),
+        ),
+      );
 
   @override
   State<AdminPanelScreen> createState() => _AdminPanelScreenState();
@@ -185,6 +182,111 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   /// Kimlik ibrazı onayı bekleyen kayıt sayısı (yetki alanına göre).
   int _ibrazPending = 0;
 
+  /// Bekleyen onaylar kartı: kapanır/açılır (son durum cihazda hatırlanır).
+  bool _apOpen = false;
+  int _penPending = 0, _newsPending = 0, _commentPending = 0;
+  String _apKey = '';
+  DateTime? _apAt;
+
+  Future<void> _loadApprovalPref() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final v = p.getBool('panel_approvals_open') ?? false;
+      if (mounted && v != _apOpen) setState(() => _apOpen = v);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleApprovals() async {
+    setState(() => _apOpen = !_apOpen);
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool('panel_approvals_open', _apOpen);
+    } catch (_) {}
+  }
+
+  /// Ceza, haber, yorum bekleyen sayıları (seçili turnuva ve bölge).
+  /// Sık sorgulanmaz: anahtar değişince ya da 3 dakikada bir.
+  Future<void> _loadApprovals({bool force = false}) async {
+    final s = _scope;
+    if (s == null) return;
+    final key = '${s.leagueId}|${_regionId ?? ''}';
+    if (!force &&
+        key == _apKey &&
+        _apAt != null &&
+        DateTime.now().difference(_apAt!) < const Duration(minutes: 3)) {
+      return;
+    }
+    _apKey = key;
+    _apAt = DateTime.now();
+    final region = _regionId;
+    var pen = 0, news = 0, com = 0;
+    try {
+      final seasons = await _sb
+          .from('seasons')
+          .select('id')
+          .eq('league_id', s.leagueId)
+          .eq('is_active', true)
+          .isFilter('deleted_at', null);
+      final sids = [for (final r in seasons) '${r['id']}'];
+      if (sids.isNotEmpty) {
+        final rows = await _sb
+            .from('player_penalties')
+            .select('id, match_id')
+            .inFilter('season_id', sids)
+            .eq('status', 'pending');
+        if (region == null) {
+          pen = rows.length;
+        } else {
+          // Maçsız elle girilen ceza her bölgede sayılır.
+          final mids = [
+            for (final r in rows)
+              if (r['match_id'] != null) '${r['match_id']}',
+          ];
+          var inRegion = 0;
+          if (mids.isNotEmpty) {
+            final ms = await _sb
+                .from('matches')
+                .select('id, group_id')
+                .inFilter('id', mids);
+            final gs = await _sb
+                .from('groups')
+                .select('id, region_id')
+                .inFilter('season_id', sids);
+            final regionOf = {
+              for (final g in gs) '${g['id']}': '${g['region_id'] ?? ''}',
+            };
+            final matchRegion = {
+              for (final m in ms) '${m['id']}': regionOf['${m['group_id']}'],
+            };
+            inRegion = mids.where((id) => matchRegion[id] == region).length;
+          }
+          pen = inRegion + (rows.length - mids.length);
+        }
+      }
+    } catch (_) {}
+    try {
+      final list = await ServiceLocator.leagueService
+          .watchNewsFeed(leagueId: s.leagueId, pending: true)
+          .first;
+      news = list
+          .where(
+            (x) =>
+                x.tournamentId == s.leagueId &&
+                (region == null || x.regionId == null || x.regionId == region),
+          )
+          .length;
+    } catch (_) {}
+    try {
+      com = await NewsTalkService.pendingCount(s.leagueId);
+    } catch (_) {}
+    if (!mounted || _apKey != key) return;
+    setState(() {
+      _penPending = pen;
+      _newsPending = news;
+      _commentPending = com;
+    });
+  }
+
   /// Bütün girişleri tamam olan maçlar özet görünür; dokununca açılır.
   final Set<String> _expanded = {};
   Timer? _timer;
@@ -193,6 +295,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadApprovalPref();
     _loadScope();
     // Canlı skor ve durumlar için ara ara yenilenir.
     _timer = Timer.periodic(const Duration(seconds: 45), (_) => _loadMatches());
@@ -258,11 +361,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 (e) => e.leagueId == widget.leagueId,
                 orElse: () => list.first,
               );
-        // Bölge sorumlusu tek bölgedeyse o bölgeye sabitlenir.
+        // Admin ve kurucu "Tümü" ile başlar; bölge sorumlusu kendi (ilk)
+        // bölgesine sabitlenir.
         final s = _scope;
-        _regionId = s != null && !s.canAll && s.regions.length == 1
-            ? s.regions.first.$1
-            : null;
+        _regionId = s == null ? null : _defaultRegion(s);
       });
       _loadTheme();
       await _loadMatches();
@@ -306,6 +408,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   Future<void> _loadMatches() async {
     _loadIbraz();
+    _loadApprovals();
     final s = _scope;
     if (s == null) {
       if (mounted) setState(() => _loading = false);
@@ -355,7 +458,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       }
       _loadCrew(list);
       await _loadEnler();
-      _leaveIfEmpty();
     } catch (_) {
       _failed();
     }
@@ -464,23 +566,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       );
     } catch (_) {
       _enlerKey = '';
-    }
-  }
-
-  bool _leaveChecked = false;
-
-  /// Açılışta kendiliğinden açılan panelde hiçbir sekmede kayıt yoksa ana
-  /// sayfaya dönülür (bir kez).
-  void _leaveIfEmpty() {
-    if (!widget.autoOpened || _leaveChecked || !mounted) return;
-    _leaveChecked = true;
-    final empty =
-        !_matches.any(_isPre) &&
-        !_matches.any(_isLive) &&
-        !_matches.any(_isPost) &&
-        (!_showEnler || _enler.isEmpty);
-    if (empty && (ModalRoute.of(context)?.isCurrent ?? false)) {
-      Navigator.of(context).pop();
     }
   }
 
@@ -834,72 +919,85 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       _ => post,
     };
     final onEnler = _tab == 3;
+    final sc = _scope;
+    final regionName = sc != null && sc.regions.length == 1
+        ? sc.regions.first.$2
+        : '';
     return BandBackPage(
-      theme: _theme,
-      subtitle: 'Yönetim Paneli',
-      home: true,
-      trailing: _scopes.length > 1
-          ? IconButton(
-              tooltip: 'Turnuva seç',
-              onPressed: _pickLeague,
-              icon: const Icon(Icons.expand_more_rounded, color: Colors.white),
-            )
-          : null,
+      theme: _theme ?? ActiveTournament.theme.value,
+      subtitle: regionName.isEmpty
+          ? 'Yönetim Paneli'
+          : 'Yönetim Paneli · $regionName',
+      homeRight: true,
+      onTitleTap: _scopes.length > 1 ? _pickLeague : null,
       child: Scaffold(
         backgroundColor: _bg,
         body: SafeArea(
           top: false,
           child: ColoredBox(
             color: _bg,
-            child: RefreshIndicator(
-              onRefresh: _loadMatches,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
-                children: [
-                  _scopeBar(),
-                  const SizedBox(height: 10),
-                  if (_ibrazPending > 0) _ibrazStrip(),
-                  // Ana sayfadaki uyarılar artık panelde.
-                  if (_scope != null) ...[
-                    OverdueResultsBanner(leagueId: _scope!.leagueId),
-                    UnassignedRefereesBanner(leagueId: _scope!.leagueId),
-                    UnscheduledMatchesBanner(leagueId: _scope!.leagueId),
-                  ],
-                  _tabs(pre.length, live.length, post.length, enler.length),
-                  const SizedBox(height: 12),
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_error != null)
-                    _empty(_error!)
-                  else if (_scope == null)
-                    _empty('Yönettiğin aktif bir turnuva yok.')
-                  else if (onEnler)
-                    for (final e in enler)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _enlerCard(e),
-                      )
-                  else if (shown.isEmpty)
-                    _empty(switch (_tab) {
-                      0 => 'Bugün maç yok.',
-                      1 => 'Şu an canlı maç yok.',
-                      _ => 'Son 3 günde biten maç yok.',
-                    })
-                  else
-                    for (final m in shown)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: switch (_tab) {
-                          0 => _preCard(m),
-                          1 => _liveCard(m),
-                          _ => _postCard(m),
-                        },
-                      ),
-                ],
-              ),
+            child: Column(
+              children: [
+                _regionStrip(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await _loadApprovals(force: true);
+                      await _loadMatches();
+                    },
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 32),
+                      children: [
+                        _approvalsCard(),
+                        // Ana sayfadaki uyarılar artık panelde.
+                        if (_scope != null) ...[
+                          OverdueResultsBanner(leagueId: _scope!.leagueId),
+                          UnassignedRefereesBanner(leagueId: _scope!.leagueId),
+                          UnscheduledMatchesBanner(leagueId: _scope!.leagueId),
+                        ],
+                        _tabs(
+                          pre.length,
+                          live.length,
+                          post.length,
+                          enler.length,
+                        ),
+                        const SizedBox(height: 12),
+                        if (_loading)
+                          const Padding(
+                            padding: EdgeInsets.all(40),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_error != null)
+                          _empty(_error!)
+                        else if (_scope == null)
+                          _empty('Yönettiğin aktif bir turnuva yok.')
+                        else if (onEnler)
+                          for (final e in enler)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _enlerCard(e),
+                            )
+                        else if (shown.isEmpty)
+                          _empty(switch (_tab) {
+                            0 => 'Bugün maç yok.',
+                            1 => 'Şu an canlı maç yok.',
+                            _ => 'Son 3 günde biten maç yok.',
+                          })
+                        else
+                          for (final m in shown)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: switch (_tab) {
+                                0 => _preCard(m),
+                                1 => _liveCard(m),
+                                _ => _postCard(m),
+                              },
+                            ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -916,127 +1014,247 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     ),
   );
 
-  Widget _ibrazStrip() => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Material(
-      color: const Color(0xFFF97316).withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+  Widget _regionStrip() {
+    final s = _scope;
+    if (s == null || s.regions.length < 2) return const SizedBox.shrink();
+    final chips = <(String?, String)>[
+      if (s.canAll) (null, 'Tümü'),
+      for (final r in s.regions) (r.$1, r.$2),
+    ];
+    Widget tab((String?, String) c, {required bool stretch}) {
+      final on = _regionId == c.$1;
+      final t = InkWell(
+        onTap: on
+            ? null
+            : () {
+                setState(() {
+                  _regionId = c.$1;
+                  _loading = true;
+                });
+                _loadMatches();
+              },
+        child: Container(
+          height: 38,
+          padding: EdgeInsets.symmetric(horizontal: stretch ? 4 : 18),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? const Color(0x14FFFFFF) : Colors.transparent,
+            border: Border(
+              bottom: BorderSide(
+                color: on ? _green : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Text(
+            c.$2,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: on ? Colors.white : _mid,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      );
+      return stretch ? Expanded(child: t) : t;
+    }
+
+    return Material(
+      color: _card,
+      child: Container(
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: _line)),
+        ),
+        child: chips.length <= 4
+            ? Row(children: [for (final c in chips) tab(c, stretch: true)])
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [for (final c in chips) tab(c, stretch: false)],
+                ),
+              ),
+      ),
+    );
+  }
+
+  /// Bekleyen onaylar: kapanır/açılır kart; satırlar ilgili ekrana götürür.
+  Widget _approvalsCard() {
+    final s = _scope;
+    final total = _penPending + _newsPending + _commentPending + _ibrazPending;
+    if (s == null || total == 0) return const SizedBox.shrink();
+    Widget row(
+      IconData icon,
+      Color color,
+      String title,
+      int n,
+      Future<void> Function() go,
+    ) {
+      if (n == 0) return const SizedBox.shrink();
+      return InkWell(
         onTap: () async {
-          await IbrazPendingScreen.open(context);
-          _loadIbraz();
+          await go();
+          if (mounted) {
+            _loadApprovals(force: true);
+            _loadIbraz();
+          }
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFFF97316).withValues(alpha: 0.6),
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: _line)),
           ),
           child: Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF97316),
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.badge_outlined,
-                  color: Colors.white,
-                  size: 21,
-                ),
+                child: Icon(icon, size: 16, color: color),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Kimlik ibraz onayı bekleyen kayıtlar var',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      '$_ibrazPending futbolcu kimliğini göstermeyi bekliyor',
-                      style: const TextStyle(
-                        color: Color(0xFFFED7AA),
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Container(
-                constraints: const BoxConstraints(minWidth: 28),
-                height: 28,
+                constraints: const BoxConstraints(minWidth: 24),
+                height: 24,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF97316),
-                  borderRadius: BorderRadius.circular(14),
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '$_ibrazPending',
+                  '$n',
                   style: const TextStyle(
                     color: Colors.white,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFFFDBA74)),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, color: _mid, size: 20),
             ],
           ),
         ),
-      ),
-    ),
-  );
+      );
+    }
 
-  Widget _scopeBar() {
-    final s = _scope;
-    if (s == null) return const SizedBox.shrink();
-    final chips = <(String?, String)>[
-      if (s.canAll && s.regions.length > 1) (null, 'Tümü'),
-      if (s.canAll || s.regions.length > 1)
-        for (final r in s.regions) (r.$1, r.$2),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (chips.length > 1) ...[
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final (id, label) in chips)
-                ChoiceChip(
-                  label: Text(label),
-                  selected: _regionId == id,
-                  onSelected: (_) {
-                    setState(() {
-                      _regionId = id;
-                      _loading = true;
-                    });
-                    _loadMatches();
-                  },
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: _toggleApprovals,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'BEKLEYEN ONAYLAR',
+                      style: TextStyle(
+                        color: _mid,
+                        fontSize: 12,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 24),
+                    height: 24,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$total',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    _apOpen
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: _mid,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_apOpen) ...[
+            row(
+              Icons.gavel_rounded,
+              const Color(0xFFEF4444),
+              'Kart cezası onayı',
+              _penPending,
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  settings: const RouteSettings(
+                    name: 'AdminPenaltyManagementScreen',
+                  ),
+                  builder: (_) =>
+                      AdminPenaltyManagementScreen(initialLeagueId: s.leagueId),
                 ),
-            ],
-          ),
-        ] else if (!s.canAll && s.regions.length == 1) ...[
-          Text(
-            s.regions.first.$2,
-            style: const TextStyle(color: _mid, fontWeight: FontWeight.w700),
-          ),
+              ),
+            ),
+            row(
+              Icons.article_outlined,
+              const Color(0xFF3B82F6),
+              'Haber onayı',
+              _newsPending,
+              () async =>
+                  openNewsList(context, leagueId: s.leagueId, pending: true),
+            ),
+            row(
+              Icons.chat_bubble_outline_rounded,
+              const Color(0xFF8B5CF6),
+              'Yorum onayı',
+              _commentPending,
+              () => NewsCommentReviewScreen.open(context, s.leagueId),
+            ),
+            row(
+              Icons.badge_outlined,
+              const Color(0xFFF97316),
+              'Kimlik ibraz onayı',
+              _ibrazPending,
+              () => IbrazPendingScreen.open(context),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
+
+  String? _defaultRegion(_Scope s) =>
+      !s.canAll && s.regions.isNotEmpty ? s.regions.first.$1 : null;
 
   Future<void> _pickLeague() async {
     final picked = await showAdminOptionPicker<_Scope>(
@@ -1049,9 +1267,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     if (picked == null || picked == _scope) return;
     setState(() {
       _scope = picked;
-      _regionId = !picked.canAll && picked.regions.length == 1
-          ? picked.regions.first.$1
-          : null;
+      _regionId = _defaultRegion(picked);
       _loading = true;
       _theme = null;
     });
