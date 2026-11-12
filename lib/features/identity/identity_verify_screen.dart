@@ -293,7 +293,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     if (!_caseWarned) {
       final ok = await showAdminConfirmDialog(
         context: context,
-        title: 'Telefon kılıfını çıkarın',
+        title: 'Dikkat',
         message:
             'Telefon kılıfı kimlik çipinin okunmasını engelleyebilir. '
             'Okutmadan önce kılıfı çıkarın, ardından kimliği telefonun '
@@ -301,7 +301,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         confirmLabel: 'DEVAM ET',
         cancelLabel: 'VAZGEÇ',
         destructive: false,
-        icon: Icons.phone_android_rounded,
+        icon: Icons.warning_amber_rounded,
       );
       if (!ok || !mounted) return;
       _caseWarned = true;
