@@ -55,3 +55,11 @@ Her maddede: **Biz böyle doldurduk** → **Avukata soru**.
 - Kullanıcı kararı: boy-kilo tamamen isteğe bağlı; girilirse profilde herkese açık, girilmezse kimseye gösterilmez.
 - Açık Rıza 4+5 birleştirildi (yeni numaralar: 5 herkese açık yayın, 6 sağlık, 7 geri alma); Sporcu Aydınlatma veri/aktarım/saklama satırları güncellendi; avukat dosyasına 4.3 sorusu eklendi, uyumsuzluk maddesi kaldırıldı.
 - Uygulamada yapılacak küçük iş: profil düzenlemede boy-kilo altına "Girersen profilinde herkese görünür" notu.
+
+## Uygulamaya geçenler (12 Kasım 2026, feat/kvkk-onaylar → release)
+- Boy-kilo alanlarına "girersen profilinde herkese görünür" notu (profil düzenleme + futbolcu kaydı).
+- Sezon bazlı sağlık beyanı: `player_season_declarations` + `my_pending_health_seasons` + `give_season_health_declarations`; Ana Sayfa kartı (SeasonHealthCard); kadroya eklenince push (yalnız anahtar herkese açıkken). Anahtar `season_health_enabled` = false (yalnız admin). 2026-11-13 öncesi sezonlarda eski profil beyanı geçerli sayılır. Açılırsa beyanı olmayan ~35/60 hesaplı futbolcu kart görür.
+  - Açmak: `update app_settings set value='true' where key='season_health_enabled';`
+  - Henüz yok: lisans listesinde sezon bazlı beyan sütunu; hesabı olmayan oyuncular için kâğıt beyan.
+- Periyodik imha: `retention_purge()` + cron `retention-purge` her ayın 1'i 04:23 UTC; `retention_log`'a yazar. İlk çalıştırma (deneme): silinecek kayıt yok.
+- Metinler buna göre güncellendi: Saklama politikası tablosu (30 gün kimlik eşleşme, 90 gün bekleyen ibraz TC, aylık imha), Sporcu Aydınlatma NFC satırı, avukat dosyası.
