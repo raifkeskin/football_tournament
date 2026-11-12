@@ -303,51 +303,23 @@ def story_overlay(c, out, logos, zoom=1.0):
     d.text((x + w_h + w_d, y), as_, font=sf, fill=GOLD if c['side'] == 'away' else WHITE)
 
     # B: alt imza yok; filigran videonun köşesinde (logo + yazı)
-    # Sponsor bandı: beyaz şerit, ana sponsorlar büyük, alt sponsorlar küçük; altlarında adları.
-    # Skor kutusu (y 1548-1640) ile bant arasında boşluk kalsın diye bant 180 px yüksekliktedir.
+    # Sponsor bandı: beyaz şerit, her golde TEK sponsor (büyük logo + ad).
+    # Sıra: ana sponsorlar, sonra alt sponsorlar, sonra yine ana sponsorlar (maçtaki gol sırasına göre).
+    # Bant skor kutusunun (y 1548-1640) altında başlar.
     sp = c.get('sponsor_logos') or {}
-    mains = sp.get('main', [])[:3]
-    subs = sp.get('sub', [])
-    if len(subs) > 5:  # 5'ten fazla alt sponsor: her kesit sıradaki 5'liyi gösterir (adil dönüşüm)
-        st = sum(ord(ch) for ch in str(c.get('id', ''))) % len(subs)
-        subs = [subs[(st + i) % len(subs)] for i in range(5)]
-    if mains or subs:
-        x0, x1, y1 = 40, W - 40, 1868
-        mh, sh = 62, 30
-        y0 = y1 - 10 - (mh + 36 if mains else 0) - (8 + sh + 29 if subs else 0) - 10
+    allsp = sp.get('main', []) + sp.get('sub', [])
+    if allsp:
+        pth, nm = allsp[int(c.get('sponsor_rank') or 0) % len(allsp)]
+        x0, x1, y0, y1 = 40, W - 40, 1664, 1868
         d.rounded_rectangle((x0, y0, x1, y1), 28, fill=(255, 255, 255, 255))
-        fm = font('BarlowCondensed-ExtraBold.ttf', 30)
-        fsn = font('BarlowCondensed-ExtraBold.ttf', 22)
-
-        def fit(path, bw, bh):
-            lg = Image.open(path).convert('RGBA')
-            lg.thumbnail((bw, bh), Image.LANCZOS)
-            return lg
-
-        def label(text, cx, y, fo, fill, maxw):
-            while d.textlength(text, font=fo) > maxw and len(text) > 3:
-                text = text[:-2].rstrip() + '…'
-            d.text((cx - d.textlength(text, font=fo) / 2, y), text, font=fo, fill=fill)
-
-        y = y0 + 10
-        if mains:
-            cw = (x1 - x0 - 60) // len(mains)
-            for i, (pth, nm) in enumerate(mains):
-                cx = x0 + 30 + cw * i + cw // 2
-                l = fit(pth, 280, mh)
-                im.alpha_composite(l, (int(cx - l.width / 2), y + (mh - l.height) // 2))
-                label(nm, cx, y + mh + 2, fm, (12, 18, 32, 255), cw - 20)
-            y += mh + 36
-        if mains and subs:
-            d.line((x0 + 40, y, x1 - 40, y), fill=(226, 232, 240, 255), width=2)
-            y += 8
-        if subs:
-            cw = (x1 - x0 - 60) // len(subs)
-            for i, (pth, nm) in enumerate(subs):
-                cx = x0 + 30 + cw * i + cw // 2
-                l = fit(pth, min(150, cw - 20), sh)
-                im.alpha_composite(l, (int(cx - l.width / 2), y + (sh - l.height) // 2))
-                label(nm, cx, y + sh + 3, fsn, (71, 85, 105, 255), cw - 12)
+        lg = Image.open(pth).convert('RGBA')
+        lg.thumbnail((420, 104), Image.LANCZOS)
+        im.alpha_composite(lg, (int(W / 2 - lg.width / 2), y0 + 14 + (104 - lg.height) // 2))
+        size = 50
+        while size > 28 and d.textlength(nm, font=font('BarlowCondensed-ExtraBold.ttf', size)) > x1 - x0 - 60:
+            size -= 2
+        fo = font('BarlowCondensed-ExtraBold.ttf', size)
+        d.text((W / 2 - d.textlength(nm, font=fo) / 2, y0 + 14 + 104 + 4), nm, font=fo, fill=(12, 18, 32, 255))
 
     # Video köşe filigranı: maç görüntüsünün sağ alt köşesi (make ile aynı yer).
     vh = 1080 * zoom * 9 / 16
@@ -421,6 +393,13 @@ def make(c, tmp, fmt=FMT_HQ, crf='17', preset='slow', zoom=1.18):
                 c['sponsor_logos']['main' if sp['t'] == 'main' else 'sub'].append((pth, (sp.get('n') or '')))
     except Exception as e:
         log('sponsor logoları alınamadı:', str(e)[-120:])
+    try:  # bu golün maçtaki sırası (dakikaya göre) → hangi sponsor
+        c['sponsor_rank'] = int(psql(
+            "select count(*) from public.match_highlights h where h.kind = 'goal' and h.status = 'approved' "
+            f"and h.match_id = {q(c['match_id'])} and (coalesce(h.minute, 0), h.id::text) < "
+            f"({int(c.get('minute') or 0)}, {q(str(c['id']))})") or 0)
+    except Exception as e:
+        log('sponsor sırası alınamadı:', str(e)[-120:])
     ov, ovw = os.path.join(tmp, 'story.png'), os.path.join(tmp, 'wide.png')
     story_overlay(c, ov, logos, zoom)
     wide_overlay(ovw)
