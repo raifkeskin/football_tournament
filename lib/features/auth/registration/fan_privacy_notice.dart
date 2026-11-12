@@ -9,7 +9,7 @@ E-posta: raifkeskin@gmail.com
 Telefon: 0 (537) 508 95 89
 
 İşlenen bilgiler ve amaçlar
-Taraftar üyeliğinde ad, soyad, telefon numarası, il ve ilçe bilgileri; üyelik hesabının oluşturulması ve yönetilmesi, telefonun doğrulanması, giriş güvenliğinin sağlanması, destek taleplerinin yanıtlanması ve uygulamadaki turnuva içeriklerinin sunulması amacıyla işlenir. Üyelik koşullarının hangi sürümünün ne zaman kabul edildiğine ilişkin kayıt da saklanır.
+Taraftar üyeliğinde ad, soyad ve telefon numarası bilgileri; üyelik hesabının oluşturulması ve yönetilmesi, telefonun doğrulanması, giriş güvenliğinin sağlanması, destek taleplerinin yanıtlanması ve uygulamadaki turnuva içeriklerinin sunulması amacıyla işlenir. Üyelik koşullarının hangi sürümünün ne zaman kabul edildiğine ilişkin kayıt da saklanır.
 
 Hukuki sebepler ve toplama yöntemi
 Bilgiler doğrudan kayıt formundan, telefon doğrulama işlemi sırasında ve uygulamanın teknik kayıtlarından elektronik ortamda elde edilir. İşleme faaliyetleri; üyelik ilişkisinin kurulması ve yürütülmesi, veri sorumlusunun hukuki yükümlülükleri ve temel hak ve özgürlüklere zarar vermemek kaydıyla hizmet güvenliği için gerekli meşru menfaat hukuki sebeplerine dayanır. Kesin hukuki sebep ve saklama süreleri, hizmetin gerçek işleyişiyle karşılaştırılarak yayımdan önce doğrulanmalıdır.
