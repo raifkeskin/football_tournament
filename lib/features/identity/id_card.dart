@@ -81,6 +81,15 @@ class IdCardError implements Exception {
   String toString() => message;
 }
 
+/// Kart arama süresinde (3 deneme) hiç algılanmadı.
+class IdCardNotDetected extends IdCardError {
+  const IdCardNotDetected()
+    : super(
+        'Kimlik algılanamadı. Kimliğinizi telefonun arkasına, gösterilen '
+        'yere düz yerleştirip tekrar deneyin ya da çipsiz devam edin.',
+      );
+}
+
 /// TC kimlik no biçim ve sağlama kontrolü.
 bool tcValid(String s) {
   if (!RegExp(r'^[1-9]\d{10}$').hasMatch(s)) return false;

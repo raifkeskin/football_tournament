@@ -116,6 +116,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   bool _busy = false;
   int _count = 0;
 
+  /// Kart aranırken kaçıncı deneme (1..3); okuma başlayınca/bitince 0.
+  int _searchTry = 0;
+
   /// Kadroda okutma: sıradaki oyuncu ve son okumanın sonucu.
   int _ti = 0;
   IdScanResult? _scan;
@@ -306,6 +309,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
         },
+        onSearching: (n) {
+          if (mounted) setState(() => _searchTry = n);
+        },
       );
       if (!mounted) return;
       await _afterCard(card);
@@ -323,6 +329,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           _busy = false;
           _status = null;
           _progress = null;
+          _searchTry = 0;
         });
       }
     }
@@ -706,7 +713,18 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     ),
     child: Column(
       children: [
-        const Icon(Icons.contactless_rounded, color: _blue, size: 56),
+        // Kart algılanınca (ilerleme gelince) yerleştirme animasyonu kapanır.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: _progress == null
+              ? const _PlaceCardAnimation(key: ValueKey('place'))
+              : const Icon(
+                  Icons.contactless_rounded,
+                  key: ValueKey('read'),
+                  color: _blue,
+                  size: 56,
+                ),
+        ),
         const SizedBox(height: 12),
         Text(
           _status ?? '',
@@ -720,10 +738,12 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         const SizedBox(height: 6),
         if (_progress == null)
           Text(
-            '${IdCardReader.placementHint}; okuma bitene kadar oynatmayın '
-            '(birkaç saniye). Okumazsa kartı birkaç santim kaydırıp bekleyin.',
+            _searchTry > 1
+                ? 'Kartı gösterilen yere düz yaslayın, birkaç santim '
+                      'kaydırıp sabit tutun.'
+                : 'Okuma birkaç saniye sürer; bitene kadar oynatmayın.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: kAdminMuted, fontSize: 12.5),
+            style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
           )
         else
           const Text(
@@ -1751,6 +1771,152 @@ class _DateFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: t,
       selection: TextSelection.collapsed(offset: t.length),
+    );
+  }
+}
+
+/// Kartın telefonun arkasında nereye konacağını gösterir: kart kayarak
+/// anten noktasına (iPhone üst, Android orta) oturur, nokta dalgalanır.
+class _PlaceCardAnimation extends StatefulWidget {
+  const _PlaceCardAnimation({super.key});
+
+  @override
+  State<_PlaceCardAnimation> createState() => _PlaceCardAnimationState();
+}
+
+class _PlaceCardAnimationState extends State<_PlaceCardAnimation>
+    with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const phoneW = 104.0, phoneH = 200.0, cardW = 120.0, cardH = 76.0;
+    const blue = kVerifiedBlue;
+    final targetY = IdCardReader.antennaTop ? 34.0 : (phoneH - cardH) / 2;
+    return ClipRect(
+      child: SizedBox(
+        width: 200,
+        height: phoneH + 8,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, _) {
+            final t = _c.value;
+            // 0-0.45 kayarak gelir, 0.45-0.85 yerinde durur, sonra solar.
+            final slide = Curves.easeOutCubic.transform(
+              (t / 0.45).clamp(0.0, 1.0),
+            );
+            final fade = t < 0.85 ? 1.0 : 1 - (t - 0.85) / 0.15;
+            final pulse = t < 0.45 ? 0.0 : ((t - 0.45) / 0.4).clamp(0.0, 1.0);
+            final y = targetY + (1 - slide) * 150;
+            const left = (200 - cardW) / 2;
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Telefonun arkası.
+                Positioned(
+                  left: (200 - phoneW) / 2,
+                  top: 4,
+                  child: Container(
+                    width: phoneW,
+                    height: phoneH,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white24, width: 2),
+                    ),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        margin: const EdgeInsets.all(8),
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Anten noktası dalgası.
+                Positioned(
+                  left: 100 - 40,
+                  top: 4 + targetY + cardH / 2 - 40,
+                  child: Opacity(
+                    opacity: (1 - pulse) * 0.8,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      transform: Matrix4.diagonal3Values(
+                        0.5 + pulse,
+                        0.5 + pulse,
+                        1,
+                      ),
+                      transformAlignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: blue, width: 3),
+                      ),
+                    ),
+                  ),
+                ),
+                // Kimlik kartı.
+                Positioned(
+                  left: left,
+                  top: 4 + y,
+                  child: Opacity(
+                    opacity: fade.clamp(0.0, 1.0) * (0.35 + 0.65 * slide),
+                    child: Container(
+                      width: cardW,
+                      height: cardH,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE0F2FE), Color(0xFF93C5FD)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black45, blurRadius: 8),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 18,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBBF24),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const Spacer(),
+                          for (var i = 0; i < 3; i++)
+                            Container(
+                              margin: const EdgeInsets.only(top: 3),
+                              height: 4,
+                              width: cardW - 30 - i * 12,
+                              color: Colors.black26,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
