@@ -1800,6 +1800,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         right: half ? 'DEVRE ARASI' : '● CANLI',
         rightColor: half ? _amber : _red,
         score: true,
+        onTap: () => _openMatch('${m['id']}'),
       ),
       children: [
         _row(
@@ -1887,7 +1888,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     }
 
     return _shell(
-      head: _head(m, right: 'MAÇ SONU', rightColor: Colors.white, score: true),
+      head: _head(
+        m,
+        right: 'MAÇ SONU',
+        rightColor: Colors.white,
+        score: true,
+        onTap: () => _openMatch(id),
+      ),
       children: [
         const SizedBox(height: 6),
         GridView.count(
