@@ -311,7 +311,7 @@ class _MyProfileViewState extends State<MyProfileView> {
       message:
           'Fotoğraf yayın iznin olmadığı için fotoğrafın kimseye '
           'görünmeyecek, yalnız sen görürsün. İzinlerim\'den '
-          '"Fotoğraf ve İsim Yayın İzni"ni verirsen herkese görünür.',
+          'fotoğraf iznini verirsen herkese görünür.',
       confirmLabel: 'İZİN VER',
       cancelLabel: 'Şimdi değil',
       icon: Icons.photo_camera_front_outlined,
@@ -1738,7 +1738,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         settings: const RouteSettings(name: 'ConsentScreen'),
-        builder: (_) => ConsentScreen(playerId: id, initial: current.granted),
+        builder: (_) => ConsentScreen(playerId: id, consents: current),
       ),
     );
     if (saved != true || !mounted) return;

@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/utils/friendly_error.dart';
+import '../../player/consent/consent_service.dart';
 import '../../player/consent/consent_texts.dart';
+import '../../player/consent/consent_widgets.dart';
 
 /// Ana sayfa: futbolcunun beyan bekleyen sezonları için sağlık beyanı kartı.
 /// Kadrosunda olduğu her aktif sezon için bir kez "oynamama engel bir sağlık
@@ -37,6 +39,7 @@ class _PendingSeason {
 class _SeasonHealthCardState extends State<SeasonHealthCard> {
   final _sb = Supabase.instance.client;
   List<_PendingSeason> _pending = const [];
+  ConsentDoc? _doc;
 
   @override
   void initState() {
@@ -49,6 +52,8 @@ class _SeasonHealthCardState extends State<SeasonHealthCard> {
     if (u == null || u.isAnonymous) return;
     try {
       final rows = await _sb.rpc('my_pending_health_seasons') as List;
+      if (rows.isEmpty) return;
+      final doc = await ConsentService().loadDoc();
       final list = [
         for (final r in rows.cast<Map>())
           _PendingSeason(
@@ -60,7 +65,12 @@ class _SeasonHealthCardState extends State<SeasonHealthCard> {
             team: (r['team_name'] ?? '').toString().trim(),
           ),
       ];
-      if (mounted) setState(() => _pending = list);
+      if (mounted) {
+        setState(() {
+          _pending = list;
+          _doc = doc;
+        });
+      }
     } catch (_) {
       // Okunamazsa kart çıkmaz.
     }
@@ -72,7 +82,7 @@ class _SeasonHealthCardState extends State<SeasonHealthCard> {
       backgroundColor: const Color(0xFF16213A),
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (_) => _DeclarationSheet(seasons: _pending),
+      builder: (_) => _DeclarationSheet(seasons: _pending, doc: _doc),
     );
     if (done == true && mounted) {
       setState(() => _pending = const []);
@@ -157,16 +167,19 @@ class _SeasonHealthCardState extends State<SeasonHealthCard> {
 }
 
 class _DeclarationSheet extends StatefulWidget {
-  const _DeclarationSheet({required this.seasons});
+  const _DeclarationSheet({required this.seasons, required this.doc});
 
   final List<_PendingSeason> seasons;
+
+  /// Yürürlükteki metinler; beyan metni health_declaration kutusundan gelir.
+  final ConsentDoc? doc;
 
   @override
   State<_DeclarationSheet> createState() => _DeclarationSheetState();
 }
 
 class _DeclarationSheetState extends State<_DeclarationSheet> {
-  static const _body =
+  static const _fallbackBody =
       'Katılacağım maçların fiziksel efor gerektirdiğini ve yaralanma, '
       'sakatlanma, düşme, çarpışma gibi riskler barındırabileceğini biliyorum. '
       'Bilgim dâhilinde futbol oynamama engel bir hastalık, sakatlık, sağlık '
@@ -179,6 +192,13 @@ class _DeclarationSheetState extends State<_DeclarationSheet> {
       'Bu beyan sağlık raporu değildir; hastalık, ilaç veya rapor bilgisi '
       'istenmez. Yalnızca beyanın verildiği, tarihi ve metin sürümü kaydedilir '
       've herkese açık yayımlanmaz. Beyan bu sezon için geçerlidir.';
+
+  static const _fallbackCheckbox =
+      'Okudum; futbol oynamama engel bir sağlık durumum olmadığını beyan '
+      'ediyor, riskleri kabul ediyorum.';
+
+  ConsentItem? get _item => widget.doc?.item('health_declaration');
+  String get _version => widget.doc?.version ?? kFallbackConsentVersion;
 
   bool _checked = false;
   bool _busy = false;
@@ -194,7 +214,7 @@ class _DeclarationSheetState extends State<_DeclarationSheet> {
         'give_season_health_declarations',
         params: {
           'p_season_ids': [for (final s in widget.seasons) s.seasonId],
-          'p_version': kConsentVersion,
+          'p_version': _version,
           'p_user_agent': kIsWeb ? 'web' : defaultTargetPlatform.name,
         },
       );
@@ -252,13 +272,10 @@ class _DeclarationSheetState extends State<_DeclarationSheet> {
                   ),
                 ),
               const SizedBox(height: 10),
-              const Text(
-                _body,
-                style: TextStyle(
-                  color: Color(0xFFCBD5E1),
-                  fontSize: 14,
-                  height: 1.45,
-                ),
+              ConsentBodyText(
+                _item?.body ?? _fallbackBody,
+                color: const Color(0xFFCBD5E1),
+                fontSize: 14,
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -275,13 +292,12 @@ class _DeclarationSheetState extends State<_DeclarationSheet> {
                           ? null
                           : (v) => setState(() => _checked = v ?? false),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Padding(
-                        padding: EdgeInsets.only(top: 12),
+                        padding: const EdgeInsets.only(top: 12),
                         child: Text(
-                          'Okudum; futbol oynamama engel bir sağlık durumum '
-                          'olmadığını beyan ediyor, riskleri kabul ediyorum.',
-                          style: TextStyle(
+                          _item?.checkbox ?? _fallbackCheckbox,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
