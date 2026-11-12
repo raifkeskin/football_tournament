@@ -18,7 +18,11 @@ class SeasonHealthCard extends StatefulWidget {
   const SeasonHealthCard({super.key});
 
   static bool enabledFor(AppSessionState s) =>
-      s.isAdmin || AppSettings.seasonHealthEnabled.value;
+      s.isAdmin ||
+      AppSettings.seasonHealthEnabled.value ||
+      AppSettings.consentPreviewUsers.value.contains(
+        Supabase.instance.client.auth.currentUser?.id,
+      );
 
   @override
   State<SeasonHealthCard> createState() => _SeasonHealthCardState();
