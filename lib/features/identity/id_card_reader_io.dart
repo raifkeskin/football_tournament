@@ -151,12 +151,31 @@ class IdCardReader {
       } catch (_) {}
     }
 
-    Future<void> connect() => nfc.connect(
-      timeout: const Duration(seconds: 45),
-      iosAlertMessage: attempt == 1
-          ? '$placementHint ve okuma bitene kadar oynatmayın.'
-          : 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden okunuyor.',
-    );
+    // iPhone: sistem penceresi tek oturumda bekler. Android: kart birkaç
+    // saniyede algılanmazsa arama kendiliğinden yeniden başlatılır (bazı
+    // telefonlarda ilk arama kartı hiç görmüyor); toplam süre 45 sn.
+    Future<void> connect() async {
+      if (!Platform.isAndroid) {
+        return nfc.connect(
+          timeout: const Duration(seconds: 45),
+          iosAlertMessage: attempt == 1
+              ? '$placementHint ve okuma bitene kadar oynatmayın.'
+              : 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden '
+                    'okunuyor.',
+        );
+      }
+      final deadline = DateTime.now().add(const Duration(seconds: 45));
+      for (var round = 1; ; round++) {
+        try {
+          return await nfc.connect(timeout: _pollWindow);
+        } catch (e) {
+          if (!_isTimeout(e) || DateTime.now().isAfter(deadline)) rethrow;
+          if (!detected) {
+            onStatus?.call('Kart aranıyor, yeniden denendi ($round)…');
+          }
+        }
+      }
+    }
 
     try {
       if (attempt == 1) onStatus?.call(placementHint);
@@ -235,9 +254,7 @@ class IdCardReader {
       await _close(nfc, e.message);
       rethrow;
     } catch (e) {
-      final timeout =
-          e.toString().contains('408') ||
-          e.toString().toLowerCase().contains('timeout');
+      final timeout = _isTimeout(e);
       // Kart algılandı ama okuma koptu: sessizce kapatıp yeniden denenir.
       if (detected && !timeout) {
         try {
@@ -255,6 +272,15 @@ class IdCardReader {
       await _close(nfc, msg);
       throw IdCardError(msg);
     }
+  }
+
+  /// Android'de tek arama turu: kart bu sürede algılanmazsa arama yeniden
+  /// başlatılır.
+  static const _pollWindow = Duration(seconds: 3);
+
+  static bool _isTimeout(Object e) {
+    final s = e.toString();
+    return s.contains('408') || s.toLowerCase().contains('timeout');
   }
 
   static Future<void> _close(NfcProvider nfc, String message) async {
