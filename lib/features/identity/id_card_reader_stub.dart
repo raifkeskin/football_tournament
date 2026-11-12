@@ -29,6 +29,6 @@ class IdCardReader {
     IdCardKey key, {
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
-    void Function(int attempt)? onSearching,
+    void Function(int attempt)? onAttempt,
   }) async => throw const IdCardError('Kimlik okuma yalnız uygulamada.');
 }
