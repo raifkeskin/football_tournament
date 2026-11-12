@@ -126,8 +126,8 @@ class IdCardReader {
 
   /// Çipi okur: önce PACE (destekliyorsa), olmazsa BAC. [onStatus] okuma
   /// adımlarını, [onProgress] ilerlemeyi (0-1) bildirir (Android ekranı;
-  /// iPhone'da sistem penceresinde yüzde yazar). [onSearching] kart
-  /// aranırken deneme sırasını (1..[detectTries]) bildirir. Kart 5 sn'de
+  /// iPhone'da sistem penceresinde yüzde yazar). [onAttempt] kaçıncı
+  /// denemenin yapıldığını (1, 2, 3…) bildirir. Kart 5 sn'de
   /// algılanmazsa arama yeniden başlar; [detectTries] denemede de
   /// algılanmazsa [IdCardNotDetected]. Bağlantı koparsa [_attempts] kez
   /// yeniden denenir.
@@ -135,7 +135,7 @@ class IdCardReader {
     IdCardKey key, {
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
-    void Function(int attempt)? onSearching,
+    void Function(int attempt)? onAttempt,
   }) async {
     var interrupts = 0;
     var searches = 0;
@@ -145,13 +145,11 @@ class IdCardReader {
     while (true) {
       if (!resumed) {
         searches++;
-        onSearching?.call(searches);
+        onAttempt?.call(searches + interrupts);
         onStatus?.call(
           searches == 1
               ? placementHint
-              : searches < detectTries
-              ? 'Kimlik algılanamadı, yeniden deneniyor ($searches/$detectTries)'
-              : 'Son deneme ($searches/$detectTries)',
+              : 'Kimlik algılanamadı, tekrar deneniyor…\nKartı sabit tutun',
         );
       }
       try {
@@ -175,10 +173,9 @@ class IdCardReader {
           );
         }
         resumed = true;
-        onProgress?.call(0);
+        onAttempt?.call(searches + interrupts);
         onStatus?.call(
-          'Okuma takıldı, yeniden başlatılıyor ($interrupts/${_attempts - 1})'
-          '… kartı sabit tutun',
+          'Okuma yapılamadı, tekrar deneniyor…\nKartı sabit tutun',
         );
       }
     }

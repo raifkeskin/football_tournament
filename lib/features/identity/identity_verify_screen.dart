@@ -309,8 +309,14 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
         },
-        onSearching: (n) {
-          if (mounted) setState(() => _searchTry = n);
+        onAttempt: (n) {
+          // Yeni denemede kart yeniden aranır: yerleştirme animasyonu döner.
+          if (mounted) {
+            setState(() {
+              _searchTry = n;
+              _progress = null;
+            });
+          }
         },
       );
       if (!mounted) return;
@@ -726,26 +732,53 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                 ),
         ),
         const SizedBox(height: 12),
-        Text(
-          _status ?? '',
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
+        if (_searchTry > 1) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: kAdminAmber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kAdminAmber.withValues(alpha: 0.5)),
+            ),
+            child: Text(
+              '$_searchTry. deneme yapılıyor',
+              style: const TextStyle(
+                color: kAdminAmber,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 10),
+        ],
+        // Durum iki satır olabilir: üstte ne olduğu, altta ne yapılacağı.
+        for (final (i, line) in (_status ?? '').split('\n').indexed)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 4),
+            child: Text(
+              line,
+              textAlign: TextAlign.center,
+              style: i == 0
+                  ? const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    )
+                  : const TextStyle(
+                      color: kAdminAmber,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+            ),
+          ),
         const SizedBox(height: 6),
-        if (_progress == null)
-          Text(
-            _searchTry > 1
-                ? 'Kartı gösterilen yere düz yaslayın, birkaç santim '
-                      'kaydırıp sabit tutun.'
-                : 'Okuma birkaç saniye sürer; bitene kadar oynatmayın.',
+        if (_progress == null && _searchTry <= 1)
+          const Text(
+            'Okuma birkaç saniye sürer; bitene kadar oynatmayın.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
+            style: TextStyle(color: kAdminMuted, fontSize: 12.5),
           )
-        else
+        else if (_progress != null)
           const Text(
             'Lütfen kartı oynatmayın',
             textAlign: TextAlign.center,
