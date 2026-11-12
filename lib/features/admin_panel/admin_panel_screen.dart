@@ -164,6 +164,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   TournamentTheme? _theme;
   String? _regionId;
   List<Map<String, dynamic>> _matches = const [];
+
+  /// Sıradaki maçlar: bugünden sonraki en yakın haftanın oynanmamış maçları.
+  List<Map<String, dynamic>> _upcoming = const [];
   bool _loading = true;
   String? _error;
 
@@ -424,6 +427,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           if (r is Map) Map<String, dynamic>.from(r),
       ];
       if (!mounted) return;
+      var up = <Map<String, dynamic>>[];
+      try {
+        final rawUp = await _sb.rpc(
+          'admin_panel_upcoming',
+          params: {'p_league_id': s.leagueId, 'p_region_id': _regionId},
+        );
+        up = [
+          for (final r in (rawUp as List? ?? const []))
+            if (r is Map) Map<String, dynamic>.from(r),
+        ];
+      } catch (_) {}
       try {
         final lg = await _sb
             .from('leagues')
@@ -450,6 +464,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       if (!mounted) return;
       setState(() {
         _matches = list;
+        _upcoming = up;
         _loading = false;
         _error = null;
       });
@@ -902,11 +917,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         : const <
             ({int week, String regionId, String region, String? newsId})
           >[];
-    final counts = [pre.length, live.length, post.length, enler.length];
+    final up = _upcoming;
+    final counts = [
+      pre.length,
+      live.length,
+      post.length,
+      up.length,
+      enler.length,
+    ];
     // Maçı olmayan sekme seçilemez; seçili sekme boşsa sırayla Canlı,
-    // Maç öncesi, Maç sonu, Enler'den dolu olana geçilir.
+    // Maç öncesi, Maç sonu, Sıradaki, Enler'den dolu olana geçilir.
     if (counts[_tab] == 0) {
-      for (final i in const [1, 0, 2, 3]) {
+      for (final i in const [1, 0, 2, 3, 4]) {
         if (counts[i] > 0) {
           _tab = i;
           break;
@@ -916,9 +938,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     final shown = switch (_tab) {
       0 => pre,
       1 => live,
+      3 => up,
       _ => post,
     };
-    final onEnler = _tab == 3;
+    final onEnler = _tab == 4;
     final sc = _scope;
     final regionName = sc != null && sc.regions.length == 1
         ? sc.regions.first.$2
@@ -959,6 +982,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                           pre.length,
                           live.length,
                           post.length,
+                          up.length,
                           enler.length,
                         ),
                         const SizedBox(height: 12),
@@ -981,6 +1005,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                           _empty(switch (_tab) {
                             0 => 'Bugün maç yok.',
                             1 => 'Şu an canlı maç yok.',
+                            3 => 'Planlanmış sıradaki maç yok.',
                             _ => 'Son 3 günde biten maç yok.',
                           })
                         else
@@ -990,6 +1015,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                               child: switch (_tab) {
                                 0 => _preCard(m),
                                 1 => _liveCard(m),
+                                3 => _upCard(m),
                                 _ => _postCard(m),
                               },
                             ),
@@ -1257,14 +1283,22 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       !s.canAll && s.regions.isNotEmpty ? s.regions.first.$1 : null;
 
   Future<void> _pickLeague() async {
-    final picked = await showAdminOptionPicker<_Scope>(
-      context: context,
-      title: 'Turnuva',
-      items: _scopes,
-      labelBuilder: (s) => s.name,
-      selected: _scope,
+    final known = {
+      for (final l in ActiveTournament.myLeagues.value) l.id: l.logoUrl,
+    };
+    final id = await showBandLeagueList(
+      items: [
+        for (final e in _scopes)
+          LeagueChoice(
+            id: e.leagueId,
+            name: e.name,
+            logoUrl: known[e.leagueId] ?? '',
+          ),
+      ],
+      selectedId: _scope?.leagueId,
     );
-    if (picked == null || picked == _scope) return;
+    if (id == null || id == _scope?.leagueId) return;
+    final picked = _scopes.firstWhere((e) => e.leagueId == id);
     setState(() {
       _scope = picked;
       _regionId = _defaultRegion(picked);
@@ -1275,13 +1309,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     _loadMatches();
   }
 
-  Widget _tabs(int pre, int live, int post, int enler) {
-    final counts = [pre, live, post, if (_showEnler) enler];
+  Widget _tabs(int pre, int live, int post, int up, int enler) {
+    final counts = [pre, live, post, up, if (_showEnler) enler];
+    // Sayı yalnız sıfırdan büyükse yazılır.
+    String lab(String t, int n) => n > 0 ? '$t · $n' : t;
     final labels = [
-      'Maç öncesi · $pre',
-      'Canlı · $live',
-      'Maç sonu · $post',
-      if (_showEnler) 'Enler · $enler',
+      lab('Maç öncesi', pre),
+      lab('Canlı', live),
+      lab('Maç sonu', post),
+      lab('Sıradaki', up),
+      if (_showEnler) lab('Enler', enler),
     ];
     final compact = labels.length > 3;
     return Container(
@@ -1706,6 +1743,56 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     if (url.isEmpty) return false;
     final e = _embedCache[url];
     return e != _Embed.disabled && e != _Embed.missing;
+  }
+
+  /// Sıradaki maç: tarih/saat, hafta, saha ve hakem bilgisi; dokununca detay.
+  Widget _upCard(Map m) {
+    final id = '${m['id']}';
+    final pitch = '${m['pitch'] ?? ''}'.trim();
+    final ref = '${m['referee'] ?? ''}'.trim();
+    final undated = '${m['date'] ?? ''}'.trim().isEmpty;
+    Widget info(IconData i, String t, {bool warn = false}) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Icon(i, size: 16, color: warn ? _amber : _mid),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              t,
+              style: TextStyle(
+                color: warn ? _amber : Colors.white,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return _shell(
+      head: _head(
+        m,
+        right: m['status'] == 'postponed' ? 'ERTELENDİ' : null,
+        rightColor: _amber,
+        onTap: () => _openMatch(id),
+        compact: true,
+      ),
+      children: [
+        if (undated)
+          info(Icons.event_busy_rounded, 'Tarih/saat girilmemiş', warn: true),
+        info(
+          Icons.place_outlined,
+          pitch.isEmpty ? 'Saha belirlenmedi' : pitch,
+          warn: pitch.isEmpty,
+        ),
+        info(
+          Icons.sports_rounded,
+          ref.isEmpty ? 'Hakem atanmadı' : ref,
+          warn: ref.isEmpty,
+        ),
+      ],
+    );
   }
 
   Widget _preCard(Map m) {

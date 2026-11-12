@@ -835,10 +835,40 @@ Future<void> showLeagueSwitcher() async {
   await ActiveTournament.choose(picked);
 }
 
+/// Bandın altında açılan turnuva listesi, verilen [items] ile (ör. Yönetim
+/// Paneli: yalnız yönetilen turnuvalar). Uygulamanın aktif turnuvasını
+/// değiştirmez; seçilen turnuva kimliğini döndürür.
+Future<String?> showBandLeagueList({
+  required List<LeagueChoice> items,
+  required String? selectedId,
+}) async {
+  final nav = appNavigatorKey.currentState;
+  final box = _bandKey.currentContext?.findRenderObject() as RenderBox?;
+  if (nav == null || box == null || _switcherOpen.value) return null;
+  final overlayBox = nav.overlay?.context.findRenderObject() as RenderBox?;
+  final topLeft = overlayBox == null
+      ? box.localToGlobal(Offset.zero)
+      : box.localToGlobal(Offset.zero) - overlayBox.localToGlobal(Offset.zero);
+  _switcherOpen.value = true;
+  final route = _switcherRoute = _LeagueDropdownRoute(
+    band: topLeft & box.size,
+    items: items,
+    selectedId: selectedId,
+  );
+  final picked = await nav.push<String>(route);
+  if (_switcherRoute == route) _switcherRoute = null;
+  _switcherOpen.value = false;
+  return picked;
+}
+
 class _LeagueDropdownRoute extends PopupRoute<String> {
-  _LeagueDropdownRoute({required this.band});
+  _LeagueDropdownRoute({required this.band, this.items, this.selectedId});
 
   final Rect band;
+
+  /// Verilirse bu liste gösterilir (yıldız başlıkları olmadan).
+  final List<LeagueChoice>? items;
+  final String? selectedId;
 
   @override
   Color? get barrierColor => Colors.black38;
@@ -859,8 +889,9 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
     Animation<double> secondaryAnimation,
   ) {
     // Yıldızlanan turnuvalar önce; her grup kendi içinde alfabetiktir.
-    final all = ActiveTournament.myLeagues.value;
-    final followed = Follows.leagues.value;
+    final custom = items != null;
+    final all = items ?? ActiveTournament.myLeagues.value;
+    final followed = custom ? const <String>{} : Follows.leagues.value;
     final leagues = [...all]
       ..sort((a, b) {
         final followedOrder = (followed.contains(b.id) ? 1 : 0).compareTo(
@@ -869,7 +900,9 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
         if (followedOrder != 0) return followedOrder;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
-    final current = ActiveTournament.currentLeagueId.value;
+    final current = custom
+        ? selectedId
+        : ActiveTournament.currentLeagueId.value;
     final accent =
         ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
     final maxHeight = MediaQuery.sizeOf(context).height - band.bottom - 24;
@@ -903,13 +936,15 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
                     for (final (i, l) in leagues.indexed) ...[
                       if (followed.contains(l.id) && i == 0)
                         const _LeagueGroupHeader('Yıldızlı turnuvalar'),
-                      if (!followed.contains(l.id) &&
+                      if (!custom &&
+                          !followed.contains(l.id) &&
                           (i == 0 || followed.contains(leagues[i - 1].id)))
                         const _LeagueGroupHeader('Diğer turnuvalar'),
                       _LeagueRow(
                         league: l,
                         selected: l.id == current,
                         accent: accent,
+                        showStar: !custom,
                         // Seçince liste kapanır, turnuva değişir.
                         onTap: () => Navigator.pop(context, l.id),
                       ),
@@ -957,8 +992,10 @@ class _LeagueRow extends StatelessWidget {
     required this.selected,
     required this.accent,
     required this.onTap,
+    this.showStar = true,
   });
 
+  final bool showStar;
   final LeagueChoice league;
   final bool selected;
   final Color accent;
@@ -1023,12 +1060,13 @@ class _LeagueRow extends StatelessWidget {
               ),
             ),
             if (selected) Icon(Icons.check_rounded, color: accent, size: 20),
-            FollowStar(
-              kind: FollowKind.league,
-              id: league.id,
-              dense: true,
-              idleColor: const Color(0xFF64748B),
-            ),
+            if (showStar)
+              FollowStar(
+                kind: FollowKind.league,
+                id: league.id,
+                dense: true,
+                idleColor: const Color(0xFF64748B),
+              ),
           ],
         ),
       ),
