@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:io' show File, Platform;
 
 import 'package:dmrtd/dmrtd.dart';
@@ -93,41 +94,75 @@ class IdCardReader {
     }
   }
 
+  /// NFC anteni telefonun üst kısmında mı (iPhone) yoksa ortada mı.
+  static bool get antennaTop => Platform.isIOS;
+
   /// Kartın nereye konacağı: iPhone'un NFC anteni üst kenarda (kameranın
   /// yanında); Android'de çoğunlukla arka ortada.
   static String get placementHint => Platform.isIOS
       ? 'Kartı iPhone\'un arkasında üst kısma, kameranın hemen altına düz '
             'yaslayın'
-      : 'Kartı telefonun arka ortasına düz yaslayın';
+      : 'Kimliğinizi telefonun arkasına, tam ortaya düz yaslayın';
 
   /// Okuma yarıda koparsa (kart kaydı, temas kesildi) bu kadar kez kendi
   /// kendine yeniden denenir; kullanıcı baştan başlamak zorunda kalmaz.
   static const _attempts = 3;
 
+  /// Kart bu kadar kez [_pollWindow] içinde algılanmazsa okuma bırakılır
+  /// (kullanıcıya çipsiz devam seçeneği sunulur).
+  static const detectTries = 3;
+
+  /// Tek arama turu: kart bu sürede algılanmazsa arama yeniden başlar.
+  static const _pollWindow = Duration(seconds: 5);
+
   /// Çipi okur: önce PACE (destekliyorsa), olmazsa BAC. [onStatus] okuma
   /// adımlarını, [onProgress] ilerlemeyi (0-1) bildirir (Android ekranı;
-  /// iPhone'da sistem penceresinde yüzde yazar). Bağlantı koparsa
-  /// [_attempts] kez yeniden denenir.
+  /// iPhone'da sistem penceresinde yüzde yazar). [onSearching] kart
+  /// aranırken deneme sırasını (1..[detectTries]) bildirir. Kart 5 sn'de
+  /// algılanmazsa arama yeniden başlar; [detectTries] denemede de
+  /// algılanmazsa [IdCardNotDetected]. Bağlantı koparsa [_attempts] kez
+  /// yeniden denenir.
   static Future<IdCardData> readChip(
     IdCardKey key, {
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
+    void Function(int attempt)? onSearching,
   }) async {
-    for (var attempt = 1; ; attempt++) {
+    var interrupts = 0;
+    var searches = 0;
+    var resumed = false;
+    while (true) {
+      if (!resumed) {
+        searches++;
+        onSearching?.call(searches);
+        onStatus?.call(
+          searches == 1
+              ? placementHint
+              : searches < detectTries
+              ? 'Kimlik algılanamadı, yeniden deneniyor ($searches/$detectTries)'
+              : 'Son deneme ($searches/$detectTries)',
+        );
+      }
       try {
         return await _readChipOnce(
           key,
-          attempt: attempt,
+          resumed: resumed,
           onStatus: onStatus,
           onProgress: onProgress,
         );
+      } on _NotDetected {
+        if (resumed || searches >= detectTries) {
+          throw const IdCardNotDetected();
+        }
       } on _ReadInterrupted {
-        if (attempt >= _attempts) {
+        interrupts++;
+        if (interrupts >= _attempts) {
           throw const IdCardError(
             'Okuma yarıda kaldı. Kartı okuma bitene kadar oynatmadan, '
             'telefona tam yaslı tutun ve tekrar deneyin.',
           );
         }
+        resumed = true;
         onProgress?.call(0);
         onStatus?.call('Bağlantı koptu, yeniden deneniyor… kartı sabit tutun');
       }
@@ -136,7 +171,7 @@ class IdCardReader {
 
   static Future<IdCardData> _readChipOnce(
     IdCardKey key, {
-    required int attempt,
+    required bool resumed,
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
   }) async {
@@ -151,34 +186,39 @@ class IdCardReader {
       } catch (_) {}
     }
 
-    // iPhone: sistem penceresi tek oturumda bekler. Android: kart birkaç
-    // saniyede algılanmazsa arama kendiliğinden yeniden başlatılır (bazı
-    // telefonlarda ilk arama kartı hiç görmüyor); toplam süre 45 sn.
+    // Kart 5 sn içinde algılanmazsa arama kapatılır (_NotDetected).
+    // iPhone'da zaman aşımı sistem penceresine uygulanmadığından burada
+    // kesilir ve pencere kapatılır.
     Future<void> connect() async {
-      if (!Platform.isAndroid) {
-        return nfc.connect(
-          timeout: const Duration(seconds: 45),
-          iosAlertMessage: attempt == 1
-              ? '$placementHint ve okuma bitene kadar oynatmayın.'
-              : 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden '
-                    'okunuyor.',
-        );
-      }
-      final deadline = DateTime.now().add(const Duration(seconds: 45));
-      for (var round = 1; ; round++) {
+      if (Platform.isAndroid) {
         try {
           return await nfc.connect(timeout: _pollWindow);
         } catch (e) {
-          if (!_isTimeout(e) || DateTime.now().isAfter(deadline)) rethrow;
-          if (!detected) {
-            onStatus?.call('Kart aranıyor, yeniden denendi ($round)…');
-          }
+          if (_isTimeout(e)) throw const _NotDetected();
+          rethrow;
         }
+      }
+      final f = nfc.connect(
+        timeout: _pollWindow,
+        iosAlertMessage: resumed
+            ? 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden okunuyor.'
+            : '$placementHint ve okuma bitene kadar oynatmayın.',
+      );
+      try {
+        await f.timeout(_pollWindow);
+      } on TimeoutException {
+        f.ignore();
+        try {
+          await FlutterNfcKit.finish(iosErrorMessage: 'Kimlik algılanamadı');
+        } catch (_) {}
+        throw const _NotDetected();
+      } catch (e) {
+        if (_isTimeout(e)) throw const _NotDetected();
+        rethrow;
       }
     }
 
     try {
-      if (attempt == 1) onStatus?.call(placementHint);
       await connect();
       if (!nfc.isConnected()) {
         throw const IdCardError('Kart algılanamadı. Tekrar deneyin.');
@@ -250,6 +290,8 @@ class IdCardReader {
         birthDate: mrz.dateOfBirth,
         tc: tc,
       );
+    } on _NotDetected {
+      rethrow;
     } on IdCardError catch (e) {
       await _close(nfc, e.message);
       rethrow;
@@ -274,10 +316,6 @@ class IdCardReader {
     }
   }
 
-  /// Android'de tek arama turu: kart bu sürede algılanmazsa arama yeniden
-  /// başlatılır.
-  static const _pollWindow = Duration(seconds: 3);
-
   static bool _isTimeout(Object e) {
     final s = e.toString();
     return s.contains('408') || s.toLowerCase().contains('timeout');
@@ -288,6 +326,11 @@ class IdCardReader {
       await nfc.disconnect(iosErrorMessage: message);
     } catch (_) {}
   }
+}
+
+/// Kart arama süresinde algılanmadı.
+class _NotDetected implements Exception {
+  const _NotDetected();
 }
 
 /// Kart algılandıktan sonra okuma koptu (yeniden denenecek).

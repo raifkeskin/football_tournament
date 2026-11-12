@@ -37,7 +37,9 @@ class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
       await AppSettings.setIbrazSetting(key, on);
     } catch (e) {
       if (mounted) setState(() => _ibraz = prev);
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')),
+      );
     }
   }
 
@@ -69,7 +71,9 @@ class _AdminIdentityScreenState extends State<AdminIdentityScreen> {
     try {
       await AppSettings.setIdentityVerificationEnabled(on);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
