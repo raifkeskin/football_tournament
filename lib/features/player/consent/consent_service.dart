@@ -49,7 +49,7 @@ class ConsentService {
           .from('consent_items')
           .select('key, title, checkbox, body, required')
           .eq('version', version)
-          .order('sort_order');
+          .order('sort_order', ascending: true);
       final items = [for (final r in rows) ConsentItem.fromRow(r)];
       if (items.isEmpty) return cached ?? kFallbackConsentDoc;
       return _docCache = ConsentDoc(version: version, items: items);
