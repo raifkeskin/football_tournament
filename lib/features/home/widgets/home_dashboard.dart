@@ -37,6 +37,7 @@ import '../../admin_panel/admin_panel_screen.dart';
 import '../../match/screens/esame_edit_screen.dart';
 import '../../match/widgets/attendance_card.dart';
 import 'my_week_card.dart';
+import 'season_health_card.dart';
 import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
@@ -1196,6 +1197,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
                   UnassignedRefereesBanner(leagueId: widget.league.id),
                   UnscheduledMatchesBanner(leagueId: widget.league.id),
                 ],
+                if (session.playerId != null &&
+                    SeasonHealthCard.enabledFor(session))
+                  const SeasonHealthCard(),
                 const RefereeHomeCard(),
                 NotifInviteBanner(
                   leagueId: widget.league.id,
