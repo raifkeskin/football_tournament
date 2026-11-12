@@ -28,7 +28,6 @@ class _ConsentScreenState extends State<ConsentScreen> {
   final _service = ConsentService();
   late final ConsentDoc _doc = widget.consents.doc;
   late final Set<String> _granted = {...widget.consents.granted};
-  final Set<String> _expanded = {};
   bool _saving = false;
 
   bool get _requiredOk => _doc.items
@@ -100,57 +99,26 @@ class _ConsentScreenState extends State<ConsentScreen> {
     );
   }
 
+  /// Kutuya dokununca: işaretliyse kaldırır; değilse metni açar, sonuna
+  /// kadar okunup onaylanınca işaretler.
+  Future<void> _toggle(ConsentItem t) async {
+    if (_saving) return;
+    if (_granted.contains(t.key)) {
+      setState(() => _granted.remove(t.key));
+      return;
+    }
+    final ok = await showConsentReadDialog(context, t);
+    if (ok == true && mounted) setState(() => _granted.add(t.key));
+  }
+
   Widget _consentCard(ConsentItem t) {
-    final open = _expanded.contains(t.key);
     final checked = _granted.contains(t.key);
     return AdminFormSection(
       title: t.required ? t.title : '${t.title} (isteğe bağlı)',
       child: AdminFieldGroup(
         children: [
           InkWell(
-            onTap: () => setState(
-              () => open ? _expanded.remove(t.key) : _expanded.add(t.key),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          open ? 'Metni gizle' : 'Metni oku',
-                          style: const TextStyle(
-                            color: kAdminAccent,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        open
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
-                        color: kAdminAccent,
-                      ),
-                    ],
-                  ),
-                  if (open) ...[
-                    const SizedBox(height: 8),
-                    ConsentBodyText(t.body),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          InkWell(
-            onTap: _saving
-                ? null
-                : () => setState(
-                    () =>
-                        checked ? _granted.remove(t.key) : _granted.add(t.key),
-                  ),
+            onTap: _saving ? null : () => _toggle(t),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(4, 6, 14, 6),
               child: Row(
@@ -158,13 +126,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
                   Checkbox(
                     value: checked,
                     activeColor: kAdminAccent,
-                    onChanged: _saving
-                        ? null
-                        : (v) => setState(
-                            () => v == true
-                                ? _granted.add(t.key)
-                                : _granted.remove(t.key),
-                          ),
+                    onChanged: _saving ? null : (_) => _toggle(t),
                   ),
                   Expanded(
                     child: Text(
