@@ -63,3 +63,9 @@ Her maddede: **Biz böyle doldurduk** → **Avukata soru**.
   - Henüz yok: lisans listesinde sezon bazlı beyan sütunu; hesabı olmayan oyuncular için kâğıt beyan.
 - Periyodik imha: `retention_purge()` + cron `retention-purge` her ayın 1'i 04:23 UTC; `retention_log`'a yazar. İlk çalıştırma (deneme): silinecek kayıt yok.
 - Metinler buna göre güncellendi: Saklama politikası tablosu (30 gün kimlik eşleşme, 90 gün bekleyen ibraz TC, aylık imha), Sporcu Aydınlatma NFC satırı, avukat dosyası.
+
+## Onay metinleri veritabanında (12 Kasım 2026, akşam)
+- Uygulamadaki onay ekranı metinleri ve kutuları artık sunucudan geliyor (consent_versions + consent_items); değişiklik için mağaza güncellemesi gerekmiyor. Yeni sürüm = yeni satırlar.
+- Sürüm 2026-11-v2 yürürlükte: Sporcu Aydınlatma, Açık Rıza bölüm 2-3-4-6 ve Sağlık ve Risk Beyanı metinleri. Eski (2026-10-v1) onaylar eski sezonlar için geçerli; 2026-11-v2'den sonra açılan sezonların kadrosundakilerden yeni metin isteniyor.
+- Açık Rıza **Bölüm 5 (isteğe bağlı herkese açık ad/istatistik yayını) uygulamaya konmadı**: ad ve istatistikler temel hizmette zaten herkese açık; avukat cevabından sonra karar.
+- **Uygulama boşluğu:** "Sosyal medya ve tanıtım" (photo_social) ve "boy-kilo profilde gösterim" (height_weight) rızaları kaydediliyor ama henüz uygulamada uygulanmıyor (afiş/tanıtımda fotoğraf, profilde boy-kilo rızaya bakmıyor).

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart';
 import 'consent_service.dart';
 
 /// Oyuncu listelerinde (kadro, lisans) onay durumunu bir kez yükler; aynı
@@ -103,6 +104,86 @@ class ConsentChip extends StatelessWidget {
           fontWeight: FontWeight.w800,
         ),
       ),
+    );
+  }
+}
+
+/// Onay metni gövdesi: "## " ile başlayan satır başlık, "• " ile başlayan
+/// satır madde olarak gösterilir; gerisi paragraf.
+class ConsentBodyText extends StatelessWidget {
+  const ConsentBodyText(
+    this.body, {
+    super.key,
+    this.color = Colors.white70,
+    this.fontSize = 13,
+  });
+
+  final String body;
+  final Color color;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = body.trim().split('\n');
+    final children = <Widget>[];
+    for (final raw in lines) {
+      final line = raw.trimRight();
+      if (line.isEmpty) {
+        children.add(const SizedBox(height: 8));
+      } else if (line.startsWith('## ')) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 4),
+            child: Text(
+              line.substring(3),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: fontSize + 0.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        );
+      } else if (line.startsWith('• ')) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '•  ',
+                  style: TextStyle(color: kAdminAccent, fontSize: fontSize),
+                ),
+                Expanded(
+                  child: Text(
+                    line.substring(2),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: fontSize,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              line,
+              style: TextStyle(color: color, fontSize: fontSize, height: 1.4),
+            ),
+          ),
+        );
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 }
