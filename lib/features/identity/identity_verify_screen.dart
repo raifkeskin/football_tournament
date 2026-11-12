@@ -116,9 +116,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   bool _busy = false;
   int _count = 0;
 
-  /// Çip okuma başarısızlık sayısı (her biri 3 iç denemeyle).
-  int _chipFails = 0;
-
   /// Kadroda okutma: sıradaki oyuncu ve son okumanın sonucu.
   int _ti = 0;
   IdScanResult? _scan;
@@ -258,10 +255,24 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     });
   }
 
-  /// Çip okunamadı: arka yüzdeki bilgiyle devam (turuncu tik, onay yok).
+  /// Çip okutulmadan arka yüzdeki bilgiyle devam (turuncu tik, onay yok).
+  /// Önce profilin tam onaylı olmayacağı uyarısı onaylatılır.
   Future<void> _continueChipless() async {
     final key = _key;
     if (key == null || !key.canGoChipless) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Çipsiz devam edilsin mi?',
+      message:
+          'Profiliniz tam onaylı olmayacağından bazı turnuvalara '
+          'katılımınız alınmayabilir. Çipi daha sonra okutarak tam onay '
+          'alabilirsiniz. Onaylıyor musunuz?',
+      confirmLabel: 'ONAYLIYORUM',
+      cancelLabel: 'VAZGEÇ',
+      destructive: false,
+      icon: Icons.warning_amber_rounded,
+    );
+    if (!ok || !mounted) return;
     final card = await showDialog<IdCardData>(
       context: context,
       builder: (_) => _ChiplessDialog(key_: key),
@@ -302,7 +313,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       if (mounted) {
         setState(() {
           _error = e.message;
-          _chipFails++;
         });
       }
     } catch (e) {
@@ -630,13 +640,10 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                   busy: _busy,
                   onPressed: _scanBack,
                 ),
-                const SizedBox(height: 6),
-                TextButton(
+                const SizedBox(height: 10),
+                AdminSecondaryButton(
+                  label: 'OKUNMUYORSA ELLE GİR',
                   onPressed: _busy ? null : _manualKey,
-                  child: const Text(
-                    'Okunmuyorsa bilgileri elle girin',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
                 ),
               ],
             )
@@ -676,6 +683,13 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                     icon: Icons.nfc_rounded,
                     onPressed: _readChip,
                   ),
+                  if (_canChipless && _error == null) ...[
+                    const SizedBox(height: 10),
+                    AdminSecondaryButton(
+                      label: 'ÇİPSİZ DEVAM ET',
+                      onPressed: _continueChipless,
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -782,30 +796,26 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           ],
         ),
         if (_key != null && _card == null) ...[
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: _busy ? null : _readChip,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Tekrar dene'),
-            ),
+          const SizedBox(height: 12),
+          AdminPrimaryButton(
+            label: 'TEKRAR DENE',
+            icon: Icons.refresh_rounded,
+            onPressed: _busy ? null : _readChip,
           ),
-          if (widget.allowChipless &&
-              _chipFails >= 1 &&
-              (_key?.canGoChipless ?? false))
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _busy ? null : _continueChipless,
-                icon: const Icon(Icons.badge_outlined),
-                label: const Text('Çipsiz devam et'),
-              ),
+          if (_canChipless) ...[
+            const SizedBox(height: 10),
+            AdminSecondaryButton(
+              label: 'ÇİPSİZ DEVAM ET',
+              onPressed: _busy ? null : _continueChipless,
             ),
+          ],
         ],
       ],
     ),
   );
+
+  bool get _canChipless =>
+      widget.allowChipless && (_key?.canGoChipless ?? false);
 
   /// Ekranda kimlik bilgileri maskeli: seri noyu ve tarihlerin gün/ayını
   /// yanınızdaki göremez.
