@@ -303,41 +303,51 @@ def story_overlay(c, out, logos, zoom=1.0):
     d.text((x + w_h + w_d, y), as_, font=sf, fill=GOLD if c['side'] == 'away' else WHITE)
 
     # B: alt imza yok; filigran videonun köşesinde (logo + yazı)
-    # Sponsor bandı: beyaz şerit, ana sponsorlar büyük, alt sponsorlar küçük.
+    # Sponsor bandı: beyaz şerit, ana sponsorlar büyük, alt sponsorlar küçük; altlarında adları.
+    # Skor kutusu (y 1548-1640) ile bant arasında boşluk kalsın diye bant 180 px yüksekliktedir.
     sp = c.get('sponsor_logos') or {}
-    mains, subs = sp.get('main', [])[:3], sp.get('sub', [])[:5]
+    mains = sp.get('main', [])[:3]
+    subs = sp.get('sub', [])
+    if len(subs) > 5:  # 5'ten fazla alt sponsor: her kesit sıradaki 5'liyi gösterir (adil dönüşüm)
+        st = sum(ord(ch) for ch in str(c.get('id', ''))) % len(subs)
+        subs = [subs[(st + i) % len(subs)] for i in range(5)]
     if mains or subs:
         x0, x1, y1 = 40, W - 40, 1868
-        mh, sh = 86, 38
-        y0 = y1 - 16 - (mh + 14 if mains else 0) - (sh + 8 if subs else 0)
+        mh, sh = 62, 30
+        y0 = y1 - 10 - (mh + 36 if mains else 0) - (8 + sh + 29 if subs else 0) - 10
         d.rounded_rectangle((x0, y0, x1, y1), 28, fill=(255, 255, 255, 255))
+        fm = font('BarlowCondensed-ExtraBold.ttf', 30)
+        fsn = font('BarlowCondensed-ExtraBold.ttf', 22)
 
         def fit(path, bw, bh):
             lg = Image.open(path).convert('RGBA')
             lg.thumbnail((bw, bh), Image.LANCZOS)
             return lg
 
-        y = y0 + 12
+        def label(text, cx, y, fo, fill, maxw):
+            while d.textlength(text, font=fo) > maxw and len(text) > 3:
+                text = text[:-2].rstrip() + '…'
+            d.text((cx - d.textlength(text, font=fo) / 2, y), text, font=fo, fill=fill)
+
+        y = y0 + 10
         if mains:
-            ml = [fit(pth, 300, mh) for pth in mains]
-            gap = 70
-            tot = sum(l.width for l in ml) + gap * (len(ml) - 1)
-            x = (W - tot) // 2
-            for l in ml:
-                im.alpha_composite(l, (x, y + (mh - l.height) // 2))
-                x += l.width + gap
-            y += mh + 8
+            cw = (x1 - x0 - 60) // len(mains)
+            for i, (pth, nm) in enumerate(mains):
+                cx = x0 + 30 + cw * i + cw // 2
+                l = fit(pth, 280, mh)
+                im.alpha_composite(l, (int(cx - l.width / 2), y + (mh - l.height) // 2))
+                label(nm, cx, y + mh + 2, fm, (12, 18, 32, 255), cw - 20)
+            y += mh + 36
         if mains and subs:
             d.line((x0 + 40, y, x1 - 40, y), fill=(226, 232, 240, 255), width=2)
             y += 8
         if subs:
-            sl = [fit(pth, 160, sh) for pth in subs]
-            gap = 46
-            tot = sum(l.width for l in sl) + gap * (len(sl) - 1)
-            x = (W - tot) // 2
-            for l in sl:
-                im.alpha_composite(l, (x, y + (sh - l.height) // 2))
-                x += l.width + gap
+            cw = (x1 - x0 - 60) // len(subs)
+            for i, (pth, nm) in enumerate(subs):
+                cx = x0 + 30 + cw * i + cw // 2
+                l = fit(pth, min(150, cw - 20), sh)
+                im.alpha_composite(l, (int(cx - l.width / 2), y + (sh - l.height) // 2))
+                label(nm, cx, y + sh + 3, fsn, (71, 85, 105, 255), cw - 12)
 
     # Video köşe filigranı: maç görüntüsünün sağ alt köşesi (make ile aynı yer).
     vh = 1080 * zoom * 9 / 16
@@ -402,13 +412,13 @@ def make(c, tmp, fmt=FMT_HQ, crf='17', preset='slow', zoom=1.18):
              for k in ('league', 'home', 'away')}
     c['sponsor_logos'] = {'main': [], 'sub': []}
     try:
-        raw = psql("select coalesce(json_agg(json_build_object('t', tier, 'u', logo_url) "
+        raw = psql("select coalesce(json_agg(json_build_object('t', tier, 'u', logo_url, 'n', name) "
                    "order by (tier = 'main') desc, sort_order), '[]') from public.sponsors "
                    f"where league_id = {q(c['league_id'])} and is_active and coalesce(logo_url, '') <> ''")
         for i, sp in enumerate(json.loads(raw or '[]')):
             pth = fetch(sp['u'], os.path.join(tmp, f'sp{i}.png'))
             if pth:
-                c['sponsor_logos']['main' if sp['t'] == 'main' else 'sub'].append(pth)
+                c['sponsor_logos']['main' if sp['t'] == 'main' else 'sub'].append((pth, (sp.get('n') or '')))
     except Exception as e:
         log('sponsor logoları alınamadı:', str(e)[-120:])
     ov, ovw = os.path.join(tmp, 'story.png'), os.path.join(tmp, 'wide.png')
