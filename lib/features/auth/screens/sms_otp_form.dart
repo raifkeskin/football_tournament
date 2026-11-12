@@ -1,3 +1,5 @@
+import '../../../core/widgets/otp_countdown.dart';
+import '../../../core/utils/sms_code_autofill.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -41,6 +43,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
   final _pass1Focus = FocusNode();
   final _pass2Focus = FocusNode();
 
+  int _codeSerial = 0;
   bool _busy = false;
   String? _error;
   bool _showRegisterLink = false;
@@ -50,8 +53,14 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
   int _resendLeft = 0;
   Timer? _timer;
 
+  void _fillCode(String code) {
+    if (!mounted || _sentTo == null) return;
+    _codeController.text = code;
+  }
+
   @override
   void dispose() {
+    SmsCodeAutofill.stop();
     _timer?.cancel();
     _phoneController.dispose();
     _codeController.dispose();
@@ -106,6 +115,8 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
             _sentTo = raw10;
             _codeController.clear();
             _startResendTimer();
+            _codeSerial++;
+            SmsCodeAutofill.listen(_fillCode);
           case SmsOtpSendOutcome.tooSoon:
             _error = 'Yeni kod için biraz bekleyin.';
           case SmsOtpSendOutcome.tooMany:
@@ -454,6 +465,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
           ],
         ),
       ),
+      OtpCountdown(key: ValueKey(_codeSerial)),
       AdminFormSection(
         title: widget.isReset ? 'Yeni Şifre' : 'Şifre',
         child: AdminFieldGroup(

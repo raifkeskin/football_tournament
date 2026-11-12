@@ -242,7 +242,7 @@ class _MainNavigatorState extends State<MainNavigator> {
           : _aktifSekme == 0 && HomeSearch.visible(context)
           ? BandIconButton(
               icon: Icons.search_rounded,
-              size: 36,
+              size: 34,
               tooltip: 'Ara',
               onTap: () => SearchScreen.open(context),
             )

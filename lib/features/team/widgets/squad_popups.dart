@@ -452,7 +452,7 @@ Future<String?> showSquadPlayerActions({
   );
 }
 
-/// Forma numarası popup'ı: yazarak ya da 1-99 arasından seçerek. Dolu
+/// Forma numarası popup'ı: yazarak ya da 1-18 (Hepsini göster: 1-99) arasından seçerek. Dolu
 /// numaralar seçilemez. Boş metin = numarayı kaldır; null = vazgeçildi.
 Future<String?> showSquadJerseyPicker({
   required BuildContext context,
@@ -463,6 +463,8 @@ Future<String?> showSquadJerseyPicker({
 }) {
   final controller = TextEditingController(text: current);
   String? error;
+  // Varsayılan 1-18; mevcut numara daha büyükse hepsi açık gelir.
+  var showAll = (int.tryParse(current) ?? 0) > 18;
   final result = showDialog<String>(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -520,7 +522,9 @@ Future<String?> showSquadJerseyPicker({
           const SizedBox(height: 14),
           TextField(
             controller: controller,
-            keyboardType: TextInputType.number,
+            // signed: iOS'ta "Tamam" (bitti) tuşu olan sayı klavyesi.
+            keyboardType: const TextInputType.numberWithOptions(signed: true),
+            textInputAction: TextInputAction.done,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(3),
@@ -584,7 +588,7 @@ Future<String?> showSquadJerseyPicker({
               mainAxisSpacing: 6,
               crossAxisSpacing: 6,
               children: [
-                for (var v = 1; v <= 99; v++)
+                for (var v = 1; v <= (showAll ? 99 : 18); v++)
                   _NumberCell(
                     value: v,
                     taken: taken.contains(v),
@@ -598,10 +602,23 @@ Future<String?> showSquadJerseyPicker({
               ],
             ),
           ),
+          if (!showAll)
+            Center(
+              child: TextButton(
+                onPressed: () => setState(() => showAll = true),
+                child: const Text(
+                  'Hepsini göster',
+                  style: TextStyle(
+                    color: kAdminAccent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 12),
           Row(
             children: [
-              if (current.isNotEmpty) ...[
+              if (picked.isNotEmpty) ...[
                 Expanded(
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
@@ -614,9 +631,13 @@ Future<String?> showSquadJerseyPicker({
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () => Navigator.pop(ctx, ''),
+                    // Yalnız alanı boşaltır; KAYDET ile numara kaldırılır.
+                    onPressed: () => setState(() {
+                      controller.clear();
+                      error = null;
+                    }),
                     child: const Text(
-                      'Numarayı kaldır',
+                      'Temizle',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),

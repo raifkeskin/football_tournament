@@ -162,8 +162,9 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
-    // Gol videosunu WhatsApp'ta açar (sohbet ya da Durum seçimi WhatsApp'ta);
-    // WhatsApp yoksa WhatsApp Business; ikisi de yoksa false.
+    // Gol videosunu WhatsApp'ta BELGE olarak açar: video türüyle gönderilince
+    // WhatsApp yeniden sıkıştırıp kaliteyi düşürüyor; belge olarak dosya
+    // olduğu gibi gider. WhatsApp yoksa WhatsApp Business; ikisi de yoksa false.
     private fun shareVideoToWhatsApp(bytes: ByteArray): Boolean {
         val dir = File(cacheDir, "ig_share").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
@@ -172,7 +173,7 @@ class MainActivity : FlutterFragmentActivity() {
         val uri = FileProvider.getUriForFile(this, "$packageName.igshare", file)
         for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b")) {
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "video/mp4"
+                type = "application/octet-stream"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 setPackage(pkg)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

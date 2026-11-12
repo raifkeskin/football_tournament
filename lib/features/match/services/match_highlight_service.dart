@@ -224,6 +224,62 @@ class MatchHighlightService {
     return (rows as List).length;
   }
 
+  /// Maçın gol kayıtları (dakika sırasıyla): kesiti hangi gole bağlayacağını
+  /// seçmek için.
+  static Future<List<HighlightGoal>> goalEvents(String matchId) async {
+    final rows = await _db
+        .from('match_events')
+        .select(
+          'id, team_id, minute, added_minute, player_id, is_own_goal, '
+          'created_at',
+        )
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal');
+    final list = List<Map<String, dynamic>>.from(rows);
+    int n(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+    list.sort((a, b) {
+      final c = n(a['minute']).compareTo(n(b['minute']));
+      if (c != 0) return c;
+      final d = n(a['added_minute']).compareTo(n(b['added_minute']));
+      return d != 0
+          ? d
+          : (a['created_at'] ?? '').toString().compareTo(
+              (b['created_at'] ?? '').toString(),
+            );
+    });
+    final pids = {
+      for (final r in list)
+        if ((r['player_id'] ?? '').toString().isNotEmpty)
+          r['player_id'].toString(),
+    };
+    final names = <String, String>{};
+    if (pids.isNotEmpty) {
+      final ps = await _db
+          .from('players')
+          .select('id, name, surname')
+          .inFilter('id', pids.toList());
+      for (final p in ps) {
+        names[p['id'].toString()] = '${p['name'] ?? ''} ${p['surname'] ?? ''}'
+            .trim();
+      }
+    }
+    return [
+      for (var i = 0; i < list.length; i++)
+        HighlightGoal(
+          id: list[i]['id'].toString(),
+          order: i + 1,
+          teamId: (list[i]['team_id'] ?? '').toString(),
+          minute: n(list[i]['minute']),
+          addedMinute: n(list[i]['added_minute']),
+          playerId: (list[i]['player_id'] ?? '').toString().isEmpty
+              ? null
+              : list[i]['player_id'].toString(),
+          playerName: names[(list[i]['player_id'] ?? '').toString()] ?? '',
+          ownGoal: list[i]['is_own_goal'] == true,
+        ),
+    ];
+  }
+
   /// Maç olayına bağlı gol kesitlerinde, gol kaydedildiği andaki skoru verir.
   static Future<Map<String, String>> goalScores({
     required String matchId,
@@ -292,11 +348,20 @@ class MatchHighlightService {
   /// yeniden denenecek; null yok.
   static Future<String?> autoStatus(String matchId) async {
     try {
-      final v = await _db.rpc(
-        'highlights_auto_status',
-        params: {'p_match_id': matchId},
-      );
-      return v?.toString();
+      // running / pending / retry / failed (v2); v2 yoksa eski sorgu.
+      try {
+        final v = await _db.rpc(
+          'highlights_auto_status_v2',
+          params: {'p_match_id': matchId},
+        );
+        return v?.toString();
+      } on PostgrestException {
+        final v = await _db.rpc(
+          'highlights_auto_status',
+          params: {'p_match_id': matchId},
+        );
+        return v?.toString();
+      }
     } catch (_) {
       return null;
     }
@@ -361,8 +426,16 @@ class MatchHighlightService {
     String? status,
     String? description,
     String? playerId,
+    String? matchEventId,
+    int? minute,
+    int? addedMinute,
+    String? teamId,
   }) async {
     final patch = <String, dynamic>{
+      'match_event_id': ?matchEventId,
+      'minute': ?minute,
+      'added_minute': ?addedMinute,
+      'team_id': ?teamId,
       'start_sec': ?startSec,
       'end_sec': ?endSec,
       if (description != null)
@@ -371,7 +444,10 @@ class MatchHighlightService {
       'status': ?status,
       // Sorumlunun dokunduğu kesit (onay, düzeltme, kaldırma) YZ yeniden
       // çalışınca silinmez.
-      if (status != null || startSec != null || endSec != null) ...{
+      if (status != null ||
+          startSec != null ||
+          endSec != null ||
+          matchEventId != null) ...{
         'reviewed_by': _db.auth.currentUser?.id,
         'reviewed_at': DateTime.now().toUtc().toIso8601String(),
       },
@@ -577,6 +653,31 @@ class MatchHighlightService {
     });
   }
 
+  /// Sunucudan dönen ham hata metnini kullanıcıya Türkçe bir açıklamaya
+  /// çevirir; ham metin gösterilmez.
+  static String friendlyError(String? raw) {
+    final e = (raw ?? '').toLowerCase();
+    if (e.isEmpty) return 'beklenmeyen bir hata oluştu.';
+    if (e.contains('permission') || e.contains('403')) {
+      return 'yayın analiz servisi tarafından okunamadı (erişim izni yok).';
+    }
+    if (e.contains('quota') || e.contains('429') || e.contains('limit')) {
+      return 'analiz kotası doldu; biraz sonra tekrar denenecek.';
+    }
+    if (e.contains('timeout') ||
+        e.contains('timed out') ||
+        e.contains('deadline')) {
+      return 'analiz zaman aşımına uğradı.';
+    }
+    if (e.contains('not found') || e.contains('404') || e.contains('private')) {
+      return 'yayın videosuna ulaşılamadı (silinmiş ya da gizli olabilir).';
+    }
+    if (e.contains('budget') || e.contains('bütçe')) {
+      return 'bu maç için analiz bütçesi doldu.';
+    }
+    return 'beklenmeyen bir hata oluştu.';
+  }
+
   static void _notifyDone(MatchHighlightJob? j, String? label) {
     final ctx = appNavigatorKey.currentContext;
     if (ctx == null || j == null) return;
@@ -588,7 +689,7 @@ class MatchHighlightService {
           ? 'Gol analizi bitti$who: $n gol kesiti bulundu, onay bekliyor.'
           : 'Gol analizi bitti$who: gol kesiti bulunamadı.';
     } else if (j.status == 'error') {
-      msg = 'Gol analizi tamamlanamadı$who: ${j.error ?? 'bilinmeyen hata'}';
+      msg = 'Gol analizi tamamlanamadı$who: ${friendlyError(j.error)}';
     } else {
       return;
     }
@@ -598,4 +699,29 @@ class MatchHighlightService {
         SnackBar(content: Text(msg), duration: const Duration(seconds: 6)),
       );
   }
+}
+
+/// Maçın bir gol kaydı (kesiti gole bağlarken seçilir).
+class HighlightGoal {
+  const HighlightGoal({
+    required this.id,
+    required this.order,
+    required this.teamId,
+    required this.minute,
+    required this.addedMinute,
+    required this.playerId,
+    required this.playerName,
+    required this.ownGoal,
+  });
+
+  final String id;
+
+  /// Maçtaki kaçıncı gol (dakika sırasıyla).
+  final int order;
+  final String teamId;
+  final int minute;
+  final int addedMinute;
+  final String? playerId;
+  final String playerName;
+  final bool ownGoal;
 }

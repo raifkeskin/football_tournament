@@ -18,7 +18,10 @@ import '../../tournament/screens/formation_tab.dart'
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_name.dart';
-import '../../../core/widgets/admin_page.dart' show showAdminConfirmDialog;
+import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart'
+    show showAdminConfirmDialog, showAdminPopup;
+import '../../team/screens/team_squad_screen.dart' show BirthDateInputFormatter;
 import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/verified_badge.dart';
@@ -242,59 +245,129 @@ class _PlayerCardState extends State<PlayerCard> {
     final surname = TextEditingController(
       text: (row['surname'] ?? '').toString(),
     );
-    DateTime? birth = DateTime.tryParse((row['birth_date'] ?? '').toString());
-    final saved = await showDialog<bool>(
+    final b0 = DateTime.tryParse((row['birth_date'] ?? '').toString());
+    final birthText = TextEditingController(
+      text: b0 == null ? '' : DateFormat('dd-MM-yyyy').format(b0),
+    );
+    DateTime? birth = b0;
+    // Uygulamanın standart popup'ı (Futbolcu Güncelle ile aynı tasarım).
+    final saved = await showAdminPopup<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: const Text('Futbolcu bilgileri'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Ad'),
+        builder: (ctx, setD) {
+          Widget row(
+            IconData icon,
+            String label,
+            TextEditingController c, {
+            String? hint,
+            Widget? trailing,
+            bool date = false,
+          }) => AdminFieldRow(
+            icon: icon,
+            label: label,
+            trailing: trailing,
+            child: TextField(
+              controller: c,
+              keyboardType: date ? TextInputType.number : TextInputType.name,
+              inputFormatters: date ? [BirthDateInputFormatter()] : null,
+              textCapitalization: date
+                  ? TextCapitalization.none
+                  : TextCapitalization.words,
+              onChanged: date
+                  ? (v) {
+                      try {
+                        birth = v.length == 10
+                            ? DateFormat('dd-MM-yyyy').parseStrict(v)
+                            : null;
+                      } catch (_) {
+                        birth = null;
+                      }
+                    }
+                  : null,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
               ),
-              TextField(
-                controller: surname,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Soyad'),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.cake_outlined),
-                label: Text(
-                  birth == null
-                      ? 'Doğum tarihi seç'
-                      : DateFormat('dd.MM.yyyy').format(birth!),
+              decoration: adminInlineInputDecoration(hint: hint ?? label),
+            ),
+          );
+          return AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(ctx, false),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: AdminDialogHeader(
+                    icon: Icons.manage_accounts_rounded,
+                    title: 'Futbolcu Güncelle',
+                  ),
                 ),
-                onPressed: () async {
-                  final d = await showDatePicker(
-                    context: ctx,
-                    initialDate: birth ?? DateTime(1985),
-                    firstDate: DateTime(1930),
-                    lastDate: DateTime.now(),
-                  );
-                  if (d != null) setD(() => birth = d);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Vazgeç'),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: AdminFormSection(
+                      title: 'Kimlik',
+                      child: AdminFieldGroup(
+                        children: [
+                          row(Icons.person_outline_rounded, 'Ad', name),
+                          row(Icons.person_outline_rounded, 'Soyad', surname),
+                          row(
+                            Icons.cake_outlined,
+                            'Doğum Tarihi',
+                            birthText,
+                            hint: 'GG-AA-YYYY',
+                            date: true,
+                            trailing: IconButton(
+                              icon: const Icon(
+                                Icons.calendar_month_outlined,
+                                color: Colors.white54,
+                              ),
+                              tooltip: 'Takvimden seç',
+                              onPressed: () async {
+                                final d = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: birth ?? DateTime(1985),
+                                  firstDate: DateTime(1930),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (d == null) return;
+                                setD(() {
+                                  birth = d;
+                                  birthText.text = DateFormat(
+                                    'dd-MM-yyyy',
+                                  ).format(d);
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: AdminPrimaryButton(
+                    label: 'GÜNCELLE',
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Kaydet'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
     if (saved != true) return;
+    if (birthText.text.trim().isNotEmpty && birth == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Doğum tarihi GG-AA-YYYY olmalı.')),
+      );
+      return;
+    }
     try {
       await Supabase.instance.client.rpc(
         'player_edit_basic',
@@ -1037,6 +1110,8 @@ class _PlayerCardState extends State<PlayerCard> {
     // Sezon başına oynadığı takım(lar); bu sezonun armaları için id ve logo.
     final teamsBySeason = <String, List<String>>{};
     final teamIdBySeason = <String, String>{};
+    // Transfer döneminde aynı sezonda iki takımın kadrosunda olanlar için.
+    final extraActiveTeams = <String, Set<String>>{};
     final teamName = <String, String>{};
     final teamLogo = <String, String>{};
     final teamShort = <String, String>{};
@@ -1068,6 +1143,9 @@ class _PlayerCardState extends State<PlayerCard> {
         final list = teamsBySeason.putIfAbsent(sid, () => []);
         if (!list.contains(n)) list.add(n);
         // Sezon içinde takım değiştirdiyse güncel (aktif) kayıt.
+        if (l['is_active'] != false) {
+          extraActiveTeams.putIfAbsent(sid, () => {}).add(tid);
+        }
         if (l['is_active'] != false || !teamIdBySeason.containsKey(sid)) {
           teamIdBySeason[sid] = tid;
         }
@@ -1292,6 +1370,10 @@ class _PlayerCardState extends State<PlayerCard> {
         teamIdBySeason[sid] ?? '',
         totalsBySeason[sid] ?? const _StatTotals(),
       );
+      for (final tid in extraActiveTeams[sid] ?? const <String>{}) {
+        if (tid == teamIdBySeason[sid]) continue;
+        addCareer(sid, tid, const _StatTotals());
+      }
     }
     final careerRows = career.values.toList()
       ..sort((a, b) {

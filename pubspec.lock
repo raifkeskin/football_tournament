@@ -1275,6 +1275,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  smart_auth:
+    dependency: "direct main"
+    description:
+      name: smart_auth
+      sha256: c9f8a0927f5e22ba7f823f0cfe9233d6304176fd0fbecda9fd6ed612c4f7111b
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.0.0"
   source_map_stack_trace:
     dependency: "direct dev"
     description:

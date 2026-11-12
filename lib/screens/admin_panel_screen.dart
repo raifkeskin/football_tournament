@@ -18,6 +18,7 @@ import '../features/auth/screens/admin_otp_monitor_screen.dart';
 import '../features/stats/admin_stats_screen.dart';
 import '../features/stats/admin_cutout_pending_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
+import '../features/identity/admin_registrations_screen.dart';
 import '../features/identity/admin_identity_screen.dart';
 import '../features/tournament_request/admin_tournament_requests_screen.dart';
 import '../features/referees/admin_referees_screen.dart';
@@ -235,6 +236,23 @@ class AdminPanelWidget extends StatelessWidget {
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'AdminIdentityScreen'),
                 builder: (_) => const AdminIdentityScreen(),
+              ),
+            );
+          },
+        ),
+      // Yeni hesaplar (en yeni üstte): taraftar, futbolcu, sorumlu.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Kayıtlar',
+          renkler: const [Color(0xFF34D399), Color(0xFF059669)],
+          ikon: Icons.how_to_reg_rounded,
+          resimYolu: 'assets/images/admin_team.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminRegistrationsScreen'),
+                builder: (_) => const AdminRegistrationsScreen(),
               ),
             );
           },

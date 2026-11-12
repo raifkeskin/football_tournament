@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/friendly_error.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -137,7 +138,7 @@ Future<void> showLeagueCodeDialog(BuildContext context) async {
     await showAdminInfoDialog(
       context: context,
       title: 'Turnuva açılamadı',
-      message: e.toString().replaceFirst('Exception: ', ''),
+      message: friendlyErrorText(e),
     );
     return;
   }
@@ -149,7 +150,7 @@ Future<void> showLeagueCodeDialog(BuildContext context) async {
     await showAdminInfoDialog(
       context: context,
       title: 'Turnuva seçilemedi',
-      message: e.toString().replaceFirst('Exception: ', ''),
+      message: friendlyErrorText(e),
     );
     return;
   }

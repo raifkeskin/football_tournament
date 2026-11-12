@@ -23,6 +23,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -37,8 +38,9 @@ ARCHIVE_DIR = os.environ.get(
 DRIVE_ROOTS = glob.glob(os.path.expanduser(
     '~/Library/CloudStorage/GoogleDrive-*/*/LigMasasi'))
 BREW = '/opt/homebrew/bin'
-LEAD, LENGTH = 3, 20  # özetteki başlangıçtan 3 sn önce, 20 sn
+LEAD, LENGTH = 0, 20  # özetteki başlangıç (gol - 12 sn) → 20 sn: golden 12 sn önce, 8 sn sonra
 MAX_TRIES = 3
+PAUSE_SEC = 120  # kesitler arası bekleme (saniye)
 
 
 def log(*a):
@@ -127,7 +129,7 @@ select json_agg(json_build_object(
   'id', h.id, 'match_id', h.match_id, 'video_id', h.video_id,
   'start', h.start_sec, 'minute', h.minute, 'added', h.added_minute,
   'week', h.week, 'date', h.match_date,
-  'league', l.name, 'league_logo', l.logo_url,
+  'league', l.name, 'league_logo', l.logo_url, 'league_id', h.league_id,
   'home', ht.name, 'away', at.name,
   'home_logo', ht.logo_url, 'away_logo', at.logo_url,
   'home_color', ht.first_color, 'away_color', at.first_color,
@@ -265,52 +267,72 @@ def story_overlay(c, out, logos, zoom=1.0):
     # hikâyeyi paylaşır, asist yapanın adı da görünür).
     assist = (c.get('assist') or '').upper() if c.get('scorer') else ''
     minute = f"{c['minute']}+{c['added']}'" if c.get('added') else f"{c['minute']}'"
-    ctext(1290, 'GOL!', font('BarlowCondensed-ExtraBoldItalic.ttf', 160), GOLD)
+    ctext(1282, 'GOL!', font('BarlowCondensed-ExtraBoldItalic.ttf', 128), GOLD)
     who = f"{minute}  {c['scorer']}" if c.get('scorer') else f"{minute}  {short(c['team'])}"
-    fo = font('BarlowCondensed-ExtraBold.ttf', 72 if assist else 76)
+    fo = font('BarlowCondensed-ExtraBold.ttf', 56 if assist else 60)
     if d.textlength(who, font=fo) > W - 80:
-        fo = font('BarlowCondensed-ExtraBold.ttf', 60)
-    ctext(1458 if assist else 1470, who, fo, WHITE)
+        fo = font('BarlowCondensed-ExtraBold.ttf', 48)
+    ctext(1412 if assist else 1424, who, fo, WHITE)
     if assist:
         GREEN = (52, 211, 153, 255)
-        tag, tf = 'ASİST', font('BarlowCondensed-ExtraBold.ttf', 34)
-        nf = font('BarlowCondensed-ExtraBold.ttf', 44)
+        tag, tf = 'ASİST', font('BarlowCondensed-ExtraBold.ttf', 28)
+        nf = font('BarlowCondensed-ExtraBold.ttf', 36)
         tw, nw = d.textlength(tag, font=tf), d.textlength(assist, font=nf)
         x = (W - (tw + 28 + 16 + nw)) / 2
-        y = 1534
-        d.rounded_rectangle((x, y + 4, x + tw + 28, y + 50), 10, outline=GREEN, width=3)
-        d.text((x + 14, y + 8), tag, font=tf, fill=GREEN)
+        y = 1486
+        d.rounded_rectangle((x, y + 3, x + tw + 28, y + 41), 9, outline=GREEN, width=3)
+        d.text((x + 14, y + 5), tag, font=tf, fill=GREEN)
         d.text((x + tw + 28 + 16, y), assist, font=nf, fill=MUTED)
 
     # Golle gelen skor: iki takımın logosu arasında; golü atan tarafın
     # sayısı altın rengi.
-    sf = font('BarlowCondensed-ExtraBold.ttf', 92)
+    sf = font('BarlowCondensed-ExtraBold.ttf', 74)
     hs, as_ = str(c['rh']), str(c['ra'])
     dash = ' - '
     w_h, w_d, w_a = (d.textlength(t, font=sf) for t in (hs, dash, as_))
     total = w_h + w_d + w_a
     x = (W - total) / 2
-    y = 1590 if assist else 1565
-    pad = 26
-    d.rounded_rectangle((x - 110 - pad, y - 4, x + total + 110 + pad, y + 112),
-                        radius=58, fill=(11, 18, 32, 190), outline=(226, 184, 69, 140), width=2)
-    logo(logos['home'], x - 60, y + 54, 76)
-    logo(logos['away'], x + total + 60, y + 54, 76)
+    y = 1548 if assist else 1530
+    pad = 22
+    d.rounded_rectangle((x - 92 - pad, y - 4, x + total + 92 + pad, y + 92),
+                        radius=48, fill=(11, 18, 32, 190), outline=(226, 184, 69, 140), width=2)
+    logo(logos['home'], x - 50, y + 44, 62)
+    logo(logos['away'], x + total + 50, y + 44, 62)
     d.text((x, y), hs, font=sf, fill=GOLD if c['side'] == 'home' else WHITE)
     d.text((x + w_h, y), dash, font=sf, fill=MUTED)
     d.text((x + w_h + w_d, y), as_, font=sf, fill=GOLD if c['side'] == 'away' else WHITE)
 
-    # Lig Masası imzası
-    fb = font('BarlowCondensed-ExtraBold.ttf', 62)
-    tw = d.textlength('LİG MASASI', font=fb)
-    x0 = (W - (90 + 16 + tw)) / 2
-    logo(APP_LOGO, x0 + 45, 1757, 90)
-    d.text((x0 + 106, 1720), 'LİG MASASI', font=fb, fill=WHITE)
+    # B: alt imza yok; filigran videonun köşesinde (logo + yazı)
+    # Sponsor bandı: beyaz şerit, her golde TEK sponsor (büyük logo + ad).
+    # Sıra: ana sponsorlar, sonra alt sponsorlar, sonra yine ana sponsorlar (maçtaki gol sırasına göre).
+    # Bant skor kutusunun (y 1548-1640) altında başlar.
+    sp = c.get('sponsor_logos') or {}
+    allsp = sp.get('main', []) + sp.get('sub', [])
+    if allsp:
+        pth, nm = allsp[int(c.get('sponsor_rank') or 0) % len(allsp)]
+        x0, x1, y0, y1 = 40, W - 40, 1664, 1868
+        d.rounded_rectangle((x0, y0, x1, y1), 28, fill=(255, 255, 255, 255))
+        lg = Image.open(pth).convert('RGBA')
+        lg.thumbnail((420, 104), Image.LANCZOS)
+        im.alpha_composite(lg, (int(W / 2 - lg.width / 2), y0 + 14 + (104 - lg.height) // 2))
+        size = 50
+        while size > 28 and d.textlength(nm, font=font('BarlowCondensed-ExtraBold.ttf', size)) > x1 - x0 - 60:
+            size -= 2
+        fo = font('BarlowCondensed-ExtraBold.ttf', size)
+        d.text((W / 2 - d.textlength(nm, font=fo) / 2, y0 + 14 + 104 + 4), nm, font=fo, fill=(12, 18, 32, 255))
 
     # Video köşe filigranı: maç görüntüsünün sağ alt köşesi (make ile aynı yer).
     vh = 1080 * zoom * 9 / 16
     bottom = (H + vh) / 2 if zoom == 1 else 545 + (735 + vh) / 2
-    logo(APP_LOGO, W - 22 - 39, bottom - 18 - 39, 78, alpha=0.9)
+    # Ortada: logo + LİG MASASI, videonun alt kenarında
+    fw = font('BarlowCondensed-ExtraBold.ttf', 46)
+    tt = 'LİG MASASI'
+    tw2 = d.textlength(tt, font=fw)
+    gx = (W - (78 + 14 + tw2)) / 2
+    cy = bottom - 20 - 39
+    logo(APP_LOGO, gx + 39, cy, 78, alpha=0.92)
+    d.text((gx + 92 + 2, cy - 26 + 2), tt, font=fw, fill=(0, 0, 0, 150))
+    d.text((gx + 92, cy - 26), tt, font=fw, fill=(255, 255, 255, 235))
     im.save(out)
 
 
@@ -360,6 +382,24 @@ def make(c, tmp, fmt=FMT_HQ, crf='17', preset='slow', zoom=1.18):
     logos = {k: fetch(c.get(f'{k}_logo') if k != 'league' else c.get('league_logo'),
                       os.path.join(tmp, f'{k}.png'))
              for k in ('league', 'home', 'away')}
+    c['sponsor_logos'] = {'main': [], 'sub': []}
+    try:
+        raw = psql("select coalesce(json_agg(json_build_object('t', tier, 'u', logo_url, 'n', name) "
+                   "order by (tier = 'main') desc, sort_order), '[]') from public.sponsors "
+                   f"where league_id = {q(c['league_id'])} and is_active and coalesce(logo_url, '') <> ''")
+        for i, sp in enumerate(json.loads(raw or '[]')):
+            pth = fetch(sp['u'], os.path.join(tmp, f'sp{i}.png'))
+            if pth:
+                c['sponsor_logos']['main' if sp['t'] == 'main' else 'sub'].append((pth, (sp.get('n') or '')))
+    except Exception as e:
+        log('sponsor logoları alınamadı:', str(e)[-120:])
+    try:  # bu golün maçtaki sırası (dakikaya göre) → hangi sponsor
+        c['sponsor_rank'] = int(psql(
+            "select count(*) from public.match_highlights h where h.kind = 'goal' and h.status = 'approved' "
+            f"and h.match_id = {q(c['match_id'])} and (coalesce(h.minute, 0), h.id::text) < "
+            f"({int(c.get('minute') or 0)}, {q(str(c['id']))})") or 0)
+    except Exception as e:
+        log('sponsor sırası alınamadı:', str(e)[-120:])
     ov, ovw = os.path.join(tmp, 'story.png'), os.path.join(tmp, 'wide.png')
     story_overlay(c, ov, logos, zoom)
     wide_overlay(ovw)
@@ -443,11 +483,170 @@ def measure_drive():
     log('Drive ölçüldü:', round(total / 1e9, 2), 'GB')
 
 
+# --- Haftanın Golü hikâye videosu: 2 sn kart + gol videosu -------------------
+AWARD_QUERY = """
+select coalesce(json_agg(t), '[]'::json) from (
+  select n.id, n.week, n.auto_data->>'league_name' as league,
+         n.auto_data->>'league_logo' as league_logo, a as goal
+    from public.news n, jsonb_array_elements(n.auto_data->'awards') a
+   where n.auto_kind = 'week_awards' and a->>'kind' = 'goal'
+     and coalesce(a->'clip'->>'story_url', '') <> ''
+     and coalesce(n.auto_data->>'goal_video_url', '') = ''
+     and n.created_at > now() - interval '21 days'
+   limit 4
+) t
+"""
+
+
+def tr_upper(t):
+    return (t or '').replace('i', 'İ').replace('ı', 'I').upper()
+
+
+def award_intro(g, out, tmp):
+    """9:16 tuvalde ortalanmış 4:5 'Haftanın Golü' kartı (uygulamadaki kartın aynısı)."""
+    W, H = 1080, 1920
+    CW, CH = 1080, 1350
+    top = (H - CH) // 2
+    bg = Image.linear_gradient('L').resize((W, H))
+    im = Image.merge('RGB', [bg.point(lambda v, a=a: int(a[0] + (a[1] - a[0]) * v / 255))
+                             for a in ((15, 10), (23, 16), (42, 30))]).convert('RGBA')
+    card = Image.new('RGBA', (CW, CH), (11, 24, 28, 255))
+    d = ImageDraw.Draw(card)
+    CORAL = (248, 113, 113, 255)
+    GOLD = (226, 184, 69, 255)
+    WHITE = (241, 245, 249, 255)
+    MUTED = (203, 213, 225, 255)
+    goal, pl, team = g['goal'], g['goal'].get('player') or {}, g['goal'].get('team') or {}
+
+    # Sol: oyuncu fotoğrafı, sağ kenarı eğik kesik.
+    top_x, bot_x = int(CW * 0.53), int(CW * 0.43)
+    photo = fetch(goal.get('photo') or pl.get('photo'), os.path.join(tmp, 'ph.img'))
+    if photo:
+        ph = Image.open(photo).convert('RGBA')
+        pw = top_x + 20
+        scale = max(pw / ph.width, CH / ph.height)
+        ph = ph.resize((int(ph.width * scale), int(ph.height * scale)), Image.LANCZOS)
+        ox, oy = (ph.width - pw) // 2, int((ph.height - CH) * 0.3)
+        ph = ph.crop((ox, oy, ox + pw, oy + CH))
+        mask = Image.new('L', (CW, CH), 0)
+        ImageDraw.Draw(mask).polygon([(0, 0), (top_x, 0), (bot_x, CH), (0, CH)], fill=255)
+        layer = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
+        layer.paste(ph, (0, 0))
+        card.paste(layer, (0, 0), mask)
+    else:
+        lg = fetch(team.get('logo'), os.path.join(tmp, 'tl.img'))
+        if lg:
+            t = Image.open(lg).convert('RGBA')
+            t.thumbnail((420, 420), Image.LANCZOS)
+            card.alpha_composite(t, (80, CH // 2 - t.height // 2))
+
+    right = CW - 56
+    def rtext(y, t, fo, fill, sp=0):
+        if sp:
+            w = sum(d.textlength(ch, font=fo) for ch in t) + sp * (len(t) - 1)
+            x = right - w
+            for ch in t:
+                d.text((x, y), ch, font=fo, fill=fill)
+                x += d.textlength(ch, font=fo) + sp
+        else:
+            d.text((right - d.textlength(t, font=fo), y), t, font=fo, fill=fill)
+
+    def fit(t, name, size, maxw):
+        while size > 30 and d.textlength(t, font=font(name, size)) > maxw:
+            size -= 4
+        return font(name, size)
+
+    # Üst: turnuva + hafta, sağda turnuva logosu
+    ll = fetch(g.get('league_logo'), os.path.join(tmp, 'll.img'))
+    lx = right
+    if ll:
+        t = Image.open(ll).convert('RGBA')
+        t.thumbnail((96, 96), Image.LANCZOS)
+        card.alpha_composite(t, (right - t.width, 56))
+        lx = right - t.width - 20
+    league = tr_upper(g.get('league'))
+    fl = fit(league, 'BarlowCondensed-ExtraBold.ttf', 36, 440)
+    d.text((lx - d.textlength(league, font=fl), 60), league, font=fl, fill=GOLD)
+    wk = f"{g['week']}. HAFTA"
+    fw = font('BarlowCondensed-ExtraBold.ttf', 30)
+    d.text((lx - d.textlength(wk, font=fw), 106), wk, font=fw, fill=WHITE)
+
+    # Orta: HAFTANIN GOLÜ + oyuncu adı
+    rtext(470, 'HAFTANIN', font('BarlowCondensed-ExtraBold.ttf', 34), CORAL, sp=10)
+    rtext(505, 'GOLÜ', font('BarlowCondensed-ExtraBoldItalic.ttf', 150), CORAL)
+    parts = (pl.get('name') or '').split()
+    first, last = ' '.join(parts[:-1]), (parts[-1] if parts else '')
+    if first:
+        rtext(690, tr_upper(first), fit(tr_upper(first), 'BarlowCondensed-ExtraBold.ttf', 70, 480), WHITE)
+    fl2 = fit(tr_upper(last), 'BarlowCondensed-ExtraBoldItalic.ttf', 150, 500)
+    rtext(740, tr_upper(last), fl2, CORAL)
+    d.line([(right - 220, 925), (right, 925)], fill=CORAL, width=5)
+
+    # Takım adı + arması
+    tn = (team.get('name') or '').replace(' Masterlar', '').replace(' Masterler', '')
+    tn = tr_upper(tn)
+    tl = fetch(team.get('logo'), os.path.join(tmp, 'tl2.img'))
+    tx = right
+    if tl:
+        t = Image.open(tl).convert('RGBA')
+        t.thumbnail((82, 82), Image.LANCZOS)
+        card.alpha_composite(t, (right - t.width, 950))
+        tx = right - t.width - 16
+    ft = fit(tn, 'BarlowCondensed-ExtraBold.ttf', 40, 380)
+    d.text((tx - d.textlength(tn, font=ft), 965), tn, font=ft, fill=MUTED)
+
+    # Alt: Lig Masası imzası
+    fb = font('BarlowCondensed-ExtraBold.ttf', 44)
+    tw = d.textlength('LİG MASASI', font=fb)
+    d.text((right - tw, CH - 100), 'LİG MASASI', font=fb, fill=WHITE)
+    al = Image.open(APP_LOGO).convert('RGBA')
+    al.thumbnail((68, 68), Image.LANCZOS)
+    card.alpha_composite(al, (int(right - tw - 16 - al.width), CH - 108))
+
+    im.alpha_composite(card, (0, top))
+    im.convert('RGB').save(out)
+
+
+def award_videos():
+    raw = psql(AWARD_QUERY)
+    rows = json.loads(raw) if raw else []
+    for g in rows:
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                intro = os.path.join(tmp, 'intro.png')
+                award_intro(g, intro, tmp)
+                story = os.path.join(tmp, 'story.mp4')
+                urllib.request.urlretrieve(g['goal']['clip']['story_url'], story)
+                out = os.path.join(tmp, 'award.mp4')
+                run([f'{BREW}/ffmpeg', '-v', 'error', '-y', '-loop', '1', '-t', '2', '-i', intro,
+                     '-i', story, '-f', 'lavfi', '-t', '2', '-i', 'anullsrc=r=44100:cl=stereo',
+                     '-filter_complex',
+                     '[0:v]fps=30,scale=1080:1920,format=yuv420p,setsar=1[v0];'
+                     '[1:v]fps=30,scale=1080:1920,format=yuv420p,setsar=1[v1];'
+                     '[2:a]aresample=44100,aformat=channel_layouts=stereo[a0];'
+                     '[1:a]aresample=44100,aformat=channel_layouts=stereo[a1];'
+                     '[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]',
+                     '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '18',
+                     '-preset', 'medium', '-c:a', 'aac', '-b:a', '128k',
+                     '-movflags', '+faststart', out])
+                url = upload(out, f"weekly/{g['id']}_goal.mp4")
+                psql("update public.news set auto_data = jsonb_set(auto_data, '{goal_video_url}', "
+                     f"to_jsonb({q(url)}::text)) where id = {q(g['id'])}")
+            log('Haftanın Golü videosu hazır:', g['week'], '. hafta')
+        except Exception as e:
+            log('Haftanın Golü videosu HATA:', str(e)[-300:])
+
+
+
 def main():
     try:
         measure_drive()
     except Exception as e:
         log('Drive ölçülemedi:', e)
+    try:
+        award_videos()
+    except Exception as e:
+        log('Haftanın Golü videoları:', e)
     ap = argparse.ArgumentParser()
     ap.add_argument('--match')
     ap.add_argument('--limit', type=int, default=8)
@@ -458,7 +657,10 @@ def main():
     clips = json.loads(raw) if raw else []
     if not clips:
         return
-    for c in clips:
+    for i, c in enumerate(clips):
+        if i:
+            # YouTube art arda indirmeleri bot sanıp engelleyebiliyor.
+            time.sleep(PAUSE_SEC)
         name = f"{c['minute']}' {c.get('scorer') or ''} · {short(c['home'])}-{short(c['away'])}"
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -485,8 +687,8 @@ if __name__ == '__main__':
     try:
         fd = os.open(lock, os.O_CREAT | os.O_EXCL)
     except FileExistsError:
-        # Önceki çalışma sürüyor (ya da yarım kaldı; 30 dk sonra kilit düşer).
-        if datetime.datetime.now().timestamp() - os.path.getmtime(lock) < 1800:
+        # Önceki çalışma sürüyor (ya da yarım kaldı; 90 dk sonra kilit düşer).
+        if datetime.datetime.now().timestamp() - os.path.getmtime(lock) < 5400:
             sys.exit(0)
         os.remove(lock)
         fd = os.open(lock, os.O_CREAT | os.O_EXCL)

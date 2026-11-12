@@ -201,8 +201,8 @@ class _MatchControlBarState extends State<MatchControlBar> {
     if (mine) {
       // Yer kaplamasın: küçük rozet; devre butonları yanında durur.
       return Container(
-        height: 32,
-        padding: const EdgeInsets.only(left: 10, right: 4),
+        height: 40,
+        padding: const EdgeInsets.only(left: 12, right: 4),
         decoration: BoxDecoration(
           color: kAdminAccent.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(99),
@@ -211,8 +211,8 @@ class _MatchControlBarState extends State<MatchControlBar> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.sports_rounded, color: kAdminAccent, size: 15),
-            const SizedBox(width: 5),
+            const Icon(Icons.sports_rounded, color: kAdminAccent, size: 18),
+            const SizedBox(width: 6),
             const Flexible(
               child: Text(
                 'Yönetiyorsun',
@@ -221,7 +221,7 @@ class _MatchControlBarState extends State<MatchControlBar> {
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 12,
+                  fontSize: 14,
                 ),
               ),
             ),
@@ -237,7 +237,7 @@ class _MatchControlBarState extends State<MatchControlBar> {
                 'Bırak',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 12,
+                  fontSize: 14,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -359,5 +359,93 @@ class _MatchControlBarState extends State<MatchControlBar> {
               ),
             ),
     );
+  }
+}
+
+/// Yetkili ama maçı yönetmeyen biri giriş yapmaya çalıştığında: "Maçı X
+/// yönetiyor, devralmak ister misiniz?" Evet → yönetim boşsa ya da yöneten
+/// görünmüyorsa doğrudan alınır, değilse yönetene devir isteği gider
+/// (onaylarsa / 30 sn cevap gelmezse şeritten devralınır). Şerit 5 sn'de
+/// bir yenilendiği için giriş düğmeleri kısa sürede açılır.
+Future<void> askMatchTakeover(BuildContext context, String matchId) async {
+  final sb = Supabase.instance.client;
+  final messenger = ScaffoldMessenger.of(context);
+  Map<String, dynamic> s;
+  try {
+    final raw = await sb.rpc(
+      'match_control_state',
+      params: {'p_match_id': matchId},
+    );
+    if (raw is! Map) return;
+    s = Map<String, dynamic>.from(raw);
+  } catch (_) {
+    return;
+  }
+  if (s['mine'] == true || !context.mounted) return;
+  final free = s['controller'] == null;
+  final name = (s['controller_name'] ?? 'Başka bir sorumlu').toString();
+  if (s['req_mine'] == true) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Devir isteğin gönderildi; $name onayı bekleniyor.'),
+      ),
+    );
+    return;
+  }
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF111A2C),
+      icon: const Icon(Icons.lock_outline_rounded, color: Color(0xFF60A5FA)),
+      title: Text(
+        free ? 'Maçı şu an kimse yönetmiyor' : 'Maçı $name yönetiyor',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white, fontSize: 18),
+      ),
+      content: Text(
+        free
+            ? 'Olay girmek için maçın yönetimini almak ister misiniz?'
+            : 'Olay girişi yalnız maçı yönetende açık. Yönetimi devralmak '
+                  'ister misiniz?',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: kAdminMuted, height: 1.4),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: kAdminAccent,
+            foregroundColor: const Color(0xFF052E22),
+          ),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(free ? 'Yönetimi al' : 'Devral'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  final direct = free || s['can_force'] == true;
+  try {
+    await sb.rpc(
+      direct ? 'match_control_take' : 'match_control_request',
+      params: {'p_match_id': matchId},
+    );
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          direct
+              ? 'Maçın yönetimi sende; giriş düğmeleri birkaç saniyede açılır.'
+              : 'Devir isteği $name\'e gönderildi. Onaylarsa yönetim sana '
+                    'geçer; 30 sn içinde cevap gelmezse şeritten devralabilirsin.',
+        ),
+      ),
+    );
+  } on PostgrestException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('İşlem yapılamadı: $e')));
   }
 }

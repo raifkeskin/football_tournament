@@ -1,3 +1,5 @@
+import '../../../core/widgets/otp_countdown.dart';
+import '../../../core/utils/sms_code_autofill.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,6 +101,7 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
   @override
   void dispose() {
     _c.removeListener(_onController);
+    SmsCodeAutofill.stop();
     _timer?.cancel();
     _phone.dispose();
     _code.dispose();
@@ -129,6 +132,8 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
     });
   }
 
+  int _codeSerial = 0;
+
   Future<void> _send({String? phone}) async {
     final raw10 = phone ?? normalizePhoneToRaw10(_phone.text);
     if (raw10.length != 10 || !raw10.startsWith('5')) {
@@ -155,8 +160,12 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
           ..code = ''
           ..verified = false;
         _code.clear();
+        _codeSerial++;
         _startTimer();
         _c._changed();
+        SmsCodeAutofill.listen((code) {
+          if (mounted) _code.text = code;
+        });
       } else {
         setState(() => _error = RegistrationService.message(r));
       }
@@ -359,6 +368,7 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
         ),
       ],
     ),
+    OtpCountdown(key: ValueKey(_codeSerial)),
     if (_error != null) _errorText(),
     const SizedBox(height: 12),
     AdminPrimaryButton(

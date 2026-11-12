@@ -162,6 +162,7 @@ class WeekAward {
     this.as,
     this.matchId,
     this.clip,
+    this.instagramUrl = '',
   });
 
   factory WeekAward.fromJson(Map m) {
@@ -179,6 +180,7 @@ class WeekAward {
       as: (match?['as'] as num?)?.toInt(),
       matchId: match?['id']?.toString(),
       clip: m['clip'] is Map ? Map<String, dynamic>.from(m['clip']) : null,
+      instagramUrl: (m['instagram_url'] ?? '').toString().trim(),
     );
   }
 
@@ -200,6 +202,9 @@ class WeekAward {
   /// Haftanın golünün kesiti: video_id, start, end, clip_url, story_url.
   final Map<String, dynamic>? clip;
 
+  /// Turnuva sahiplerinin Instagram'da paylaştığı gönderi / Reels (enin 2. sayfası).
+  final String instagramUrl;
+
   String get score => hs == null ? '' : '$hs-$as';
 
   Map<String, dynamic> toJson() => {
@@ -218,6 +223,7 @@ class WeekAward {
         'as': as,
       },
     if (clip != null) 'clip': clip,
+    if (instagramUrl.isNotEmpty) 'instagram_url': instagramUrl,
   };
 }
 
@@ -230,6 +236,8 @@ class WeekAwards {
     required this.formation,
     required this.eleven,
     required this.awards,
+    this.instagramUrl = '',
+    this.goalVideoUrl = '',
   });
 
   factory WeekAwards.fromJson(Map d) => WeekAwards(
@@ -245,6 +253,8 @@ class WeekAwards {
       for (final a in (d['awards'] as List? ?? const []))
         if (a is Map) WeekAward.fromJson(a),
     ],
+    instagramUrl: (d['instagram_url'] ?? '').toString().trim(),
+    goalVideoUrl: (d['goal_video_url'] ?? '').toString().trim(),
   );
 
   final int week;
@@ -255,6 +265,12 @@ class WeekAwards {
   final String formation;
   final List<ElevenSlot> eleven;
   final List<WeekAward> awards;
+
+  /// Yayından sonra eklenen Instagram gönderisi / Reels (bültenin son sayfası).
+  final String instagramUrl;
+
+  /// Haftanın Golü hikâye videosu (2 sn kart + gol); Mac işi üretir.
+  final String goalVideoUrl;
 
   bool get hasEleven =>
       eleven.isNotEmpty &&

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -281,6 +282,145 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     }
   }
 
+  /// Gol videosu durumu: dönen ikon yalnız tarama sürerken.
+  Widget _statusCard(String status) {
+    final failed = status == 'failed';
+    final retry = status == 'retry';
+    final busy = !failed && !retry;
+    final color = busy
+        ? const Color(0xFF10B981)
+        : failed
+        ? const Color(0xFFF87171)
+        : const Color(0xFFFBBF24);
+    final (title, body) = switch (status) {
+      'running' => (
+        'Maç taranıyor',
+        'Maç özeti gol videoları hazırlanıyor; hazır olunca burada görünür.',
+      ),
+      'retry' => (
+        'Tarama tamamlanamadı',
+        'Gol videoları şu an hazırlanamadı; tarama bir süre sonra '
+            'kendiliğinden yeniden denenecek.',
+      ),
+      'failed' => (
+        'Gol Özet taraması hata aldı',
+        'Admin ile iletişime geçiniz.',
+      ),
+      _ => (
+        'Tarama sırada',
+        'Yayın kaydı hazır olunca maç taranacak; gol videoları burada '
+            'görünecek.',
+      ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: status == 'running'
+                ? CircularProgressIndicator(strokeWidth: 2, color: color)
+                : Icon(
+                    failed
+                        ? Icons.error_outline_rounded
+                        : retry
+                        ? Icons.schedule_rounded
+                        : Icons.hourglass_empty_rounded,
+                    size: 18,
+                    color: color,
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                ),
+                if (failed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: TextButton.icon(
+                      onPressed: _reported ? null : _reportProblem,
+                      icon: Icon(
+                        _reported
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.campaign_outlined,
+                        size: 18,
+                      ),
+                      label: Text(_reported ? 'Bildirildi' : "Admin'e Bildir"),
+                      style: TextButton.styleFrom(
+                        foregroundColor: color,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _reported = false;
+
+  /// Hatayı adminlere Telegram'dan maç bilgisiyle iletir.
+  Future<void> _reportProblem() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r =
+          (await Supabase.instance.client.rpc(
+                    'report_highlight_problem',
+                    params: {'p_match_id': widget.match.id},
+                  ) ??
+                  '')
+              .toString();
+      if (!mounted) return;
+      if (r == 'ok' || r == 'already') {
+        setState(() => _reported = true);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              r == 'ok'
+                  ? 'Admine bildirildi. Teşekkürler.'
+                  : 'Bu maç için zaten bildirdin.',
+            ),
+          ),
+        );
+      } else if (r == 'login') {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Bildirmek için giriş yapmalısın.')),
+        );
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Bildirilemedi. Tekrar dene.')),
+        );
+      }
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Bağlantı hatası. Tekrar dene.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final approved = [
@@ -320,49 +460,7 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (preparing) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
-                ),
-              ),
-              child: const Row(
-                children: [
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Maç taranıyor',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Maç özeti gol videoları hazırlanıyor; hazır '
-                          'olunca burada görünür.',
-                          style: TextStyle(color: kAdminMuted, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _statusCard(_autoStatus!),
             const SizedBox(height: 10),
           ],
           if (showReview) ...[
@@ -424,15 +522,15 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
             const SizedBox(height: 10),
           ],
           for (final h in approved)
-            GoalClipCard(
-              title: _clipTitle(
-                h,
-                widget.match,
-                widget.homeName,
-                widget.awayName,
-              ),
-              scorer: _scorers[h.id],
-              description: h.description,
+            GoalClipRow(
+              minute: h.minute != null
+                  ? minuteLabel(h.minute, h.addedMinute)
+                  : '',
+              name:
+                  _scorers[h.id]?.name ??
+                  _teamLabel(h, widget.match, widget.homeName, widget.awayName),
+              jersey: _scorers[h.id]?.jersey,
+              home: h.teamId == widget.match.homeTeamId,
               onPlay: () => openYoutubeClip(
                 context,
                 videoId: h.videoId,
@@ -454,6 +552,98 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [main, ...widget.trailing],
+    );
+  }
+}
+
+/// Herkesin gördüğü tek satırlık gol kesiti: takım rengi şeridi, dakika,
+/// golü atan ve "izle" düğmesi.
+class GoalClipRow extends StatelessWidget {
+  const GoalClipRow({
+    super.key,
+    required this.minute,
+    required this.name,
+    required this.jersey,
+    required this.home,
+    required this.onPlay,
+  });
+
+  final String minute;
+  final String name;
+  final int? jersey;
+  final bool home;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final stripe = home ? const Color(0xFFFBBF24) : const Color(0xFF3B82F6);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPlay,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: stripe, width: 3)),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  child: Text(
+                    minute,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const BallIcon(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (jersey != null) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '#$jersey',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -603,6 +793,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   MatchHighlightJob? _job;
   Map<String, HighlightScorer> _scorers = const {};
   Map<String, String> _goalScores = const {};
+  List<HighlightGoal> _goals = const [];
   List<HighlightRosterPlayer>? _roster;
   bool _loading = true;
   String? _playingId;
@@ -696,6 +887,62 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         items: _items,
       );
       if (mounted) setState(() => _scorers = map);
+    } catch (_) {}
+    try {
+      final g = await MatchHighlightService.goalEvents(m.id);
+      if (mounted) setState(() => _goals = g);
+    } catch (_) {}
+  }
+
+  String _goalLabel(HighlightGoal g) {
+    final team = g.teamId == widget.match.homeTeamId
+        ? shortTeamName(widget.homeName)
+        : shortTeamName(widget.awayName);
+    final min = g.addedMinute > 0
+        ? "${g.minute}+${g.addedMinute}'"
+        : "${g.minute}'";
+    final taken = _items.any(
+      (x) => x.matchEventId == g.id && x.status != 'rejected',
+    );
+    return '${g.order}. gol · $min ${g.playerName.isEmpty ? '' : '${g.playerName} '}'
+        '($team)${taken ? ' · kesiti var' : ''}';
+  }
+
+  /// Kesitin hangi gol kaydına ait olduğunu seçer (ör. yayın geç başladıysa
+  /// ilk bulunan kesit maçın 3. golüdür).
+  Future<void> _pickGoal(MatchHighlight h) async {
+    if (_goals.isEmpty) {
+      await _loadScorers();
+    }
+    if (!mounted) return;
+    if (_goals.isEmpty) {
+      _snack('Maç detayında gol kaydı yok.');
+      return;
+    }
+    final picked = await showAdminOptionPicker<HighlightGoal>(
+      context: context,
+      title: 'Bu Kesit Hangi Gol?',
+      items: _goals,
+      selected: _goals.where((g) => g.id == h.matchEventId).firstOrNull,
+      labelBuilder: _goalLabel,
+      emptyText: 'Maç detayında gol kaydı yok.',
+    );
+    if (picked == null) return;
+    await _update(
+      h,
+      matchEventId: picked.id,
+      minute: picked.minute,
+      addedMinute: picked.addedMinute,
+      teamId: picked.teamId,
+      playerId: picked.playerId,
+    );
+    try {
+      final scores = await MatchHighlightService.goalScores(
+        matchId: widget.match.id,
+        homeTeamId: widget.match.homeTeamId,
+        awayTeamId: widget.match.awayTeamId,
+      );
+      if (mounted) setState(() => _goalScores = scores);
     } catch (_) {}
   }
 
@@ -849,7 +1096,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       );
       await _refresh();
     } catch (e) {
-      _snack('Kaydedilemedi: $e');
+      _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
     }
   }
 
@@ -883,6 +1130,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     String? status,
     String? description,
     String? playerId,
+    String? matchEventId,
+    int? minute,
+    int? addedMinute,
+    String? teamId,
   }) async {
     setState(() => _busy.add(h.id));
     try {
@@ -893,6 +1144,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         status: status,
         description: description,
         playerId: playerId,
+        matchEventId: matchEventId,
+        minute: minute,
+        addedMinute: addedMinute,
+        teamId: teamId,
       );
       if (!mounted) return;
       setState(() {
@@ -905,7 +1160,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         if (updated != null) _play(updated);
       }
     } catch (e) {
-      _snack('Kaydedilemedi: $e');
+      _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _busy.remove(h.id));
     }
@@ -1100,7 +1355,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
           : 'Gol dakikalarının çevresi taranıyor…';
       color = kAdminAmber;
     } else if (job?.status == 'error') {
-      text = 'Son analiz başarısız: ${job?.error ?? ''}';
+      text =
+          'Son analiz başarısız: ${MatchHighlightService.friendlyError(job?.error)}';
       color = kAdminDanger;
     } else if (job?.status == 'done') {
       text = 'Son analizde ${job?.found ?? 0} gol bulundu.';
@@ -1157,7 +1413,12 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   style: const TextStyle(color: kAdminMuted, fontSize: 11.5),
                 ),
               ],
-              if (job != null && !running) ...[
+              // Devre başlangıçları yalnız admine (yetkilileri
+              // karıştırmasın); hata alan taramada anlamsız.
+              if (job != null &&
+                  !running &&
+                  job.status != 'error' &&
+                  AppSession.of(context).value.isAdmin) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -1408,6 +1669,21 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
             ],
           ),
           const SizedBox(height: 8),
+          _editRow(
+            icon: Icons.sports_soccer_rounded,
+            text: h.matchEventId == null
+                ? 'Hangi gol olduğu seçilmedi'
+                : (_goals.where((g) => g.id == h.matchEventId).firstOrNull ==
+                          null
+                      ? "${h.minute ?? '?'}'. dakika golü"
+                      : _goalLabel(
+                          _goals.firstWhere((g) => g.id == h.matchEventId),
+                        )),
+            muted: h.matchEventId == null,
+            action: h.matchEventId == null ? 'Seç' : 'Değiştir',
+            onTap: busy ? null : () => _pickGoal(h),
+          ),
+          const SizedBox(height: 6),
           _editRow(
             icon: Icons.person_rounded,
             text: _scorers[h.id] == null

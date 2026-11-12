@@ -76,8 +76,25 @@ button:disabled{opacity:.5;cursor:default}
   var scene = null, audioBuf = null, videoFile = null;
 
   function msg(t, err) { $('msg').textContent = t || ''; $('msg').className = 'msg' + (err ? ' err' : ''); }
+  // Özel liglerin maçları yalnız giriş yapmış kullanıcıya açık: uygulama
+  // oturum anahtarını adres parçasıyla (#t=...) verir; web'de aynı tarayıcıdaki
+  // oturum aranır. Anahtar adres çubuğundan hemen silinir.
+  var TOKEN = (function () {
+    try {
+      var m = /[#&]t=([^&]+)/.exec(location.hash);
+      if (m) { history.replaceState(null, '', location.pathname + location.search); return decodeURIComponent(m[1]); }
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!/auth-token|supabase\.auth/.test(k)) continue;
+        var j = JSON.parse(localStorage.getItem(k));
+        var t = j && (j.access_token || (j.currentSession && j.currentSession.access_token));
+        if (t) return t;
+      }
+    } catch (e) {}
+    return null;
+  })();
   function get(path) {
-    return fetch(API + path, { headers: { apikey: KEY, Authorization: 'Bearer ' + KEY } }).then(function (r) {
+    return fetch(API + path, { headers: { apikey: KEY, Authorization: 'Bearer ' + (TOKEN || KEY) } }).then(function (r) {
       if (!r.ok) throw new Error('Veri alınamadı (' + r.status + ')');
       return r.json();
     });
@@ -332,13 +349,14 @@ button:disabled{opacity:.5;cursor:default}
     ctx.fillText('LİG MASASI', W / 2, y); y += 14 * U;
     ctx.fillStyle = '#c9d0de'; ctx.font = bodyFont(4.2 * U);
     ctx.fillText('Canlı skor, kadro ve yayın linki uygulamada', W / 2, y); y += 10 * U;
-    var bw = 60 * U;
-    if (scene.appStore) { var h1 = bw * scene.appStore.height / scene.appStore.width; ctx.drawImage(scene.appStore, W / 2 - bw / 2, y, bw, h1); y += h1 + 3 * U; }
-    if (scene.googlePlay) {
-      var h2 = bw * scene.googlePlay.height / scene.googlePlay.width, gw = bw * .78, gh = h2 * .78;
-      ctx.globalAlpha = p * .45; ctx.drawImage(scene.googlePlay, W / 2 - gw / 2, y, gw, gh); ctx.globalAlpha = p;
-      ctx.fillStyle = '#aab3c4'; ctx.font = bodyFont(3.6 * U, 700); ctx.fillText('Google Play · Yakında', W / 2, y + gh + 1.6 * U); y += gh + 9 * U;
-    }
+    // İki mağaza rozeti aynı yükseklikte, tam görünür.
+    var bh = 17.8 * U;
+    [scene.appStore, scene.googlePlay].forEach(function (im) {
+      if (!im) return;
+      var iw = bh * im.width / im.height;
+      ctx.drawImage(im, W / 2 - iw / 2, y, iw, bh); y += bh + 3 * U;
+    });
+    y += 3 * U;
     ctx.fillStyle = '#8d97ab'; ctx.font = bodyFont(3.8 * U); ctx.fillText('ligmasasi.com/indir', W / 2, y + 2 * U);
     ctx.restore();
   }
@@ -641,6 +659,7 @@ button:disabled{opacity:.5;cursor:default}
   }
   function copyCaption(silent) {
     var ta = $('caption'), text = ta.value;
+    if (window.LmApp) { LmApp.postMessage(JSON.stringify({ t: 'copy', text: text })); if (!silent) msg('Açıklama kopyalandı.'); return; }
     function fallback() {
       ta.focus(); ta.select();
       try { document.execCommand('copy'); if (!silent) msg('Açıklama kopyalandı.'); } catch (e) { if (!silent) msg('Kopyalanamadı; metni seçip kopyala.', true); }
@@ -777,13 +796,27 @@ button:disabled{opacity:.5;cursor:default}
       msg((e && e.message) || 'Video oluşturulamadı.', true);
     }).then(function () { $('make').disabled = $('preview').disabled = false; });
   }
+  // Uygulama içi görünümde (LmApp kanalı var) dosya ve metin uygulamaya
+  // parça parça gönderilir; kaydetme / paylaşma uygulama tarafında yapılır.
+  function toApp(action) {
+    var r = new FileReader();
+    r.onload = function () {
+      var b = String(r.result).split(',')[1] || '', N = 600000, n = Math.max(1, Math.ceil(b.length / N)), id = String(Date.now());
+      LmApp.postMessage(JSON.stringify({ t: 'begin', id: id, action: action, name: videoFile.name, n: n }));
+      for (var i = 0; i < n; i++) LmApp.postMessage(JSON.stringify({ t: 'chunk', id: id, i: i, d: b.slice(i * N, (i + 1) * N) }));
+      LmApp.postMessage(JSON.stringify({ t: 'end', id: id }));
+    };
+    r.readAsDataURL(videoFile);
+  }
   function save() {
+    if (window.LmApp) { toApp('save'); return; }
     var a = document.createElement('a');
     a.href = URL.createObjectURL(videoFile); a.download = videoFile.name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
   }
   function share() {
+    if (window.LmApp) { toApp('share'); return; }
     if (navigator.canShare && navigator.canShare({ files: [videoFile] })) {
       navigator.share({ files: [videoFile] }).catch(function (e) { if (e && e.name !== 'AbortError') save(); });
     } else {

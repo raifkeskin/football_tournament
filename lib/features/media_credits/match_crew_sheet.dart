@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/utils/friendly_error.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../match/models/match.dart';
@@ -9,7 +10,13 @@ import 'media_credit.dart';
 /// Maçın medya ekibini düzenler: turnuvanın künye havuzundan yayıncı ve
 /// fotoğrafçılar işaretlenir (birden çok), havuzda olmayan kişi buradan
 /// eklenir. "Varsayılana dön" maçı turnuvanın varsayılanına bağlar.
-Future<void> showMatchCrewSheet(BuildContext context, MatchModel match) {
+/// [kind] verilirse yalnız o tür (Yayıncı ya da Fotoğrafçı) düzenlenir; tür
+/// bilgi olarak gösterilir, değiştirilemez.
+Future<void> showMatchCrewSheet(
+  BuildContext context,
+  MatchModel match, {
+  MediaCreditKind? kind,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -17,14 +24,15 @@ Future<void> showMatchCrewSheet(BuildContext context, MatchModel match) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
     ),
-    builder: (_) => _MatchCrewSheet(match: match),
+    builder: (_) => _MatchCrewSheet(match: match, kind: kind),
   );
 }
 
 class _MatchCrewSheet extends StatefulWidget {
-  const _MatchCrewSheet({required this.match});
+  const _MatchCrewSheet({required this.match, this.kind});
 
   final MatchModel match;
+  final MediaCreditKind? kind;
 
   @override
   State<_MatchCrewSheet> createState() => _MatchCrewSheetState();
@@ -86,6 +94,19 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
     if (added != null) await _load();
   }
 
+  /// Tek tür düzenlenirken "Varsayılan": o türün seçimi turnuva varsayılanına
+  /// döner, diğer türün seçimi korunur.
+  Future<void> _resetKind(MediaCreditKind k) async {
+    final credits = _credits ?? const <MediaCredit>[];
+    final of = credits.where((c) => c.kind == k).toList();
+    final def = of.where((c) => c.isDefault).firstOrNull ?? of.firstOrNull;
+    setState(() {
+      _picked.removeAll(of.map((c) => c.id));
+      if (def != null) _picked.add(def.id);
+    });
+    await _save({..._picked});
+  }
+
   Future<void> _save(Set<String>? ids) async {
     setState(() => _saving = true);
     try {
@@ -94,7 +115,7 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        _snack('Kaydedilemedi: $e');
+        _snack('Kaydedilemedi: ${friendlyErrorText(e)}');
       }
     }
   }
@@ -179,28 +200,66 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
-                    'Maçın Medya Ekibi',
-                    style: TextStyle(
+                  Text(
+                    widget.kind == null
+                        ? 'Maçın Medya Ekibi'
+                        : (widget.kind == MediaCreditKind.broadcast
+                              ? 'Maç Yayıncısı'
+                              : 'Maç Fotoğrafçısı'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w900,
                       fontSize: 18,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Bu maçı yayınlayan ve fotoğraflayanları işaretle. Hiçbiri '
-                    'işaretli değilse bu maçta medya ekibi görünmez.',
-                    style: TextStyle(color: kAdminMuted, fontSize: 12.5),
+                  Text(
+                    widget.kind == null
+                        ? 'Bu maçı yayınlayan ve fotoğraflayanları işaretle. '
+                              'Hiçbiri işaretli değilse bu maçta medya ekibi '
+                              'görünmez.'
+                        : 'Bu maçta görev alanları işaretle (birden fazla '
+                              'kişi seçilebilir). Listede yoksa Ekle ile '
+                              'rehberden seç ya da yeni kişi kaydet.',
+                    style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
                   ),
+                  if (widget.kind != null) ...[
+                    const SizedBox(height: 10),
+                    Opacity(
+                      opacity: 0.6,
+                      child: AdminFieldGroup(
+                        children: [
+                          ListTile(
+                            enabled: false,
+                            dense: true,
+                            title: const Text(
+                              'Tür',
+                              style: TextStyle(color: kAdminMuted),
+                            ),
+                            trailing: Text(
+                              widget.kind!.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (credits == null)
                     const Padding(
                       padding: EdgeInsets.all(32),
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else ...[
-                    _section(MediaCreditKind.broadcast, credits),
-                    _section(MediaCreditKind.photo, credits),
+                    if (widget.kind == null ||
+                        widget.kind == MediaCreditKind.broadcast)
+                      _section(MediaCreditKind.broadcast, credits),
+                    if (widget.kind == null ||
+                        widget.kind == MediaCreditKind.photo)
+                      _section(MediaCreditKind.photo, credits),
                   ],
                 ],
               ),
@@ -213,7 +272,11 @@ class _MatchCrewSheetState extends State<_MatchCrewSheet> {
                     flex: 2,
                     child: AdminSecondaryButton(
                       label: 'VARSAYILAN',
-                      onPressed: _saving ? null : () => _save(null),
+                      onPressed: _saving
+                          ? null
+                          : () => widget.kind == null
+                                ? _save(null)
+                                : _resetKind(widget.kind!),
                     ),
                   ),
                   const SizedBox(width: 10),

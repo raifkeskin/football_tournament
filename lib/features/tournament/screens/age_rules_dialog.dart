@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/widgets/admin_form.dart';
@@ -102,7 +103,7 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
     }
   }
 

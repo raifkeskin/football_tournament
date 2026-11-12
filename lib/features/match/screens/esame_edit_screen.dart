@@ -2,11 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/team_colors.dart';
+import '../../../core/services/app_session.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_name_band.dart';
@@ -15,6 +16,7 @@ import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 import '../../player/services/penalty_service.dart';
 import '../../tournament/models/age_rules.dart';
+import '../../team/widgets/squad_popups.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../models/match.dart';
 import '../utils/season_match_settings.dart';
@@ -31,12 +33,16 @@ class EsameEditScreen extends StatefulWidget {
     required this.teamId,
     required this.teamName,
     required this.isHome,
+    this.autoScan = false,
   });
 
   final MatchModel match;
   final String teamId;
   final String teamName;
   final bool isHome;
+
+  /// Ana sayfadan "Kağıttan okut" ile açıldı: yüklenince tarama başlar.
+  final bool autoScan;
 
   @override
   State<EsameEditScreen> createState() => _EsameEditScreenState();
@@ -75,9 +81,16 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// sunucudaki hâl bundan farklıysa esameyi başka bir sorumlu değiştirmiştir.
   String? _baseSig;
 
+  /// Kayıtlı saha yerleşimi (oyuncu → pos_x). Esame yeniden kaydedilirken
+  /// Kadro sekmesinde yapılan diziliş düzenlemesi silinmesin diye korunur.
+  Map<String, int> _savedSlots = {};
+
   /// Numarası yazılan oyuncu: satırı vurgulanır, klavyenin üstündeki
   /// şeritte adı görünür.
   String? _editingId;
+
+  /// Forma numarası penceresinin takım renkleri.
+  TeamPalette _palette = TeamPalette.of(null, null);
 
   int _startingLimit = 11;
   int _subLimit = 7;
@@ -87,10 +100,20 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// Sezonda onaylı kimlik zorunlu mu; zorunluysa onaysız oyuncu esameye
   /// eklenemez.
   bool _requireId = false;
+
+  /// Sezon kuralı: any / chip / chip_ibraz.
+  String _idMode = 'any';
   Set<String> _verified = const {};
+
+  /// Admin'in bu sezon kimlik istisnası verdiği oyuncular (yırtık kart vb.).
+  Set<String> _exempt = const {};
 
   /// -1: Tümü, 0..3: Kaleci / Defans / Orta Saha / Forvet.
   int _tab = -1;
+
+  /// Katılım anketinde "evet" diyenler (anket yoksa null; çip görünmez).
+  Set<String>? _pollYes;
+  static const _pollTab = 99;
 
   static const _bg = Color(0xFF0F172A);
   static const _card = Color(0xFF1E293B);
@@ -109,7 +132,23 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   void initState() {
     super.initState();
     _loadData();
+    Supabase.instance.client
+        .from('teams')
+        .select('first_color, second_color')
+        .eq('id', widget.teamId)
+        .maybeSingle()
+        .then((r) {
+          if (!mounted || r == null) return;
+          setState(
+            () => _palette = TeamPalette.of(
+              r['first_color'] as String?,
+              r['second_color'] as String?,
+            ),
+          );
+        })
+        .catchError((_) {});
     _loadBoxesOpen();
+    _loadPoll();
     SeasonMatchSettings.of(widget.match.seasonId).then((s) {
       if (mounted && s.aiEsame != _aiEsame) {
         setState(() => _aiEsame = s.aiEsame);
@@ -181,6 +220,23 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     await _loadData();
   }
 
+  Future<void> _loadPoll() async {
+    try {
+      final raw = await Supabase.instance.client.rpc(
+        'attendance_summary',
+        params: {'p_match_id': widget.match.id, 'p_team_id': widget.teamId},
+      );
+      if (raw is! Map || raw['poll_id'] == null || !mounted) return;
+      final yes = <String>{
+        for (final p in (raw['players'] as List? ?? const []))
+          if (p is Map && p['status'] == 'yes') '${p['id']}',
+      };
+      setState(() => _pollYes = yes);
+    } catch (_) {
+      // Anket okunamazsa çip görünmez.
+    }
+  }
+
   Future<void> _loadData() async {
     try {
       Future<Map<String, dynamic>?> loadSeasonLimits() async {
@@ -190,7 +246,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               .from('seasons')
               .select(
                 'starting_player_count, sub_player_count, age_rules, '
-                'require_verified_id',
+                'require_verified_id, verified_id_mode',
               )
               .eq('id', widget.match.seasonId)
               .maybeSingle();
@@ -222,6 +278,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         _subLimit = sRes?['sub_player_count'] ?? 7;
         _ageRules = AgeRules.fromJson(sRes?['age_rules']);
         _requireId = sRes?['require_verified_id'] == true;
+        _idMode = (sRes?['verified_id_mode'] ?? (_requireId ? 'chip' : 'any'))
+            .toString();
         _players = [...players]..sort(_compare);
         _byId = {for (final p in _players) p.id: p};
         _penalized = penalties;
@@ -229,6 +287,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           for (final r in rosters)
             (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
         ]);
+        _savedSlots = {
+          for (final r in rosters)
+            if (r.isStarting && r.slot != null) r.playerId: r.slot!,
+        };
         // Esame sırası kayıtlıysa (list_order) aynen o sırayla açılır.
         final ordered = rosters.every((r) => r.listOrder != null)
             ? ([...rosters]
@@ -258,6 +320,12 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         _isLoading = false;
       });
       _loadVerified();
+      // Ana sayfadan "Kağıttan okut": liste yüklenince tarama açılır.
+      if (widget.autoScan && _players.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _readFromPaper();
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -266,12 +334,29 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   Future<void> _loadVerified() async {
     try {
       final v = await IdentityService.verifiedAmong(_players.map((p) => p.id));
-      if (mounted) setState(() => _verified = v);
+      Set<String> ex = const {};
+      try {
+        final r = await Supabase.instance.client.rpc(
+          'verified_exempt_list',
+          params: {'p_season': widget.match.seasonId},
+        );
+        ex = {for (final x in (r as List? ?? const [])) '$x'};
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _verified = v;
+          _exempt = ex;
+        });
+      }
     } catch (_) {}
   }
 
   /// Sezon onaylı kimlik istiyor ve oyuncunun kimliği onaylı değil.
-  bool _unverified(String id) => _requireId && !_verified.contains(id);
+  bool _unverified(String id) =>
+      _requireId &&
+      !_exempt.contains(id) &&
+      (!_verified.contains(id) ||
+          (_idMode == 'chip' && IdentityService.isIbraz(id)));
 
   /// Esameden "Kimliği okut": doğrulama ekranı açılır, dönünce liste
   /// yenilenir.
@@ -285,6 +370,36 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     await _loadVerified();
     if (mounted && _verified.contains(p.id)) {
       _toast('${p.name} onaylandı; esameye ekleyebilirsiniz.');
+    }
+  }
+
+  /// Admin: bu oyuncuya bu sezon için kimlik istisnası verir (sebep sorulur).
+  Future<void> _grantExempt(PlayerModel p) async {
+    final reason = await showAdminTextInputDialog(
+      context: context,
+      title: 'Kimlik istisnası',
+      icon: Icons.verified_outlined,
+      label: 'Sebep (ör. yırtık kart)',
+      fieldIcon: Icons.edit_note_rounded,
+      subtitle:
+          '${p.name} bu sezon kimliği onaylanmadan da esameye ve kadroya '
+          'yazılabilir.',
+    );
+    if (reason == null || !mounted) return;
+    try {
+      await Supabase.instance.client.rpc(
+        'admin_set_verified_exempt',
+        params: {
+          'p_player': p.id,
+          'p_season': widget.match.seasonId,
+          'p_exempt': true,
+          'p_reason': reason,
+        },
+      );
+      await _loadVerified();
+      if (mounted) _toast('${p.name} için istisna verildi.');
+    } catch (e) {
+      if (mounted) _toast('İstisna verilemedi: $e');
     }
   }
 
@@ -716,6 +831,28 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     if (!mounted) return false;
     setState(() => _isSaving = true);
     try {
+      // Saha yerleşimi: aynı ilk 11 ise olduğu gibi; tek oyuncu değiştiyse
+      // giren çıkanın yerine; daha fazlası değiştiyse yalnız kaleci (ilk
+      // sıradaki) sabit, gerisini diziliş ekranı yeniden dizer.
+      final starters = _starters.toSet();
+      final complete =
+          _savedSlots.isNotEmpty &&
+          _savedSlots.keys.toSet().length == _savedSlots.length &&
+          _savedSlots.values.toSet().length == _savedSlots.length;
+      final slots = <String, int>{};
+      if (complete) {
+        final out = _savedSlots.keys
+            .where((k) => !starters.contains(k))
+            .toList();
+        final inn = starters.where((k) => !_savedSlots.containsKey(k)).toList();
+        if (out.isEmpty && inn.isEmpty) {
+          slots.addAll(_savedSlots);
+        } else if (out.length == 1 && inn.length == 1) {
+          slots.addAll(_savedSlots);
+          slots[inn.first] = slots.remove(out.first)!;
+        }
+      }
+      if (slots.isEmpty && _starters.isNotEmpty) slots[_starters.first] = 0;
       final rosters = <MatchRosterModel>[
         for (final id in ids)
           MatchRosterModel(
@@ -729,7 +866,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             isStarting: _starters.contains(id),
             jerseyNumber: _jersey[id]?.text.trim(),
             isCaptain: _starters.contains(id) && id == _captainId,
-            slot: _starters.isNotEmpty && id == _starters.first ? 0 : null,
+            slot: _starters.contains(id) ? slots[id] : null,
           ),
       ];
       await _matchService.updateMatchRoster(
@@ -741,6 +878,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         rosters: rosters,
       );
       _dirty = false;
+      _savedSlots = slots.length == starters.length ? slots : {};
       _baseSig = _sigOf([
         for (final r in rosters)
           (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
@@ -999,13 +1137,6 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                       ),
                     ),
             ),
-            if (keyboard > 0 && _byId[_editingId] != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: keyboard,
-                child: _numberStrip(_byId[_editingId]!),
-              ),
           ],
         ),
       ),
@@ -1618,8 +1749,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                 bad: bad.contains(id),
                 small: true,
                 active: id == _editingId,
-                onChanged: _onJerseyChanged,
-                onFocusChange: (f) => _onJerseyFocus(id, f),
+                onTap: () => _editJersey(id),
               ),
               const SizedBox(width: 4),
               Expanded(child: _slotName(box, i, p)),
@@ -1776,14 +1906,32 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     ),
   );
 
-  void _onJerseyChanged() => setState(() => _dirty = true);
-
-  void _onJerseyFocus(String id, bool focused) {
-    if (focused) {
-      setState(() => _editingId = id);
-    } else if (_editingId == id) {
-      setState(() => _editingId = null);
-    }
+  /// Takım ekranındaki forma numarası penceresi: 1-18 seçici, dolu numaralar
+  /// kapalı. Boş = numarayı kaldır.
+  Future<void> _editJersey(String id) async {
+    final p = _byId[id];
+    final ctrl = _jersey[id];
+    if (p == null || ctrl == null) return;
+    final taken = <int>{
+      for (final o in [..._starters, ..._subs])
+        if (o != id) ?int.tryParse(_jersey[o]?.text.trim() ?? ''),
+    };
+    setState(() => _editingId = id);
+    final input = await showSquadJerseyPicker(
+      context: context,
+      playerName: p.name,
+      current: ctrl.text.trim(),
+      taken: taken,
+      palette: _palette,
+    );
+    if (!mounted) return;
+    setState(() {
+      _editingId = null;
+      if (input != null && input.trim() != ctrl.text.trim()) {
+        ctrl.text = input.trim();
+        _dirty = true;
+      }
+    });
   }
 
   List<PlayerModel> get _remaining =>
@@ -1791,7 +1939,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
   Widget _tabs() {
     final left = _remaining;
-    final labels = ['Tümü', ...positionLineLabels];
+    final labels = [
+      'Tümü',
+      ...positionLineLabels,
+      if (_pollYes != null) 'Ankete evet',
+    ];
     return SizedBox(
       height: 36,
       child: ListView.separated(
@@ -1800,9 +1952,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         itemCount: labels.length,
         separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, k) {
-          final t = k - 1;
+          final t = k > positionLineLabels.length ? _pollTab : k - 1;
           final on = _tab == t;
-          final n = t < 0
+          final n = t == _pollTab
+              ? left.where((p) => _pollYes!.contains(p.id)).length
+              : t < 0
               ? left.length
               : left.where((p) => _line(p) == t).length;
           return GestureDetector(
@@ -1840,52 +1994,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     );
   }
 
-  /// Klavyenin üstünde: kimin numarası yazılıyor (klavye kutuyu örtse de).
-  Widget _numberStrip(PlayerModel p) {
-    final no = _jersey[p.id]?.text.trim() ?? '';
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 0, 10, 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: Color.lerp(_bg, _gold, 0.16),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _gold.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        children: [
-          const Text(
-            'Forma no · ',
-            style: TextStyle(color: _mid, fontSize: 13),
-          ),
-          Expanded(
-            child: Text(
-              p.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _gold,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          Text(
-            no.isEmpty ? '–' : no,
-            style: const TextStyle(
-              color: _gold,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _squadList(double keyboard) {
     final left = _remaining;
-    final shown = _tab < 0
+    final shown = _tab == _pollTab
+        ? left.where((p) => _pollYes?.contains(p.id) ?? false).toList()
+        : _tab < 0
         ? left
         : left.where((p) => _line(p) == _tab).toList();
     final children = <Widget>[];
@@ -1981,8 +2094,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             bad: false,
             small: false,
             active: editing,
-            onChanged: _onJerseyChanged,
-            onFocusChange: (f) => _onJerseyFocus(p.id, f),
+            onTap: () => _editJersey(p.id),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -2003,13 +2115,22 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ),
           ),
           if (_verified.contains(p.id))
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: VerifiedBadge(size: 15),
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: VerifiedBadge(
+                size: 15,
+                ibraz: IdentityService.isIbraz(p.id),
+              ),
             ),
           if (_ageRules.hasMatchLimits && _isQuota(p))
             _tag('KONTENJAN ${AgeRules.birthYearOf(p.birthDate)}', _gold),
           const SizedBox(width: 6),
+          if (noId && AppSession.of(context).value.isAdmin) ...[
+            _addButton('İstisna', _gold, () => _grantExempt(p)),
+            const SizedBox(width: 4),
+          ],
+          if (_exempt.contains(p.id) && AppSession.of(context).value.isAdmin)
+            _tag('İSTİSNA', _gold),
           if (noId)
             kIsWeb
                 ? _tag('KİMLİK ONAYSIZ', _mid)
@@ -2125,112 +2246,88 @@ class _JerseyBox extends StatelessWidget {
     required this.controller,
     required this.bad,
     required this.small,
-    required this.onChanged,
-    required this.onFocusChange,
+    required this.onTap,
     this.active = false,
   });
 
   final TextEditingController controller;
   final bool bad;
   final bool small;
-  final VoidCallback onChanged;
-  final ValueChanged<bool> onFocusChange;
 
-  /// Numarası şu an yazılıyor: kutu dolu sarı.
+  /// Dokununca takım ekranındaki forma numarası penceresi açılır.
+  final VoidCallback onTap;
+
+  /// Numarası şu an değiştiriliyor: kutu dolu sarı.
   final bool active;
 
   static const _gold = Color(0xFFFBBF24);
   static const _red = Color(0xFFF87171);
-
-  void _selectAll() {
-    controller.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: controller.text.length,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = bad ? _red : _gold;
     final w = small ? 26.0 : 34.0;
     final h = small ? 19.0 : 28.0;
-    return SizedBox(
-      width: w,
-      height: h,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _DashedBorder(color: c.withValues(alpha: 0.7)),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: active ? c : c.withValues(alpha: bad ? 0.14 : 0.07),
-                  borderRadius: BorderRadius.circular(small ? 4 : 6),
-                ),
-                child: Focus(
-                  onFocusChange: onFocusChange,
-                  child: TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(2),
-                    ],
-                    textAlign: TextAlign.center,
-                    textAlignVertical: TextAlignVertical.center,
-                    onTap: () {
-                      _selectAll();
-                      // Odak alınca imleç sona gidebilir; bir kare sonra yine seç.
-                      WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => _selectAll(),
-                      );
-                    },
-                    onChanged: (_) => onChanged(),
-                    style: TextStyle(
-                      color: active ? const Color(0xFF1F1300) : Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: small ? 11 : 13.5,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                    // Tema dolgu ve boşluk vermesin (küçük kutuda numara
-                    // görünmez oluyordu).
-                    decoration: InputDecoration(
-                      isCollapsed: true,
-                      isDense: true,
-                      filled: false,
-                      contentPadding: EdgeInsets.zero,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: '#',
-                      hintStyle: TextStyle(
-                        color: active
-                            ? const Color(0xFF1F1300)
-                            : c.withValues(alpha: 0.7),
-                      ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _DashedBorder(color: c.withValues(alpha: 0.7)),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: active ? c : c.withValues(alpha: bad ? 0.14 : 0.07),
+                    borderRadius: BorderRadius.circular(small ? 4 : 6),
+                  ),
+                  child: Center(
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (_, v, _) {
+                        final no = v.text.trim();
+                        return Text(
+                          no.isEmpty ? '#' : no,
+                          style: TextStyle(
+                            color: no.isEmpty
+                                ? (active
+                                      ? const Color(0xFF1F1300)
+                                      : c.withValues(alpha: 0.7))
+                                : (active
+                                      ? const Color(0xFF1F1300)
+                                      : Colors.white),
+                            fontWeight: FontWeight.w800,
+                            fontSize: small ? 11 : 13.5,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          if (!small)
-            Positioned(
-              right: -4,
-              top: -5,
-              child: IgnorePointer(
-                child: Container(
-                  padding: const EdgeInsets.all(1),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0F172A),
-                    shape: BoxShape.circle,
+            if (!small)
+              Positioned(
+                right: -4,
+                top: -5,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.all(1),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.edit_rounded, size: 9, color: c),
                   ),
-                  child: Icon(Icons.edit_rounded, size: 9, color: c),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

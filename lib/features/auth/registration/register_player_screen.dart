@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/services/app_settings.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../identity/id_card_reader.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 import '../../player/services/player_profile_service.dart';
+import '../../team/screens/team_squad_screen.dart' show BirthDateInputFormatter;
 import '../screens/forgot_password_screen.dart';
 import 'register_phone_screen.dart';
 import 'registration_service.dart';
@@ -39,12 +42,25 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
   bool _busy = false;
   String? _error;
 
+  /// Kimliğini okutmadan kayıt: bilgiler elle girilir, profil onaysız
+  /// açılır ve yetkili kimliği görünce (ibraz) onaylar.
+  bool _manualMode = false;
+  bool _manualForm = false;
+  final _tcCtrl = TextEditingController();
+  final _mFirst = TextEditingController();
+  final _mLast = TextEditingController();
+  final _mBirth = TextEditingController();
+
   @override
   void dispose() {
     _height.dispose();
     _weight.dispose();
     _firstCtrl.dispose();
     _lastCtrl.dispose();
+    _tcCtrl.dispose();
+    _mFirst.dispose();
+    _mLast.dispose();
+    _mBirth.dispose();
     super.dispose();
   }
 
@@ -76,6 +92,77 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
           _card = card;
           _firstCtrl.text = trTitleCase(card.firstName);
           _lastCtrl.text = trTitleCase(card.lastName);
+          _editName = false;
+        });
+      } else if (r == 'profile_has_account') {
+        await _alreadyRegistered();
+      } else {
+        setState(() => _error = RegistrationService.message(r));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Bağlantı hatası. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Elle girilen kimlik bilgileri kontrol edilir; sonra mevki adımına geçilir.
+  Future<void> _manualContinue() async {
+    final tc = _tcCtrl.text.trim();
+    final first = trTitleCase(
+      _mFirst.text.trim().replaceAll(RegExp(r'\s+'), ' '),
+    );
+    final last = trTitleCase(
+      _mLast.text.trim().replaceAll(RegExp(r'\s+'), ' '),
+    );
+    DateTime? birth;
+    try {
+      birth = _mBirth.text.length == 10
+          ? DateFormat('dd-MM-yyyy').parseStrict(_mBirth.text)
+          : null;
+    } catch (_) {
+      birth = null;
+    }
+    String? err;
+    if (tc.length != 11 || !tcValid(tc)) {
+      err =
+          'TC kimlik numarası geçersiz. Kimliğindeki gibi 11 haneyi kontrol et.';
+    } else if (first.length < 2 || last.length < 2) {
+      err = 'Ad ve soyadı kimliğindeki gibi eksiksiz yaz.';
+    } else if (birth == null ||
+        birth.year < 1940 ||
+        birth.isAfter(DateTime.now().subtract(const Duration(days: 3650)))) {
+      err = 'Doğum tarihini GG-AA-YYYY biçiminde, eksiksiz yaz.';
+    }
+    if (err != null) {
+      setState(() => _error = err);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = await RegistrationService.precheckPlayer(
+        firstName: first,
+        lastName: last,
+        birthDate: birth!,
+        tc: tc,
+      );
+      if (!mounted) return;
+      if (r == 'ok') {
+        setState(() {
+          _manualMode = true;
+          _card = IdCardData(
+            firstName: first,
+            lastName: last,
+            birthDate: birth!,
+            tc: tc,
+          );
+          _firstCtrl.text = first;
+          _lastCtrl.text = last;
           _editName = false;
         });
       } else if (r == 'profile_has_account') {
@@ -192,6 +279,7 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
     final foot = _foot;
     final height = int.tryParse(_height.text.trim());
     final weight = int.tryParse(_weight.text.trim());
+    final manual = _manualMode;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: 'RegisterPhoneScreen'),
@@ -199,21 +287,28 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
           kind: 'player',
           name: '$first $last',
           buttonLabel: 'PROFİLİMİ OLUŞTUR',
-          successMessage: 'Futbolcu profilin oluşturuldu.',
-          submit: (raw10, code, password) => RegistrationService.registerPlayer(
-            raw10: raw10,
-            code: code,
-            password: password,
-            firstName: first,
-            lastName: last,
-            birthDate: card.birthDate,
-            tc: card.tc,
-            mainPosition: main,
-            subPosition: sub,
-            foot: foot,
-            height: height,
-            weight: weight,
-          ),
+          successMessage: manual
+              ? 'Futbolcu profilin oluşturuldu. Kimliğini turnuva yetkilisine '
+                    'gösterince onaylanır.'
+              : 'Futbolcu profilin oluşturuldu.',
+          submit: (raw10, code, password) =>
+              (manual
+              ? RegistrationService.registerPlayerManual
+              : RegistrationService.registerPlayer)(
+                raw10: raw10,
+                code: code,
+                password: password,
+                firstName: first,
+                lastName: last,
+                birthDate: card.birthDate,
+                tc: card.tc,
+                mainPosition: main,
+                subPosition: sub,
+                foot: foot,
+                height: height,
+                weight: weight,
+                chipless: card.chipless,
+              ),
         ),
       ),
     );
@@ -229,7 +324,12 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
         children: [
           _progress(card == null ? 1 : 2),
           const SizedBox(height: 18),
-          if (card == null) ..._identityStep() else ..._formStep(card),
+          if (card != null)
+            ..._formStep(card)
+          else if (_manualForm)
+            ..._manualStep()
+          else
+            ..._identityStep(),
         ],
       ),
     );
@@ -305,6 +405,144 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
         style: TextStyle(color: kAdminMuted, fontSize: 12.5),
       ),
     ],
+    if (AppSettings.ibrazEnabled.value) ...[
+      const SizedBox(height: 14),
+      Center(
+        child: TextButton(
+          onPressed: _busy
+              ? null
+              : () => setState(() {
+                  _manualForm = true;
+                  _error = null;
+                }),
+          style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+          child: const Text(
+            'Kimliğimi okutmadan devam et',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
+          ),
+        ),
+      ),
+    ],
+  ];
+
+  /// Kimliğini okutmadan kayıt: bilgileri elle yazar; profil, kimliği
+  /// yetkiliye gösterince (ibraz) turuncu tikle onaylanır.
+  List<Widget> _manualStep() => [
+    const Text(
+      'Bilgilerini gir',
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: 22,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+    const SizedBox(height: 10),
+    Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.55),
+        ),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Color(0xFFFBBF24), size: 22),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'TC, doğum tarihi, ad soyad bilgilerini tam ve eksiksiz '
+              'giriniz. Bilgiler kimliğinle aynı olmalı; profilin, kimliğini '
+              'turnuva yetkilisine gösterdiğinde onaylanır.',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13.5,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+    AdminFormSection(
+      title: 'Kimlik bilgileri',
+      child: AdminFieldGroup(
+        children: [
+          AdminFieldRow(
+            icon: Icons.credit_card_rounded,
+            label: 'TC Kimlik No',
+            child: TextField(
+              controller: _tcCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+              ],
+              onChanged: (_) => setState(() => _error = null),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: adminInlineInputDecoration(hint: '11 haneli'),
+            ),
+          ),
+          AdminFieldRow(
+            icon: Icons.badge_outlined,
+            label: 'Ad',
+            child: _nameField(_mFirst),
+          ),
+          AdminFieldRow(
+            icon: Icons.badge_outlined,
+            label: 'Soyad',
+            child: _nameField(_mLast),
+          ),
+          AdminFieldRow(
+            icon: Icons.cake_outlined,
+            label: 'Doğum Tarihi',
+            child: TextField(
+              controller: _mBirth,
+              keyboardType: TextInputType.number,
+              inputFormatters: [BirthDateInputFormatter()],
+              onChanged: (_) => setState(() => _error = null),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: adminInlineInputDecoration(hint: 'GG-AA-YYYY'),
+            ),
+          ),
+        ],
+      ),
+    ),
+    if (_error != null) _errorText(),
+    AdminPrimaryButton(
+      label: 'DEVAM',
+      icon: Icons.arrow_forward_rounded,
+      busy: _busy,
+      onPressed: _manualContinue,
+    ),
+    const SizedBox(height: 8),
+    Center(
+      child: TextButton(
+        onPressed: _busy
+            ? null
+            : () => setState(() {
+                _manualForm = false;
+                _error = null;
+              }),
+        style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+        child: const Text(
+          'Kimliğimi okutmak istiyorum',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+    ),
   ];
 
   Widget _note(IconData icon, String text) => Container(
@@ -479,21 +717,33 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  const VerifiedBadge(size: 18),
+                  if (!_manualMode) ...[
+                    const SizedBox(width: 6),
+                    const VerifiedBadge(size: 18),
+                  ],
                 ],
               ),
               const SizedBox(height: 3),
               Text(
-                'Doğum yılı ${card.birthDate.year} · kimlikten geldi',
+                _manualMode
+                    ? 'Kimlik ibrazıyla onaylanacak'
+                    : 'Doğum yılı ${card.birthDate.year} · kimlikten geldi',
                 style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
               ),
             ],
           ),
         ),
         TextButton(
-          onPressed: _busy ? null : _readCard,
-          child: const Text('Tekrar oku'),
+          onPressed: _busy
+              ? null
+              : _manualMode
+              ? () => setState(() {
+                  _card = null;
+                  _manualMode = false;
+                  _manualForm = true;
+                })
+              : _readCard,
+          child: Text(_manualMode ? 'Düzenle' : 'Tekrar oku'),
         ),
       ],
     ),

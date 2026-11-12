@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -21,33 +22,38 @@ import '../../tournament_request/tournament_request.dart';
 import '../../../core/services/app_settings.dart';
 import '../registration/register_choice_screen.dart';
 
-/// Eski misafir-kipi tercihini temizleyip giriş kapısını zorunlu tutar.
+/// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır). Giriş
+/// isteğe bağlıdır (Apple 5.1.1); hesap yalnız takip/yorum gibi işler için.
 class GuestMode {
   GuestMode._();
 
   static const _key = 'guest_mode_chosen';
+
+  /// Uygulamada misafir seçimi yalnız bu açılış için: her açılış giriş
+  /// ekranıyla başlar (eski sürümün kalıcı kaydı silinir). Web'de
+  /// hatırlanır (paylaşılan maç linkine gelen her seferinde girişe düşmesin).
   static bool chosen = false;
 
   static Future<void> load() async {
+    chosen = false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      chosen = false;
-      if (prefs.getBool(_key) == true) {
-        await prefs.setBool(_key, false);
+      if (kIsWeb) {
+        chosen = prefs.getBool(_key) ?? false;
+      } else {
+        await prefs.remove(_key);
       }
     } catch (_) {}
   }
 
   static Future<void> set(bool value) async {
-    chosen = false;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (value) {
-        await prefs.remove(_key);
-      } else {
-        await prefs.setBool(_key, false);
-      }
-    } catch (_) {}
+    chosen = value;
+    if (kIsWeb) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_key, value);
+      } catch (_) {}
+    }
     // Oturum değişince aktif turnuva teması yeniden belirlenir.
     await ActiveTournament.refresh();
   }
@@ -241,7 +247,20 @@ class _LoginScreenState extends State<LoginScreen> {
     _adminTapTimer?.cancel();
     _adminTapCount = 0;
 
-    final pwd = await _showBackdoorPasswordDialog();
+    // Kayıtlı admin parmak izi / Face ID varsa önce o; vazgeçilirse şifre.
+    String? pwd;
+    var fromBio = false;
+    final bioAvailable = await BiometricLogin.available();
+    final saved = bioAvailable ? await BiometricLogin.readAdmin() : null;
+    if (saved != null) {
+      final label = await BiometricLogin.label();
+      if (await BiometricLogin.authenticate('$label ile admin girişi')) {
+        pwd = saved;
+        fromBio = true;
+      }
+    }
+    if (!mounted) return;
+    pwd ??= await _showBackdoorPasswordDialog();
     if (!mounted || pwd == null) return;
 
     setState(() => _loading = true);
@@ -249,10 +268,17 @@ class _LoginScreenState extends State<LoginScreen> {
       final ok = await session.signInSuperAdminBackdoor(password: pwd);
       if (!mounted) return;
       if (!ok) {
+        // Saklanan şifre artık geçmiyorsa kayıt silinir.
+        if (fromBio) await BiometricLogin.clearAdmin();
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Şifre hatalı.')));
         return;
+      }
+      if (!fromBio && bioAvailable && saved == null) {
+        await _offerAdminBiometric(pwd);
+        if (!mounted) return;
       }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
@@ -271,6 +297,34 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Şifreyle admin girişinden sonra: "Admin girişi parmak izi ile
+  /// yapılsın mı?" Evet denirse şifre telefonun güvenli kasasına yazılır.
+  Future<void> _offerAdminBiometric(String password) async {
+    final label = await BiometricLogin.label();
+    if (!mounted) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$label ile admin girişi'),
+        content: Text(
+          'Bir dahaki sefere uygulama adına 3 kez dokunup $label ile '
+          'admin girişi yapılsın mı? Futbolcu girişiniz bundan etkilenmez.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Şimdi değil'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Evet'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true) await BiometricLogin.saveAdmin(password);
   }
 
   /// Supabase giriş hatasını kullanıcının anlayacağı bir mesaja çevirir.
@@ -340,6 +394,8 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
         rememberMe: rememberMe,
       );
+      // Parmak izi / Face ID girişi arka planda kapanmaya karşı korunur.
+      await AppSessionController.setBiometricSession(biometric);
       if (session.mustChangePassword) {
         nav.push(
           MaterialPageRoute<void>(
@@ -394,6 +450,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Saha (futbolcu) mı Kulübe (sorumlu) mi seçili. Giriş yöntemi aynı;
+  Future<void> _continueAsGuest() async {
+    await GuestMode.set(true);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'MainNavigator'),
+        builder: (_) => const MainNavigator(),
+      ),
+      (Route<dynamic> route) => false,
+    );
+  }
+
   /// Taraftar seçeneği de aynı telefon/şifre girişini kullanır.
   bool _staff = false;
   bool _fan = false;
@@ -572,6 +640,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               scale: s,
                               showSubtitle: subtitles,
                               onTap: _loading ? null : _openRegistration,
+                            ),
+                            // Giriş zorunlu değil: misafir her şeyi izler
+                            // (menüden açılan giriş ekranında da).
+                            TextButton(
+                              onPressed: _loading ? null : _continueAsGuest,
+                              child: const Text(
+                                'Üye olmadan misafir olarak devam et  ›',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ],
                         ),

@@ -21,6 +21,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../share/king_poster.dart';
 import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
+import '../../share/suspended_poster.dart';
 
 /// Bir sezonun oyuncu istatistikleri (gol, asist, maçın oyuncusu, kartlar).
 /// Başlık çubuğu yok; Turnuva Sayfası'nın İstatistik sekmesinde gösterilir.
@@ -649,6 +650,87 @@ class _StatsTabsState extends State<_StatsTabs> {
     );
   }
 
+  /// Cezalı afişi: tek kişide tekli, birden çok kişide liste afişi.
+  Future<void> _shareSuspended(List<_Suspended> rows) async {
+    if (rows.isEmpty) return;
+    final withPhoto = await showAdminOptionPicker<bool>(
+      context: context,
+      title: 'Afiş türü',
+      items: const [true, false],
+      labelBuilder: (v) => v ? 'Fotoğraflı' : 'Fotoğrafsız',
+      emptyText: '',
+    );
+    if (withPhoto == null || !mounted) return;
+    final client = Supabase.instance.client;
+    final groupId = widget.groupId;
+    final (league, season, groups) = await (
+      widget.leagueId == null
+          ? Future<Map<String, dynamic>?>.value()
+          : client
+                .from('leagues')
+                .select('name, logo_url')
+                .eq('id', widget.leagueId!)
+                .maybeSingle()
+                .catchError((_) => null),
+      client
+          .from('seasons')
+          .select('name')
+          .eq('id', widget.seasonId)
+          .maybeSingle()
+          .catchError((_) => null),
+      groupId == null
+          ? Future<List<Map<String, dynamic>>>.value(const [])
+          : client
+                .from('groups')
+                .select('id, name')
+                .eq('season_id', widget.seasonId)
+                .isFilter('deleted_at', null)
+                .catchError((_) => <Map<String, dynamic>>[]),
+    ).wait;
+    if (!mounted) return;
+    final groupName = groups.length < 2
+        ? ''
+        : (groups.firstWhere(
+                    (g) => g['id'] == groupId,
+                    orElse: () => const {},
+                  )['name'] ??
+                  '')
+              .toString()
+              .trim();
+    final data = SuspendedPosterData(
+      leagueName: (league?['name'] ?? '').toString(),
+      leagueLogo: (league?['logo_url'] ?? '').toString(),
+      withPhoto: withPhoto,
+      subtitle: [
+        (season?['name'] ?? '').toString().trim(),
+        groupName,
+      ].where((e) => e.isNotEmpty).join(' · '),
+      rows: [
+        for (final r in rows)
+          SuspendedPosterRow(
+            photoUrl: r.player?.photoUrl ?? '',
+            name: r.name,
+            team: widget.teamById[r.teamId]?.name ?? '',
+            teamLogo: widget.teamById[r.teamId]?.logoUrl ?? '',
+            reason: r.reason,
+            remaining: r.remaining,
+            total: r.penalty.matchCount,
+          ),
+      ],
+    );
+    await showPosterPreview(
+      context: context,
+      fileName: rows.length == 1 ? 'ceza_bildirimi' : 'cezalilar_listesi',
+      title: rows.length == 1 ? 'Ceza bildirimi' : 'Cezalılar listesi',
+      formats: const [PosterFormat.post, PosterFormat.story],
+      imageUrls: [
+        data.leagueLogo,
+        for (final r in data.rows) ...[r.teamLogo, if (withPhoto) r.photoUrl],
+      ].where((u) => u.trim().isNotEmpty).toList(),
+      poster: SuspendedPoster(data: data),
+    );
+  }
+
   /// Turnuvada hiç maçın adamı seçilmediyse o sekme gösterilmez; Cezalı
   /// yalnız süren ceza varken (açılana dek yalnız admine) görünür.
   List<_Category> get _visible {
@@ -748,6 +830,12 @@ class _StatsTabsState extends State<_StatsTabs> {
                   rows: _suspended,
                   teamById: widget.teamById,
                   mine: mine,
+                  onShareAll: AppSession.of(context).value.isAdmin
+                      ? () => _shareSuspended(_suspended)
+                      : null,
+                  onShareOne: AppSession.of(context).value.isAdmin
+                      ? (r) => _shareSuspended([r])
+                      : null,
                 )
               : _Board(
                   key: ValueKey(_cat),
@@ -2291,6 +2379,7 @@ class _Suspended {
 
   String get name => (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
   int get remaining => penalty.remainingMatches ?? penalty.matchCount;
+  int get total => penalty.matchCount;
 
   String get reason => switch (penalty.kind) {
     'red_card' => 'Kırmızı kart',
@@ -2305,25 +2394,45 @@ class _SuspendedBoard extends StatelessWidget {
     required this.rows,
     required this.teamById,
     required this.mine,
+    this.onShareAll,
+    this.onShareOne,
   });
 
   final List<_Suspended> rows;
   final Map<String, Team> teamById;
   final Set<String> mine;
 
+  /// Afiş (şimdilik yalnız admin): tümü ve satır başına tekli.
+  final VoidCallback? onShareAll;
+  final void Function(_Suspended)? onShareOne;
+
   @override
   Widget build(BuildContext context) {
+    final list = _buildList();
+    if (onShareAll == null) return list;
+    return Stack(
+      children: [
+        list,
+        Positioned(
+          right: 16,
+          bottom: 24,
+          child: FloatingActionButton.extended(
+            heroTag: 'suspended_poster',
+            backgroundColor: _red,
+            foregroundColor: Colors.white,
+            onPressed: onShareAll,
+            icon: const Icon(Icons.ios_share_rounded),
+            label: Text(rows.length == 1 ? 'Afiş' : 'Liste afişi'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 10),
-          child: Text(
-            'Cezası süren oyuncular takımlarının sıradaki maçlarında '
-            'oynayamaz.',
-            style: TextStyle(color: _muted, fontSize: 12),
-          ),
-        ),
         for (final r in rows)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
@@ -2331,6 +2440,7 @@ class _SuspendedBoard extends StatelessWidget {
               row: r,
               team: teamById[r.teamId],
               isMe: mine.contains(r.penalty.playerId),
+              onShare: onShareOne == null ? null : () => onShareOne!(r),
             ),
           ),
       ],
@@ -2343,11 +2453,13 @@ class _SuspendedRow extends StatelessWidget {
     required this.row,
     required this.team,
     required this.isMe,
+    this.onShare,
   });
 
   final _Suspended row;
   final Team? team;
   final bool isMe;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -2403,6 +2515,8 @@ class _SuspendedRow extends StatelessWidget {
                             [
                               if (team != null) team!.name,
                               row.reason,
+                              if (row.total > row.remaining)
+                                '${row.total} maçlık ceza',
                             ].join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -2425,7 +2539,9 @@ class _SuspendedRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${row.remaining} maç',
+                  row.total > row.remaining
+                      ? '${row.remaining} maç kaldı'
+                      : '${row.remaining} maç',
                   style: const TextStyle(
                     color: Color(0xFFFCA5A5),
                     fontSize: 12,
@@ -2433,6 +2549,14 @@ class _SuspendedRow extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onShare != null)
+                IconButton(
+                  tooltip: 'Tekli afiş',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.ios_share_rounded, size: 18),
+                  color: const Color(0xFFFCA5A5),
+                  onPressed: onShare,
+                ),
             ],
           ),
         ),

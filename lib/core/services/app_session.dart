@@ -9,8 +9,21 @@ import 'package:supabase_flutter/supabase_flutter.dart'
     as sb; // Supabase çakışmasını önlemek için alias
 import '../push/push_service.dart';
 import 'error_reporter.dart';
+import '../utils/app_activity.dart';
 
 const _kRememberMeKey = 'auth_remember_me';
+
+/// Parmak izi / Face ID ile girildi: arka planda sistem uygulamayı kapatsa
+/// da oturum korunur; uzun süre sonra açılışta giriş ekranı gelir.
+const _kBioSessionKey = 'auth_bio_session';
+
+/// Uygulamanın arka plana alındığı an (ms). Ön plana dönünce silinir.
+/// Açılışta varsa: uygulama arka plandayken kapanmış demektir.
+const _kBackgroundAtKey = 'auth_background_at';
+
+/// Parmak izi oturumu: arka planda kapanan uygulama bu süre içinde
+/// açılırsa kaldığı oturumla devam eder.
+const _kBioResumeWindow = Duration(minutes: 60);
 
 /// Kullanıcının sorumlu olduğu takım (sezon bazında, `team_managers`).
 @immutable
@@ -180,8 +193,12 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       ) {
     // Akışı Supabase Auth değişikliklerine kaydırdık
     _sub = _supabase.auth.onAuthStateChange.listen((data) {
+      if (data.event == sb.AuthChangeEvent.signedOut) {
+        _checkSessionLost();
+      }
       _onAuthChanged(data.session?.user);
     });
+    AppActivity.foreground.addListener(_onForegroundChanged);
 
     // İlk açılışta mevcut kullanıcıyı kontrol et
     _onAuthChanged(_supabase.auth.currentUser);
@@ -199,6 +216,16 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       remember = prefs.getBool(_kRememberMeKey) ?? false;
+      // Parmak izi / Face ID girişi: uygulama arka plandayken kapandıysa
+      // (sistem bellek için kapattı) ve çok beklenmediyse oturum sürer.
+      final bgAt = prefs.getInt(_kBackgroundAtKey);
+      if (!remember &&
+          (prefs.getBool(_kBioSessionKey) ?? false) &&
+          bgAt != null) {
+        final away = DateTime.now().millisecondsSinceEpoch - bgAt;
+        remember = away >= 0 && away < _kBioResumeWindow.inMilliseconds;
+      }
+      await prefs.remove(_kBackgroundAtKey);
     } catch (_) {}
     if (remember) return;
     try {
@@ -213,8 +240,59 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     } catch (_) {}
   }
 
+  /// Giriş parmak izi / Face ID ile mi yapıldı (bkz. [enforceRememberMe]).
+  static Future<void> setBiometricSession(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kBioSessionKey, value);
+    } catch (_) {}
+  }
+
+  /// Arka plana geçiş anı saklanır; ön plana dönünce silinir.
+  void _onForegroundChanged() {
+    final fg = AppActivity.foreground.value;
+    SharedPreferences.getInstance()
+        .then((prefs) {
+          if (fg) {
+            prefs.remove(_kBackgroundAtKey);
+          } else {
+            prefs.setInt(
+              _kBackgroundAtKey,
+              DateTime.now().millisecondsSinceEpoch,
+            );
+          }
+        })
+        .catchError((_) => null);
+  }
+
+  /// Oturum kullanıcı çıkış yapmadan kapandı (ör. arka plandan dönüşte
+  /// oturum yenilenemedi): açık ekran misafir yetkisiyle kalmasın, giriş
+  /// ekranına gidilir. main.dart'ta atanır.
+  static VoidCallback? onSessionLost;
+
+  /// Kullanıcının kendi çıkışı (Çıkış yap, hesap silme, şifre sıfırlama).
+  bool _signingOut = false;
+
+  void _checkSessionLost() {
+    final prev = value.user;
+    if (_signingOut || prev == null || prev.isAnonymous) return;
+    // Kısa bir bekleme: oturum hemen geri geldiyse (yeniden giriş) dokunma.
+    Future<void>.delayed(const Duration(milliseconds: 800), () {
+      final now = _supabase.auth.currentUser;
+      if (_signingOut || (now != null && !now.isAnonymous)) return;
+      ErrorReporter.report(
+        StateError('Oturum kendiliğinden kapandı'),
+        StackTrace.current,
+        context: 'auth',
+      );
+      onSessionLost?.call();
+    });
+  }
+
   Future<void> signOut() async {
+    _signingOut = true;
     await setRememberMe(false);
+    await setBiometricSession(false);
     // Oturum kapanmadan (yetki varken) bu cihazın bildirim kaydı silinir.
     await PushService.onSignOut();
     try {
@@ -223,6 +301,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       // ignore
     } finally {
       _onAuthChanged(null);
+      // Akıştaki signedOut olayı işlendikten sonra bayrak iner.
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        _signingOut = false;
+      });
     }
   }
 
@@ -339,8 +421,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       try {
         await _supabase.auth.signInWithPassword(email: email, password: pwd);
         if (_supabase.auth.currentUser != null) {
-          // Gizli admin girişi hatırlanmaz; uygulama tekrar açılınca kapanır.
-          await setRememberMe(false);
+          // Admin girişi her zaman hatırlanır.
+          await setRememberMe(true);
           value = value.copyWith(isAdmin: true, role: 'super_admin');
           return true;
         }
@@ -684,6 +766,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       refereeId: refereeId,
       isLoading: false,
     );
+    // Admin, "Beni Hatırla" işaretlemese de hatırlanır.
+    if (isAdmin) await setRememberMe(true);
     await _loadLeagueScope(isAdmin);
   }
 
@@ -716,6 +800,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   void dispose() {
     _sub?.cancel();
     _profileSub?.cancel();
+    AppActivity.foreground.removeListener(_onForegroundChanged);
     super.dispose();
   }
 }

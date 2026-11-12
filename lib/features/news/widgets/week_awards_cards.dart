@@ -3,9 +3,12 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:video_player/video_player.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/instagram_share.dart';
@@ -15,6 +18,7 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../tournament/models/league_extras.dart';
+import '../../videos/instagram_embed.dart';
 import '../week_awards.dart';
 import 'result_news_cards.dart';
 
@@ -1368,8 +1372,36 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
     super.dispose();
   }
 
+  /// Haftanın Golü videosu (build'te güncellenir) ve kartın sayfa sırası.
+  String _goalVideoUrl = '';
+  Set<int> _goalPages = {};
+
+  /// Instagram gönderisi olan sayfalar (görüntü olarak paylaşılamaz).
+  Set<int> _igPages = {};
+
   Future<void> _shareInstagram() async {
     if (_busy) return;
+    if (_goalPages.contains(_page) && _goalVideoUrl.isNotEmpty) {
+      // 2 sn kart + gol videosu: hikâye olarak paylaşılır.
+      final messenger = ScaffoldMessenger.of(context);
+      setState(() => _busy = true);
+      try {
+        final r = await http.get(Uri.parse(_goalVideoUrl));
+        if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+        if (!await InstagramShare.shareVideo(r.bodyBytes, story: true)) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Instagram açılamadı.')),
+          );
+        }
+      } catch (_) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Video indirilemedi. Tekrar deneyin.')),
+        );
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
     final story = await askInstagramTarget(context);
     if (story == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1465,19 +1497,96 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
           ),
         );
 
+        // Sayfalar: her kart; enin Instagram bağlantısı varsa kartın hemen
+        // ardından o gönderi (2. sayfa).
+        final mp4Ok =
+            AppSession.of(context).value.isAdmin ||
+            AppSettings.goalClipMp4Enabled.value;
+        String? clipMp4(WeekAward a) {
+          final c = a.clip;
+          final u = (c?['story_url'] ?? c?['clip_url'] ?? '').toString();
+          return u.isEmpty ? null : u;
+        }
+
+        final entries =
+            <({int card, WeekAward? award, bool ig, String? video})>[];
+        for (var i = 0; i < cards.length; i++) {
+          final a = awardAt(i);
+          entries.add((card: i, award: a, ig: false, video: null));
+          if (a != null && a.instagramUrl.isNotEmpty) {
+            entries.add((card: i, award: a, ig: true, video: null));
+          } else if (a != null &&
+              a.kind == AwardKind.goal &&
+              mp4Ok &&
+              clipMp4(a) != null) {
+            // Instagram gönderisi yoksa gol videosu aynı yerde 2. sayfa.
+            entries.add((card: i, award: a, ig: false, video: clipMp4(a)));
+          }
+        }
         final pages = <Widget>[
-          for (final (i, c) in cards.indexed)
-            GestureDetector(
-              onTap: widget.expandOnTap
-                  ? () => openFull(i)
-                  : awardAt(i)?.kind == AwardKind.goal
-                  ? () => _play(awardAt(i)!)
-                  : null,
-              child: c,
-            ),
+          for (final e in entries)
+            if (e.video != null)
+              _ClipPage(url: e.video!, label: '${e.award!.kind.full} · 2/2')
+            else if (!e.ig)
+              GestureDetector(
+                onTap: widget.expandOnTap
+                    ? () => openFull(e.card)
+                    : e.award?.kind == AwardKind.goal
+                    ? () => _play(e.award!)
+                    : null,
+                child: cards[e.card],
+              )
+            else
+              ColoredBox(
+                color: Colors.black,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    InstagramEmbed(url: e.award!.instagramUrl, focused: true),
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${e.award!.kind.full} · 2/2',
+                            style: _cond(13, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
         ];
+        final videoOk =
+            w.goalVideoUrl.isNotEmpty &&
+            (AppSession.of(context).value.isAdmin ||
+                AppSettings.goalClipMp4Enabled.value);
+        _igPages = {
+          for (var i = 0; i < entries.length; i++)
+            if (entries[i].ig || (entries[i].video != null && !videoOk)) i,
+        };
+        _goalVideoUrl = videoOk ? w.goalVideoUrl : '';
+        _goalPages = {
+          for (var i = 0; i < entries.length; i++)
+            if (!entries[i].ig && entries[i].award?.kind == AwardKind.goal) i,
+        };
         // Görünen kart haftanın golüyse altında "Golü izle".
-        final goal = _goalWithClip(awardAt(_page));
+        final cur = _page < entries.length ? entries[_page] : null;
+        // Gol videosu 2. sayfa olarak varsa "Golü izle" düğmesi gerekmez.
+        final goal =
+            cur != null && !cur.ig && !entries.any((e) => e.video != null)
+            ? _goalWithClip(cur.award)
+            : null;
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -1532,22 +1641,17 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   ],
                 ),
               ),
-              // Uygulamada daha alçak: kart 4:5 kalır (paylaşım görseli), kare
-              // alanda ortalanır.
+              // Kart (4:5) alanın tamamını kaplar; en-boy oranı korunur, bu
+              // yüzden alan da 4:5'tir (fotoğraf şişmez / kırpılmaz).
               AspectRatio(
-                aspectRatio: 1.08,
+                aspectRatio: 4 / 5,
                 child: PageView.builder(
                   controller: _pager,
                   itemCount: pages.length,
                   onPageChanged: (i) => setState(() => _page = i),
-                  itemBuilder: (context, i) => Center(
-                    child: AspectRatio(
-                      aspectRatio: 4 / 5,
-                      child: RepaintBoundary(
-                        key: _keys.putIfAbsent(i, GlobalKey.new),
-                        child: pages[i],
-                      ),
-                    ),
+                  itemBuilder: (context, i) => RepaintBoundary(
+                    key: _keys.putIfAbsent(i, GlobalKey.new),
+                    child: pages[i],
                   ),
                 ),
               ),
@@ -1600,7 +1704,11 @@ class _WeekAwardsNewsCardState extends State<WeekAwardsNewsCard> {
                   likeCount: widget.likeCount,
                   onToggleLike: widget.onToggleLike,
                   onShare: widget.onShare,
-                  onInstagram: snap.data == true && !_busy && pages.isNotEmpty
+                  onInstagram:
+                      snap.data == true &&
+                          !_busy &&
+                          pages.isNotEmpty &&
+                          !_igPages.contains(_page)
                       ? _shareInstagram
                       : null,
                 ),
@@ -2200,6 +2308,117 @@ class WeekAwardsCover extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Haftanın Golü kesiti (MP4) kartın 2. sayfasında: dokununca oynar.
+class _ClipPage extends StatefulWidget {
+  const _ClipPage({required this.url, required this.label});
+
+  final String url;
+  final String label;
+
+  @override
+  State<_ClipPage> createState() => _ClipPageState();
+}
+
+class _ClipPageState extends State<_ClipPage> {
+  VideoPlayerController? _c;
+  bool _failed = false;
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    var c = _c;
+    if (c == null) {
+      // Veri harcamamak için video yalnız dokununca indirilmeye başlar.
+      c = _c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      setState(() {});
+      try {
+        await c.initialize();
+        await c.setLooping(true);
+        if (!mounted) return;
+        setState(() {});
+        await c.play();
+      } catch (_) {
+        if (mounted) setState(() => _failed = true);
+      }
+      return;
+    }
+    if (!c.value.isInitialized) return;
+    c.value.isPlaying ? await c.pause() : await c.play();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    final ready = c != null && c.value.isInitialized;
+    return GestureDetector(
+      onTap: _toggle,
+      child: ColoredBox(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (ready)
+              Center(
+                child: AspectRatio(
+                  aspectRatio: c.value.aspectRatio,
+                  child: VideoPlayer(c),
+                ),
+              ),
+            if (!ready || !c.value.isPlaying)
+              Center(
+                child: _failed
+                    ? const Text(
+                        'Video açılamadı',
+                        style: TextStyle(color: Colors.white70),
+                      )
+                    : c != null && !ready
+                    ? const CircularProgressIndicator(color: Colors.white70)
+                    : Container(
+                        width: 72,
+                        height: 72,
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 48,
+                        ),
+                      ),
+              ),
+            Positioned(
+              left: 10,
+              top: 10,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    widget.label,
+                    style: _cond(13, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

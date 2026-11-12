@@ -91,10 +91,51 @@ class RegistrationService {
     String? foot,
     int? height,
     int? weight,
+    bool chipless = false,
   }) async {
     String two(int v) => v.toString().padLeft(2, '0');
     final r = await _sb.rpc(
       'register_player',
+      params: {
+        'p_phone': raw10,
+        'p_code': code,
+        'p_password': password,
+        'p_first': firstName,
+        'p_last': lastName,
+        'p_birth':
+            '${birthDate.year}-${two(birthDate.month)}-${two(birthDate.day)}',
+        'p_tc': tc,
+        'p_main': mainPosition,
+        'p_sub': subPosition,
+        'p_foot': foot,
+        'p_height': height,
+        'p_weight': weight,
+        if (chipless) 'p_chipless': true,
+      },
+    );
+    return (r ?? '').toString();
+  }
+
+  /// Kimliğini okutmadan kayıt: profil onaysız açılır, ibrazla onaylanır.
+  static Future<String> registerPlayerManual({
+    required String raw10,
+    required String code,
+    required String password,
+    required String firstName,
+    required String lastName,
+    required DateTime birthDate,
+    required String tc,
+    required String mainPosition,
+    String? subPosition,
+    String? foot,
+    int? height,
+    int? weight,
+    // Okutmadan kayıtta kullanılmaz; registerPlayer ile aynı çağrı biçimi için.
+    bool chipless = false,
+  }) async {
+    String two(int v) => v.toString().padLeft(2, '0');
+    final r = await _sb.rpc(
+      'register_player_manual',
       params: {
         'p_phone': raw10,
         'p_code': code,
@@ -146,6 +187,12 @@ class RegistrationService {
     'not_verified' => 'Profilin kimlikle onaylı değil.',
     'identity_mismatch' => 'Okutulan kimlik bu profile ait değil.',
     'phone_taken' => 'Bu numara başka bir hesapta kayıtlı.',
+    'tc_taken' =>
+      'Bu TC kimlik numarası onaylı bir profilde kayıtlı. Kimliğini '
+          'okutarak kayıt ol ya da sorumlunuza başvurun.',
+    'tc_pending' =>
+      'Bu TC kimlik numarasıyla onay bekleyen bir kayıt var. Sorumlunuza '
+          'başvurun.',
     'same_phone' => 'Bu numara zaten hesabında kayıtlı.',
     _ => 'İşlem tamamlanamadı. Lütfen tekrar deneyin.',
   };

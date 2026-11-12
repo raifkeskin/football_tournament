@@ -47,11 +47,8 @@ class RegisterChoiceScreen extends StatelessWidget {
                 've puan durumunu takip et. Telefonunu doğrula, hesabını oluştur.',
             icon: Icons.stadium_rounded,
             colors: const [Color(0xFF2563EB), Color(0xFF172554)],
-            onTap: () => _open(
-              context,
-              'RegisterFanScreen',
-              const RegisterFanScreen(),
-            ),
+            onTap: () =>
+                _open(context, 'RegisterFanScreen', const RegisterFanScreen()),
           ),
           const SizedBox(height: 14),
           _ChoiceCard(

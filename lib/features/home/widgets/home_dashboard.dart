@@ -32,6 +32,10 @@ import '../../tournament/models/league_extras.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/app_settings.dart';
 import 'attendance_home_card.dart';
+import 'notif_invite_banner.dart';
+import '../../admin_panel/admin_panel_screen.dart';
+import '../../match/screens/esame_edit_screen.dart';
+import '../../match/widgets/attendance_card.dart';
 import 'my_week_card.dart';
 import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
@@ -39,6 +43,7 @@ import 'referee_home_card.dart';
 import 'unassigned_referees_banner.dart';
 import 'unscheduled_matches_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
+import '../../identity/identity_service.dart';
 import '../../identity/verify_prompt_chip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
@@ -193,6 +198,9 @@ class _Scorer {
   final String teamId;
   final String photoUrl;
   int goals = 0;
+
+  /// Cezalı listesinde: verilen toplam ceza maçı (goals = kalan).
+  int total = 0;
 }
 
 /// Panonun tek seferde okunan verisi.
@@ -209,6 +217,7 @@ class _DashData {
     required this.myTeamIds,
     required this.scorers,
     required this.assisters,
+    required this.suspended,
     required this.totalGoals,
     required this.activePenaltyMatches,
     required this.pendingPenalties,
@@ -226,6 +235,9 @@ class _DashData {
   final Set<String> myTeamIds;
   final List<_Scorer> scorers;
   final List<_Scorer> assisters;
+
+  /// Cezası süren oyuncular (goals = kalan maç, total = toplam ceza).
+  final List<_Scorer> suspended;
   final int totalGoals;
 
   /// Oyuncunun süren cezası (kalan maç); yoksa 0.
@@ -626,7 +638,31 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 .eq('season_id', seasonId)
                 .eq('status', 'pending')
           : none(),
+      // Süren onaylı cezalar (ana sayfada "Cezalılar").
+      _sb
+          .from('player_penalties')
+          .select(
+            'player_id, remaining_matches, match_count, '
+            'players(name, surname, photo_url)',
+          )
+          .eq('season_id', seasonId)
+          .eq('status', 'approved')
+          .eq('is_active', true),
     ]);
+    final suspended = (r[8] as List?) ?? const [];
+    var suspRoster = const <dynamic>[];
+    if (suspended.isNotEmpty) {
+      try {
+        suspRoster = await _sb
+            .from('season_team_players')
+            .select('player_id, team_id')
+            .eq('season_id', seasonId)
+            .eq('is_active', true)
+            .inFilter('player_id', [
+              for (final x in suspended) x['player_id'].toString(),
+            ]);
+      } catch (_) {}
+    }
     return {
       'season': season,
       'season_teams': r[0],
@@ -638,6 +674,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
       'my_penalties': r[6],
       'pending': (r[7] as List).length,
       'pending_rows': r[7],
+      'suspended': suspended,
+      'susp_roster': suspRoster,
     };
   }
 
@@ -738,6 +776,32 @@ class _HomeDashboardState extends State<HomeDashboard> {
       for (final r in (raw['my_player_teams'] as List? ?? const []))
         r['team_id'].toString(),
     };
+    final suspTeam = <String, String>{
+      for (final r in (raw['susp_roster'] as List? ?? const []))
+        r['player_id'].toString(): r['team_id'].toString(),
+    };
+    final suspended = <_Scorer>[];
+    for (final r in (raw['suspended'] as List? ?? const [])) {
+      final pl = (r['players'] as Map?) ?? const {};
+      final pid = r['player_id'].toString();
+      final total = (r['match_count'] as num?)?.toInt() ?? 0;
+      final left = (r['remaining_matches'] as num?)?.toInt() ?? total;
+      if (left <= 0) continue;
+      suspended.add(
+        _Scorer(
+            pid,
+            [
+              (pl['name'] ?? '').toString().trim(),
+              (pl['surname'] ?? '').toString().trim(),
+            ].where((e) => e.isNotEmpty).join(' '),
+            suspTeam[pid] ?? '',
+            (pl['photo_url'] ?? '').toString(),
+          )
+          ..goals = left
+          ..total = total,
+      );
+    }
+    suspended.sort((a, b) => b.goals.compareTo(a.goals));
     var activePenalty = 0;
     for (final p in (raw['my_penalties'] as List? ?? const [])) {
       activePenalty +=
@@ -766,6 +830,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       myTeamIds: myTeams,
       scorers: ranked(scorerMap),
       assisters: ranked(assistMap),
+      suspended: suspended,
       totalGoals: totalGoals,
       activePenaltyMatches: activePenalty,
       pendingPenalties: (raw['pending'] as num?)?.toInt() ?? 0,
@@ -862,6 +927,144 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ),
       ),
     );
+  }
+
+  /// Takım sorumlusu: esameyi kağıttan okut ya da elle gir.
+  Future<void> _esameChoice(
+    MatchModel m,
+    String teamId,
+    String teamName,
+  ) async {
+    Widget option({
+      required IconData icon,
+      required String title,
+      required String sub,
+      required bool scan,
+      required BuildContext ctx,
+    }) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: scan
+            ? DashColors.accent().withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.of(ctx).pop(scan),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, color: scan ? DashColors.accent() : Colors.white70),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: _barlow(size: 16, weight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        sub,
+                        style: _barlow(size: 12.5, color: DashColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final scan = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: DashColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Esameyi nasıl gireceksin?',
+                style: _barlow(size: 18, weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                [teamName, ?m.matchTime].join(' · '),
+                style: _barlow(size: 13, color: DashColors.muted),
+              ),
+              const SizedBox(height: 14),
+              option(
+                icon: Icons.document_scanner_outlined,
+                title: 'Kağıttan okut',
+                sub:
+                    'Esame kağıdının fotoğrafını çek, liste kendiliğinden dolsun',
+                scan: true,
+                ctx: ctx,
+              ),
+              option(
+                icon: Icons.edit_note_rounded,
+                title: 'Elle gir',
+                sub: 'Kadrodan seç; ankete evet diyenler ayrı sekmede',
+                scan: false,
+                ctx: ctx,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (scan == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EsameEditScreen(
+          match: m,
+          teamId: teamId,
+          teamName: teamName,
+          isHome: teamId == m.homeTeamId,
+          autoScan: scan,
+        ),
+      ),
+    );
+    _EsameMissingStrip.refresh.value++;
+  }
+
+  /// Takım sorumlusu: katılım anketi (yanıtlar, WhatsApp bağlantıları).
+  Future<void> _pollSheet(
+    MatchModel m,
+    String teamId,
+    String teamName,
+    String rivalName,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: DashColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: AttendanceCard(
+              match: m,
+              teamId: teamId,
+              teamName: teamName,
+              rivalName: rivalName,
+            ),
+          ),
+        ),
+      ),
+    );
+    AttendanceHomeCard.refresh.value++;
   }
 
   Future<void> _pickFollowedTeam(_DashData data) async {
@@ -962,6 +1165,23 @@ class _HomeDashboardState extends State<HomeDashboard> {
           // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
           child: SponsorStrip(leagueId: widget.league.id),
         ),
+        // Yönetim Paneli'ne geçiş: sponsor şeridinin altında ince şerit.
+        ListenableBuilder(
+          listenable: AdminPanelAccess.changes,
+          builder: (context, _) {
+            final session = AppSession.of(context).value;
+            if (!AdminPanelAccess.visible(session)) {
+              return const SizedBox.shrink();
+            }
+            // Açılışta panel bir kez kendiliğinden açılır.
+            AdminPanelAutoOpen.maybeOpen(
+              context,
+              session,
+              leagueId: widget.league.id,
+            );
+            return AdminPanelStrip(leagueId: widget.league.id);
+          },
+        ),
         Expanded(
           child: RefreshIndicator(
             color: DashColors.accent(),
@@ -970,10 +1190,17 @@ class _HomeDashboardState extends State<HomeDashboard> {
               padding: const EdgeInsets.only(bottom: 24),
               children: [
                 _greeting(session, data),
-                OverdueResultsBanner(leagueId: widget.league.id),
-                UnassignedRefereesBanner(leagueId: widget.league.id),
-                UnscheduledMatchesBanner(leagueId: widget.league.id),
+                // Yönetim Paneli açık olanlarda bu uyarılar panelde gösterilir.
+                if (!AdminPanelAccess.visible(session)) ...[
+                  OverdueResultsBanner(leagueId: widget.league.id),
+                  UnassignedRefereesBanner(leagueId: widget.league.id),
+                  UnscheduledMatchesBanner(leagueId: widget.league.id),
+                ],
                 const RefereeHomeCard(),
+                NotifInviteBanner(
+                  leagueId: widget.league.id,
+                  leagueName: widget.league.name,
+                ),
                 AttendanceHomeCard(leagueId: widget.league.id),
                 if (session.playerId != null && MyWeekCard.enabledFor(session))
                   MyWeekCard(leagueId: widget.league.id),
@@ -1434,6 +1661,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
         : list;
     final scorers = leadersInGroup(d.scorers);
     final assisters = leadersInGroup(d.assisters);
+    final suspendedHere = leadersInGroup(d.suspended);
     // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
     // cezalar (maçsız elle girilen ceza her grupta sayılır).
     final matchGroup = {for (final m in d.matches) m.id: m.groupId};
@@ -1460,6 +1688,46 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _alert('Cezalısın: ${d.activePenaltyMatches} maç daha oynayamazsın.'),
           const SizedBox(height: 12),
         ],
+        // Turnuva çipli kimlik istiyorsa: oyuncuya ve takım sorumlusuna uyarı.
+        if (session.user != null)
+          FutureBuilder<Map<String, dynamic>>(
+            future: IdentityService.myWarnings(),
+            builder: (context, snap) {
+              final w = snap.data ?? const <String, dynamic>{};
+              final mine = [
+                for (final x in (w['player'] as List? ?? const []))
+                  if ('${x['league']}' == widget.league.name) x,
+              ];
+              final teams = [
+                for (final x in (w['teams'] as List? ?? const []))
+                  if ('${x['league']}' == widget.league.name) x,
+              ];
+              if (mine.isEmpty && teams.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (mine.isNotEmpty) ...[
+                    _alert(
+                      'Mavi tik gerekli: ${widget.league.name} turnuvasında '
+                      'kimliği çipli okutulmayan oyuncu esameye yazılamaz. '
+                      'Kimliğini okutmak için takım sorumlunla görüş.',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  for (final t in teams) ...[
+                    _alert(
+                      '${t['team']}: ${(t['players'] as List).length} '
+                      'oyuncunun mavi tiki yok '
+                      '(${(t['players'] as List).take(3).join(', ')}'
+                      '${(t['players'] as List).length > 3 ? '…' : ''}). '
+                      'Esameye yazılamazlar; kadrodan kimlik okutun.',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              );
+            },
+          ),
         if (isOwner && pendingHere > 0) ...[
           // Dokununca ceza onayları ekranı, ana sayfada seçili turnuva,
           // sezon ve grupla süzülmüş olarak.
@@ -1584,6 +1852,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
             () => openHub(TournamentHubTab.stats),
           ),
           _leaders(d, assisters, 'asist'),
+        ],
+        if (suspendedHere.isNotEmpty) ...[
+          _sectionHeader(
+            'CEZALILAR',
+            'İstatistik',
+            () => openHub(TournamentHubTab.stats),
+          ),
+          _leaders(d, suspendedHere, 'maç', limit: 5, penalty: true),
         ],
         if (lastWeekMatches.isNotEmpty) ...[
           _sectionHeader(
@@ -1801,9 +2077,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final hasTime = RegExp(
       r'^\d{1,2}:\d{2}',
     ).hasMatch((m.matchTime ?? '').trim());
-    final openAt = kickoff == null || !hasTime
-        ? null
-        : kickoff.subtract(Duration(hours: d.openHours));
+    // Esame maç günü 00:00'dan (TR) açık; turnuva süresi daha erkense o.
+    DateTime? openAt;
+    if (kickoff != null && hasTime) {
+      final byHours = kickoff.subtract(Duration(hours: d.openHours));
+      final local = kickoff.add(const Duration(hours: 3));
+      final dayStart = DateTime.utc(
+        local.year,
+        local.month,
+        local.day,
+      ).subtract(const Duration(hours: 3));
+      openAt = byHours.isBefore(dayStart) ? byHours : dayStart;
+    }
     final now = DateTime.now().toUtc();
     // Sorumlusu olunan takım (iki takımın da sorumlusuysa ev sahibi).
     final managedTeamId =
@@ -1815,6 +2100,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ? m.awayTeamId
         : null;
     final managesThis = managedTeamId != null;
+    final myName = (managedTeamId == m.homeTeamId ? home : away)?.name ?? '';
+    final rivalName = (managedTeamId == m.homeTeamId ? away : home)?.name ?? '';
 
     String esame;
     var esameOpen = false;
@@ -1900,45 +2187,49 @@ class _HomeDashboardState extends State<HomeDashboard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               side(home),
-              SizedBox(
-                width: 92,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    if (live || hasTime)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openMatch(m),
+                child: SizedBox(
+                  width: 92,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 8),
+                      if (live || hasTime)
+                        Text(
+                          live
+                              ? '${m.homeScore} – ${m.awayScore}'
+                              : m.matchTime!.substring(0, 5),
+                          style: _condensed(
+                            size: 30,
+                            color: live ? Colors.white : accent,
+                          ),
+                        )
+                      else
+                        Text('–', style: _condensed(size: 30)),
                       Text(
-                        live
-                            ? '${m.homeScore} – ${m.awayScore}'
-                            : m.matchTime!.substring(0, 5),
-                        style: _condensed(
-                          size: 30,
-                          color: live ? Colors.white : accent,
-                        ),
-                      )
-                    else
-                      Text('–', style: _condensed(size: 30)),
-                    Text(
-                      kTr == null
-                          ? 'Tarih belirlenmedi'
-                          : _daysLong[kTr.weekday - 1],
-                      textAlign: TextAlign.center,
-                      style: _barlow(size: 12, color: DashColors.muted),
-                    ),
-                    // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
-                    if (kTr != null)
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          '${kTr.day} ${_monthsLong[kTr.month - 1]} ${kTr.year}',
-                          maxLines: 1,
-                          style: _barlow(
-                            size: 12,
-                            weight: FontWeight.w700,
-                            color: DashColors.muted,
+                        kTr == null
+                            ? 'Tarih belirlenmedi'
+                            : _daysLong[kTr.weekday - 1],
+                        textAlign: TextAlign.center,
+                        style: _barlow(size: 12, color: DashColors.muted),
+                      ),
+                      // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
+                      if (kTr != null)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '${kTr.day} ${_monthsLong[kTr.month - 1]} ${kTr.year}',
+                            maxLines: 1,
+                            style: _barlow(
+                              size: 12,
+                              weight: FontWeight.w700,
+                              color: DashColors.muted,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               side(away),
@@ -1965,6 +2256,24 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ],
             ),
           ],
+          // Takımlara logodan gidilir; maçın kendisine buradan / ortadaki
+          // saat bloğundan.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _openMatch(m),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Maç detayı ›',
+                textAlign: TextAlign.center,
+                style: _barlow(
+                  size: 12.5,
+                  weight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
           const SizedBox(height: 10),
@@ -1973,27 +2282,39 @@ class _HomeDashboardState extends State<HomeDashboard> {
             Row(
               children: [
                 Expanded(
-                  child: _cardButton(
-                    label: 'Esame',
-                    icon: esameOpen
-                        ? Icons.assignment_outlined
-                        : Icons.lock_clock_rounded,
-                    accent: accent,
-                    onPressed: esameOpen ? () => _openMatch(m, tab: 1) : null,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: _cardButton(
+                      label: 'Esame',
+                      icon: esameOpen
+                          ? Icons.assignment_outlined
+                          : Icons.lock_clock_rounded,
+                      accent: accent,
+                      onPressed: esameOpen
+                          ? () => _esameChoice(m, managedTeamId, myName)
+                          : null,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _HomePollButton(
-                    key: ValueKey('poll-${m.id}-$managedTeamId'),
-                    matchId: m.id,
-                    teamId: managedTeamId,
-                    accent: accent,
-                    onOpenRoster: () => _openMatch(m, tab: 1),
-                  ),
+                // Anket kapanınca bu düğme kalkar, Esame tam genişliğe yayılır.
+                _HomePollButton(
+                  key: ValueKey('poll-${m.id}-$managedTeamId'),
+                  matchId: m.id,
+                  teamId: managedTeamId,
+                  accent: accent,
+                  onOpenRoster: () =>
+                      _pollSheet(m, managedTeamId, myName, rivalName),
                 ),
               ],
             ),
+            if (esameOpen)
+              _EsameMissingStrip(
+                key: ValueKey('esame-${m.id}-$managedTeamId'),
+                matchId: m.id,
+                teamId: managedTeamId,
+                seasonId: m.seasonId,
+                onTap: () => _esameChoice(m, managedTeamId, myName),
+              ),
             if (!esameOpen) ...[
               const SizedBox(height: 8),
               Text(
@@ -2186,17 +2507,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
       );
     }
 
-    // Logoya dokununca takım sayfası; satırın kalanı maç detayı.
-    Widget badge(_TeamInfo? t) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: t == null
-          ? null
-          : () => _openTeam(m.seasonId, t.id, t.name, t.logoUrl),
-      child: TeamBadge(
-        name: t?.name ?? '?',
-        logoUrl: t?.logoUrl ?? '',
-        color: t?.color,
-      ),
+    // Satırın tamamı (logolar dahil) maç detayını açar.
+    Widget badge(_TeamInfo? t) => TeamBadge(
+      name: t?.name ?? '?',
+      logoUrl: t?.logoUrl ?? '',
+      color: t?.color,
     );
 
     Widget name(_TeamInfo? t, {required bool end}) => Expanded(
@@ -2388,8 +2703,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   /// İlk 3 oyuncu: fotoğrafı varsa fotoğraf, yoksa baş harf; dokununca
   /// oyuncu kartı.
-  Widget _leaders(_DashData d, List<_Scorer> list, String unit) {
-    final top = list.take(3).toList();
+  Widget _leaders(
+    _DashData d,
+    List<_Scorer> list,
+    String unit, {
+    int limit = 3,
+    bool penalty = false,
+  }) {
+    final top = list.take(limit).toList();
     return _card(
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
       child: Column(
@@ -2424,7 +2745,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
                             style: _barlow(size: 14, weight: FontWeight.w700),
                           ),
                           Text(
-                            d.teams[top[i].teamId]?.name ?? '',
+                            [
+                              d.teams[top[i].teamId]?.name ?? '',
+                              if (penalty && top[i].total > top[i].goals)
+                                '${top[i].total} maçlık ceza · ${top[i].goals} maç kaldı',
+                            ].where((e) => e.isNotEmpty).join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: _barlow(size: 12, color: DashColors.muted),
@@ -2507,12 +2832,26 @@ class _HomePollButtonState extends State<_HomePollButton> {
 
   /// null: yükleniyor; true: anket açık; false: başlatılabilir.
   bool? _active;
+
+  /// Anket var ama kapandı (maçtan 3 saat önce ya da elle); dokununca
+  /// sonuçlar görünür. Anket yokken süre dolduysa başlatılamaz.
+  bool _closed = false;
+  bool _expired = false;
+  int _yes = 0;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Ana sayfadaki katılım kartından yanıt verilince sayaç yenilenir.
+    AttendanceHomeCard.answerSaved.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    AttendanceHomeCard.answerSaved.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -2522,7 +2861,17 @@ class _HomePollButtonState extends State<_HomePollButton> {
         params: {'p_match_id': widget.matchId, 'p_team_id': widget.teamId},
       );
       if (!mounted || raw is! Map) return;
-      setState(() => _active = raw['poll_id'] != null && raw['closed'] != true);
+      final hasPoll = raw['poll_id'] != null;
+      final open = raw['match_open'] == true;
+      setState(() {
+        _closed = hasPoll && (raw['closed'] == true || !open);
+        _expired = !hasPoll && !open;
+        _active = hasPoll && !_closed;
+        _yes = [
+          for (final p in (raw['players'] as List? ?? const []))
+            if (p is Map && p['status'] == 'yes') p,
+        ].length;
+      });
     } catch (_) {
       if (mounted) setState(() => _active = false);
     }
@@ -2568,6 +2917,8 @@ class _HomePollButtonState extends State<_HomePollButton> {
   @override
   Widget build(BuildContext context) {
     final active = _active;
+    // Anket kapandıysa (ya da hiç açılmadan süresi geçtiyse) düğme gösterilmez.
+    if (_closed || _expired) return const SizedBox.shrink();
     final style = FilledButton.styleFrom(
       backgroundColor: active == true
           ? Colors.transparent
@@ -2583,27 +2934,157 @@ class _HomePollButtonState extends State<_HomePollButton> {
         ),
       ),
     );
-    return SizedBox(
-      height: 38,
-      child: FilledButton.icon(
-        style: style,
-        onPressed: active == null || _busy
-            ? null
-            : active
-            ? widget.onOpenRoster
-            : _start,
-        icon: Icon(
-          active == true ? Icons.how_to_reg_rounded : Icons.campaign_outlined,
-          size: 17,
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: SizedBox(
+          height: 38,
+          child: FilledButton.icon(
+            style: style,
+            onPressed: active == null || _busy || _expired
+                ? null
+                : active || _closed
+                ? widget.onOpenRoster
+                : _start,
+            icon: Icon(
+              active == true
+                  ? Icons.how_to_reg_rounded
+                  : Icons.campaign_outlined,
+              size: 17,
+            ),
+            label: Text(
+              _closed
+                  ? 'Anket kapandı · $_yes evet'
+                  : _expired
+                  ? 'Anket kapalı'
+                  : active == true
+                  ? 'Anket · $_yes evet'
+                  : 'Anketi Başlat',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Barlow',
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
         ),
-        label: Text(
-          active == true ? 'Anket Açık' : 'Anketi Başlat',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontFamily: 'Barlow',
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+/// Takım sorumlusu ana sayfası: esame açıkken İlk 11 eksikse uyarı şeridi;
+/// dokununca "Kağıttan okut / Elle gir" seçimi.
+class _EsameMissingStrip extends StatefulWidget {
+  const _EsameMissingStrip({
+    super.key,
+    required this.matchId,
+    required this.teamId,
+    required this.seasonId,
+    required this.onTap,
+  });
+
+  final String matchId;
+  final String teamId;
+  final String seasonId;
+  final VoidCallback onTap;
+
+  /// Esame ekranından dönünce yeniden sayılır.
+  static final refresh = ValueNotifier<int>(0);
+
+  @override
+  State<_EsameMissingStrip> createState() => _EsameMissingStripState();
+}
+
+class _EsameMissingStripState extends State<_EsameMissingStrip> {
+  final _sb = Supabase.instance.client;
+  bool _missing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _EsameMissingStrip.refresh.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    _EsameMissingStrip.refresh.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final (season, rows) = await (
+        _sb
+            .from('seasons')
+            .select('starting_player_count')
+            .eq('id', widget.seasonId)
+            .maybeSingle(),
+        _sb
+            .from('match_rosters')
+            .select('id')
+            .eq('match_id', widget.matchId)
+            .eq('team_id', widget.teamId)
+            .eq('is_starting', true),
+      ).wait;
+      final need = (season?['starting_player_count'] as num?)?.toInt() ?? 11;
+      final missing = rows.length < need;
+      if (mounted && missing != _missing) setState(() => _missing = missing);
+    } catch (_) {
+      // Okunamazsa uyarı gösterilmez.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_missing) return const SizedBox.shrink();
+    const amber = Color(0xFFFBBF24);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Material(
+        color: const Color(0xFF2A1D0B),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: amber.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: amber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Esame girişi tamamlanmadı',
+                        style: _barlow(
+                          size: 14,
+                          weight: FontWeight.w800,
+                          color: amber,
+                        ),
+                      ),
+                      Text(
+                        'Kağıttan okut ya da elle gir',
+                        style: _barlow(
+                          size: 12,
+                          color: const Color(0xFFFCD34D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: amber),
+              ],
+            ),
           ),
         ),
       ),

@@ -330,15 +330,29 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Zemin, takım rengi koyuysa (yeşil/lacivert) donuk görünüyor.
 - **Ne zaman:** Kapışma afişiyle birlikte, telefonda dekupe hazır olunca.
 
-## 31. Mobil olay girişi: Detay ve Kadro/Diziliş tek akış — CUMA 2026-11-06 AKŞAMI (limitler sıfırlanınca) (2026-11-05)
-- **Gol asisti:** Kadro/Diziliş'te oyuncuya dokunup gol girince asist sorulmuyor. Detay ekranındaki gibi asist (ya da asistsiz) sorulmalı.
-- **Tek iş kuralı:** Detay ekranındaki akış doğru; Kadro/Diziliş ona uyarlanacak. İki ekran aynı iş kodunu kullanmalı, kural değişince ikisi birlikte değişsin.
-  - Kırmızı kart gören oyuncuya gol, kart ve değişiklik girilemez; yalnız (puan) olay eklenebilir.
-  - Aynı oyuncuya ikinci sarıdan sonra ya da kırmızıdan sonra yeniden kart girilemez. Bugün dizilişten birden fazla sarı ve kırmızı girilebiliyor.
-- **"Olay ekle" (puan olayları, Detay sekmesi):**
-  - Olay seçilir. Sahada tek kaleci varsa ve mevkiler girilmişse kaleci olayı doğrudan o kaleciye yazılır, oyuncu sorulmaz.
-  - Defans, orta saha ya da forvet olayında ikinci ekranda yalnız o mevkideki oyuncular gelir. Seçilen olay üstte görünür; oyuncuya dokununca kendiliğinden kaydedilir, ayrıca "Kaydet" yok.
-  - Dakika sorulmaz; olay anının dakikası otomatik gelir.
-  - Popup'ta mevkiler sekme olur (Kaleci · Defans · Orta saha · Forvet · Herkes), olaylar sekmenin altında listelenir.
-- **Kadro/Diziliş'e de "Olay ekle":** Aynı akış oradan da çalışsın.
-- **Tam ekran canlı giriş (mobil + tablet):** Kadro sekmesinde tam ekran düğmesi olacak, basınca yatay saha açılacak. Web masasındaki saha akışı uygulanacak: dokun → menü, yedeği sürükle → değişiklik. Önizleme: https://claude.ai/artifact/3Wm5Ava1ZtTrFWunBsgJGe
+## 32. Uygulamadan kamerayla maç önü röportajı — SONRA (2026-11-10)
+- **İstek:** Yönetim Paneli maç öncesi kartında her takım için ayrı "Maç önü röportajı" satırı. Düğmeye basınca kamera açılır, kayıt başlar; kayıt o takımın o maçı için kaydedilir. Bitince açılan popup'ta konuşan kişiler etiketlenir.
+- **Hazır olanlar:** `camera` ve `video_player` paketleri, `videos` tablosu (`team_id`), kişi etiketi (`video_players`, en çok 3), takım sayfası Medya sekmesi.
+- **Eksik olan:** Video depolama. Röportajlar şimdiye kadar Instagram bağlantısıyla geliyordu. MP4 yüklemek için Cloudflare R2 + yükleme işlevi gerekir (indirme ücretsiz; ~115 GB/ay/turnuva trafik hesabı yüzünden R2 seçildi).
+- **Öneri:**
+  - Kayıt en çok 60-90 sn, telefonda 720p'ye sıkıştırılır (dakika başı ~10-15 MB).
+  - Yetki: admin, kurucu, bölge sorumlusu (takım sorumlusu değil).
+  - İlk aşamada yalnız Android + iOS uygulaması; web'de kamera kalitesi zayıf.
+  - Oyuncu görüntüsü için fotoğraf izni gibi rıza ve izinsiz oyuncuyu gizleme kuralı.
+  - Kamera + mikrofon izni için Play Veri güvenliği, Apple etiketleri ve gizlilik sayfası güncellenmeli.
+- **Sıra:** 1) R2 + yükleme, 2) kayıt düğmesi, 3) etiket popup'ı. Her aşamada önizleme ve onay.
+
+## 33. Avukat onay metinleri (KVKK) — PLAN ONAYI BEKLİYOR (2026-11-10)
+- **Kural:** Uygulamadaki eski onay/aydınlatma metinlerinin hiçbiri kullanılmaz; yalnız avukatın 6 belgesi (Üyelik Sözleşmesi, Üye Aydınlatma, Sporcu Aydınlatma, Sporcu Açık Rıza, Sağlık ve Risk Beyanı, Çerez Aydınlatma) kullanılır.
+- **Veri sorumlusu şimdilik şahıs (Raif Keskin).** Şirket kurulunca DEĞİŞECEK alanlar: ticaret unvanı, MERSİS no, tescilli adres, KEP adresi, e-posta, internet sitesi (üyelik sözleşmesi + 3 aydınlatma + açık rıza + çerez metni başlıkları ve "başvuru yolu" tabloları); sözleşmedeki "Şirket" tanımı; `fan_membership_terms.dart` işletmeci bloğu; gizlilik sayfası; Play Veri güvenliği ve App Store gizlilik/satıcı bilgileri; ileride kartla ödeme için mesafeli satış ve iade metinleri.
+- **Akış:** kayıtta sözleşme + aydınlatma (zorunlu kutu) → kayıttan hemen sonra Sporcu Açık Rıza ekranı (5 ayrı seçim, işaretsiz) → sağlık beyanı turnuva/sezon kadrosuna girişte → web'de çerez bandı. Mevcut kullanıcılara uygulamaya ilk girişte yeni metinler gösterilir.
+- **Karar:** Fotoğraf/boy-kilo görünürlüğü yalnız kayıtlı kullanıcılara (misafir görmez); boy-kilo ayrıca kullanıcı izin verdiyse. Yaş kontrolü yalnız kontenjan kuralı olan turnuvalarda. Reklam çerezi yok.
+
+## 34. Yönetim Paneli: takım bilgileri ve panel içi işlem — SONRA (2026-11-12)
+- **Karar (2026-11-12):** Yönetim Paneli yetkisi olan herkes için panel her açılışta doğrudan açılır ("boş mu" kontrolü ve geri dönüş yok); ana sayfaya geçiş butonla. Kart cezası, haber ve yorum onayları ana sayfadan panele taşınır, bölge sorumlusu da kendi bölgesi için ceza onayını görür. Tek bölgenin sorumlusu yalnız o bölgenin maçlarında işlem yapar; diğer bölgeleri ana sayfada görüntüler, düzenleyemez.
+- **Şimdilik yapılmayacak (bekletilenler):**
+  - Panel içinde onay/işlem yapma: bekleyen onay satırları yalnız sayı gösterir, dokununca mevcut ekrana gider.
+  - Takım bilgileri: takım başına oyuncu sayısı, mavi tikli / turuncu tikli / tiksiz sayıları, kadro asgarisinin altındaki ve kadrosuz takımlar.
+  - Sağlık/KVKK onayı: takım başına onay vermeyen oyuncu sayısı (`consent_status`, `consent_type` hazır). Esame engeli pazar lansmanına kadar ertelenmişti; yalnız bilgi olarak gösterilir.
+  - Cezalı oyuncusu olan takımlar, fotoğraf izni tutulan oyuncu sayısı.
+- **Not:** Takım sayıları tek toplu RPC ile sezon başına bir kez çekilip önbelleğe alınmalı (panel ilk açılışı yavaşlamasın), bölge sorumlusu yalnız kendi bölgesini görmeli, tek tek oyuncu adı yerine sayı gösterilmeli.

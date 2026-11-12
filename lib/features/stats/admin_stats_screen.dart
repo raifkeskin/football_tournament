@@ -40,7 +40,10 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
     setState(() => _collecting = true);
     try {
       await Supabase.instance.client.rpc('usage_collect_now');
+      // SMS bakiyesi: yeni sorgu at, yanıtı okuyup yaz.
+      await Supabase.instance.client.rpc('sms_balance_refresh');
       await Future<void>.delayed(const Duration(seconds: 6));
+      await Supabase.instance.client.rpc('sms_balance_refresh');
       if (!mounted) return;
       final u = _loadUsage();
       setState(() => _usage = u);
@@ -365,6 +368,7 @@ class _UsageSection extends StatelessWidget {
           (q['storage_gb'] as num?) ?? 100,
           'Videolar ${gb(st('clips'))} · Fotoğraflar ${gb(st('media'))}',
         ),
+        _smsCard(data['sms']),
         if (drive != null)
           _meter(
             'Drive arşivi',
@@ -433,6 +437,57 @@ class _UsageSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  /// İletiMerkezi SMS bakiyesi; eşiğin altındaysa kırmızı (Telegram uyarısı
+  /// veritabanından gider).
+  Widget _smsCard(dynamic raw) {
+    final m = raw is Map ? raw : const {};
+    final bal = (m['balance'] as num?)?.toInt();
+    final thr = (m['threshold'] as num?)?.toInt() ?? 1000;
+    final at = DateTime.tryParse('${m['at'] ?? ''}')?.toLocal();
+    String n(int v) => v.toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
+    final low = bal != null && bal < thr;
+    String two(int v) => v.toString().padLeft(2, '0');
+    final sub = bal == null
+        ? 'Bakiye ilk sorgudan sonra görünür.'
+        : '${n(thr)} SMS altına inince Telegram uyarısı gelir'
+              '${at == null ? '' : ' · ${two(at.hour)}:${two(at.minute)} itibarıyla'}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'SMS bakiyesi',
+                style: TextStyle(color: _soft, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Text(
+                bal == null ? '—' : '${n(bal)} SMS',
+                style: TextStyle(
+                  color: low ? const Color(0xFFF87171) : Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(sub, style: const TextStyle(color: _muted, fontSize: 12)),
+        ],
+      ),
     );
   }
 

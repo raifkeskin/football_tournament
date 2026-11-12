@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/utils/friendly_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -738,6 +739,69 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
     if (!_checkOpen()) return;
     final id = '${p['id']}';
     final name = '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim();
+    // Bu sezon başka bir takımın kadrosundaysa: transfer et / vazgeç.
+    var transfer = false;
+    try {
+      final cur = await _sb
+          .from('season_team_players')
+          .select('team_id, teams(name)')
+          .eq('season_id', _target.seasonId)
+          .eq('player_id', id)
+          .eq('is_active', true)
+          .neq('team_id', _target.teamId)
+          .limit(1);
+      if (cur.isNotEmpty) {
+        final from = '${(cur.first['teams'] as Map?)?['name'] ?? 'başka bir takım'}';
+        if (!mounted) return;
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Transfer',
+          message: _isAdmin
+              ? '$name şu an $from kadrosunda. Transfer edilirse $from '
+                    'kadrosundan çıkarılıp bu takıma eklenir. Geçmiş gol ve '
+                    'maçları $from adına kalır.'
+              : '$name şu an $from kadrosunda. Transfer talebi bölge '
+                    'sorumlusuna gider; onaylanınca $from kadrosundan çıkıp '
+                    'bu takıma geçer.',
+          confirmLabel: _isAdmin ? 'TRANSFER ET' : 'TALEP GÖNDER',
+          cancelLabel: 'VAZGEÇ',
+          destructive: false,
+          icon: Icons.swap_horiz_rounded,
+        );
+        if (!ok || !mounted) return;
+        transfer = true;
+      }
+    } catch (_) {}
+    // Sezon kimlik kuralı: onaysız oyuncu için uyarı ya da engel (admin hariç).
+    if (!_isAdmin) {
+      final chk = await IdentityService.rosterCheck(_target.seasonId, id);
+      if (!mounted) return;
+      if (chk == 'block') {
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Kadroya eklenemez',
+          message:
+              '$name kimliğini çipli okutmadığı için bu turnuvanın bu '
+              'sezonunda kadroya eklenemez. Önce kimlik doğrulaması '
+              'yapılmalı.',
+        );
+        return;
+      }
+      if (chk == 'warn') {
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Kimlik onaylı değil',
+          message:
+              '$name kimliğini çipli okutmamış. Eklenebilir, ancak onaylanmazsa '
+              'bu turnuvada esameye yazılamaz.',
+          confirmLabel: 'YİNE DE EKLE',
+          cancelLabel: 'VAZGEÇ',
+          destructive: false,
+          icon: Icons.verified_outlined,
+        );
+        if (!ok || !mounted) return;
+      }
+    }
     final jersey = await _askJersey(name);
     if (jersey == null || !mounted) return;
     final number = int.tryParse(jersey);
@@ -776,6 +840,7 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
             'player_id': id,
             'player_name': name,
             'jersey_number': ?number,
+            if (transfer) 'transfer': true,
           },
         );
       }
@@ -798,10 +863,17 @@ class _RosterAddScreenState extends State<RosterAddScreen> {
         context: context,
         title: 'Talep gönderilemedi',
         message:
-            msg.contains('pending_actions_one_open_per_player') ||
+            msg.contains('başka bir takımın kadrosunda') ||
+                msg.contains('league_team_players_player_id_league_id_key')
+            ? '$name bu sezonda başka bir takımın kadrosunda. Bir oyuncu '
+                  'aynı turnuvanın aynı sezonunda yalnız tek takımda yer '
+                  'alabilir; önce o takımın kadrosundan çıkarılmalı. '
+                  'Transfer dönemi açıkken ve çift takım izni verildiyse '
+                  'iki takımda da yer alabilir.'
+            : msg.contains('pending_actions_one_open_per_player') ||
                 msg.contains('23505')
             ? '$name için zaten onay bekleyen bir talep var.'
-            : msg.replaceFirst('Exception: ', '').trim(),
+            : friendlyErrorText(msg),
       );
     }
   }

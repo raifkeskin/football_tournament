@@ -23,8 +23,14 @@ class Season {
     this.isDoubleRound = false,
     this.trackGoalMinutes = true,
     this.assistantReferees = true,
+    this.liveStreamEnabled = true,
+    this.broadcasterEnabled = true,
+    this.photographerEnabled = true,
     this.requireVerifiedId = false,
+    this.verifiedIdMode = 'any',
+    this.verifiedIdRoster = 'off',
     this.goalkeeperAddAnytime = false,
+    this.rollingSubs = false,
   });
 
   final String id;
@@ -58,13 +64,30 @@ class Season {
   /// Maçlarda yan (yardımcı) hakem seçilir mi? Halısahada tek hakem: kapalı.
   final bool assistantReferees;
 
+  /// Medya sekmesi: sezonda canlı yayın çekiliyor mu / yayıncı / fotoğrafçı
+  /// var mı. Kapalıysa Yönetim Panelinde ilgili alan hiç gösterilmez.
+  final bool liveStreamEnabled;
+  final bool broadcasterEnabled;
+  final bool photographerEnabled;
+
   /// Onaylı kimlik zorunlu mu? Açıksa kimliği çipten doğrulanmamış oyuncu
   /// esameye eklenemez (sunucu da engeller).
   final bool requireVerifiedId;
 
+  /// Kadroya kimler yazılabilir: any (hepsi), chip (yalnız çip onaylı),
+  /// chip_ibraz (çip + ibraz onaylı).
+  final String verifiedIdMode;
+
+  /// Kadroya eklemede kimlik kuralı (mod 'any' değilse): off, warn, block.
+  final String verifiedIdRoster;
+
   /// Kaleci istisnası: lig başladıktan sonra transfer dönemi dışında da ana
   /// mevkisi kaleci olan oyuncu kadroya eklenebilir (sunucu da uygular).
   final bool goalkeeperAddAnytime;
+
+  /// Tekrar oyuna giriş: oyundan çıkan oyuncu yeniden girebilir (halısahada
+  /// dönüşümlü değişiklik). Kapalıyken çıkan yedeklerde seçilemez (sunucu da).
+  final bool rollingSubs;
 
   factory Season.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -136,6 +159,22 @@ class Season {
         v('assistantReferees', 'assistant_referees_enabled'),
         fallback: true,
       ),
+      liveStreamEnabled: boolFrom(
+        v('liveStreamEnabled', 'live_stream_enabled'),
+        fallback: true,
+      ),
+      broadcasterEnabled: boolFrom(
+        v('broadcasterEnabled', 'broadcaster_enabled'),
+        fallback: true,
+      ),
+      photographerEnabled: boolFrom(
+        v('photographerEnabled', 'photographer_enabled'),
+        fallback: true,
+      ),
+      verifiedIdMode: (v('verifiedIdMode', 'verified_id_mode') ?? 'any')
+          .toString(),
+      verifiedIdRoster:
+          (v('verifiedIdRoster', 'verified_id_roster') ?? 'off').toString(),
       requireVerifiedId: boolFrom(
         v('requireVerifiedId', 'require_verified_id'),
         fallback: false,
@@ -144,6 +183,7 @@ class Season {
         v('goalkeeperAddAnytime', 'goalkeeper_add_anytime'),
         fallback: false,
       ),
+      rollingSubs: boolFrom(v('rollingSubs', 'rolling_subs'), fallback: false),
       transferStartDate: _readDate(
         v('transferStartDate', 'transfer_start_date'),
       ),
@@ -191,8 +231,14 @@ class Season {
       'is_double_round': isDoubleRound,
       'track_goal_minutes': trackGoalMinutes,
       'assistant_referees_enabled': assistantReferees,
+      'live_stream_enabled': liveStreamEnabled,
+      'broadcaster_enabled': broadcasterEnabled,
+      'photographer_enabled': photographerEnabled,
       'require_verified_id': requireVerifiedId,
+      'verified_id_mode': verifiedIdMode,
+      'verified_id_roster': verifiedIdRoster,
       'goalkeeper_add_anytime': goalkeeperAddAnytime,
+      'rolling_subs': rollingSubs,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
     };
   }
@@ -230,8 +276,14 @@ class Season {
         'isDoubleRound': isDoubleRound,
         'trackGoalMinutes': trackGoalMinutes,
         'assistantReferees': assistantReferees,
+        'liveStreamEnabled': liveStreamEnabled,
+        'broadcasterEnabled': broadcasterEnabled,
+        'photographerEnabled': photographerEnabled,
         'requireVerifiedId': requireVerifiedId,
+        'verifiedIdMode': verifiedIdMode,
+        'verifiedIdRoster': verifiedIdRoster,
         'goalkeeperAddAnytime': goalkeeperAddAnytime,
+        'rollingSubs': rollingSubs,
         'teamsPerGroup': teamsPerGroup,
       };
     }

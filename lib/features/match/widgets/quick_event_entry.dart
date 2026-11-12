@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
@@ -21,11 +22,17 @@ class QuickEventBar extends StatelessWidget {
     required this.homeName,
     required this.awayName,
     this.onMoment,
+    this.homeColor,
+    this.awayColor,
   });
 
   final MatchModel match;
   final String homeName;
   final String awayName;
+
+  /// Takım renkleri: olay penceresi o takımın rengiyle açılır.
+  final Color? homeColor;
+  final Color? awayColor;
 
   /// Verilirse KART / DEĞ. yanında OLAY: puana etki eden an (takıma göre).
   final void Function(String teamId)? onMoment;
@@ -166,6 +173,8 @@ class QuickEventBar extends StatelessWidget {
         teamName: teamId == match.homeTeamId ? homeName : awayName,
         rivalName: teamId == match.homeTeamId ? awayName : homeName,
         kind: kind,
+        color: teamId == match.homeTeamId ? homeColor : awayColor,
+        rivalColor: teamId == match.homeTeamId ? awayColor : homeColor,
       ),
     );
     if (saved == null) return;
@@ -236,14 +245,21 @@ class _Pick {
 
 /// Maçtaki bir takımın sahadaki ve kenardaki oyuncuları (olaylara göre).
 class _Squad {
-  const _Squad(this.onPitch, this.bench);
+  const _Squad(this.onPitch, this.bench, [this.locked = const []]);
   final List<_Pick> onPitch;
   final List<_Pick> bench;
+
+  /// Kenarda ama oyuna giremeyenler: oyundan çıkanlar (sezonda tekrar giriş
+  /// kapalıysa). Değişiklik listesinde soluk ve seçilemez görünür.
+  final List<_Pick> locked;
 }
 
 /// Olay girişinin tek kuralı (Detay alt düğmeleri ve dizilişte oyuncuya
-/// dokunma aynı listeyi kullanır). İki takımın sahadakileri: ilk 11 − çıkanlar − kırmızı kart + girenler;
-/// kenardakiler: henüz oyuna girmemiş yedekler.
+/// dokunma aynı listeyi kullanır; veritabanındaki match_on_pitch_at ile
+/// aynı). Sahadakiler: ilk 11, sonra olaylar sırayla (değişiklikte çıkan
+/// iner giren çıkar; kırmızı ya da ikinci sarı gören iner). Kenardakiler:
+/// sahada olmayan, atılmamış oyuncular; çıkmış olan, sezonda tekrar giriş
+/// açık değilse kilitli.
 Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
   final client = Supabase.instance.client;
   final teamIds = [m.homeTeamId, m.awayTeamId];
@@ -251,7 +267,9 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
     client
         .from('match_events')
         .select('event_type, team_id, player_id, sub_in_player_id')
-        .eq('match_id', m.id),
+        .eq('match_id', m.id)
+        .order('minute', nullsFirst: false)
+        .order('created_at'),
     client
         .from('match_rosters')
         .select(
@@ -265,6 +283,7 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
         .eq('season_id', m.seasonId)
         .inFilter('team_id', teamIds),
   ]);
+  final rolling = (await SeasonMatchSettings.of(m.seasonId)).rollingSubs;
   final events = results[0];
   final rosters = results[1];
   final seasonNo = {
@@ -273,22 +292,32 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
   };
   final result = <String, _Squad>{};
   for (final teamId in teamIds) {
-    final out = <String>{};
-    final inn = <String>{};
+    final on = <String>{
+      for (final r in rosters)
+        if (r['team_id']?.toString() == teamId && r['is_starting'] == true)
+          r['player_id'].toString(),
+    };
+    final sentOff = <String>{};
+    final subbedOut = <String>{};
     final yellows = <String, int>{};
     for (final e in events) {
       if (e['team_id']?.toString() != teamId) continue;
       final pid = e['player_id']?.toString() ?? '';
       switch (e['event_type']) {
         case 'substitution':
-          out.add(pid);
+          on.remove(pid);
+          subbedOut.add(pid);
           final i = e['sub_in_player_id']?.toString() ?? '';
-          if (i.isNotEmpty) inn.add(i);
+          if (i.isNotEmpty) on.add(i);
         case 'red_card':
-          out.add(pid);
+          on.remove(pid);
+          sentOff.add(pid);
         case 'yellow_card':
           yellows[pid] = (yellows[pid] ?? 0) + 1;
-          if (yellows[pid]! >= 2) out.add(pid);
+          if (yellows[pid]! >= 2) {
+            on.remove(pid);
+            sentOff.add(pid);
+          }
       }
     }
     _Pick pick(Map<String, dynamic> r) {
@@ -308,17 +337,25 @@ Future<Map<String, _Squad>> _loadSquads(MatchModel m) async {
 
     final onPitch = <_Pick>[];
     final bench = <_Pick>[];
+    final locked = <_Pick>[];
     for (final r in rosters) {
       if (r['team_id']?.toString() != teamId) continue;
       final id = r['player_id'].toString();
-      if (out.contains(id)) continue;
-      if (r['is_starting'] == true || inn.contains(id)) {
+      if (on.contains(id)) {
         onPitch.add(pick(r));
+      } else if (sentOff.contains(id)) {
+        continue;
+      } else if (subbedOut.contains(id) && !rolling) {
+        locked.add(pick(r));
       } else {
         bench.add(pick(r));
       }
     }
-    result[teamId] = _Squad(onPitch..sort(byNumber), bench..sort(byNumber));
+    result[teamId] = _Squad(
+      onPitch..sort(byNumber),
+      bench..sort(byNumber),
+      locked..sort(byNumber),
+    );
   }
   return result;
 }
@@ -331,7 +368,15 @@ class _QuickEventSheet extends StatefulWidget {
     required this.rivalName,
     required this.kind,
     this.preset,
+    this.color,
+    this.rivalColor,
   });
+
+  /// Takım rengi (başlık şeridi, adım çubuğu, oyuncu kutuları).
+  final Color? color;
+
+  /// Rakibin rengi: kendi kalesine golde oyuncu rakipten seçilir.
+  final Color? rivalColor;
 
   final MatchModel match;
   final String teamId;
@@ -348,6 +393,15 @@ class _QuickEventSheet extends StatefulWidget {
 }
 
 class _QuickEventSheetState extends State<_QuickEventSheet> {
+  /// Çok koyu/açık renkler okunaklı kalsın diye yumuşatılır.
+  Color get _team {
+    final c = (_ownGoal ? widget.rivalColor : widget.color) ?? kAdminAccent;
+    final l = c.computeLuminance();
+    if (l < 0.04) return Color.lerp(c, Colors.white, 0.35)!;
+    if (l > 0.8) return const Color(0xFFCBD5E1);
+    return c;
+  }
+
   late final Future<Map<String, _Squad>> _squads = _loadSquads(widget.match);
 
   /// Kart rengi: 'yellow_card' / 'red_card'.
@@ -458,7 +512,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
     }
   }
 
@@ -491,9 +545,21 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
     final height = MediaQuery.of(context).size.height;
     return Container(
       constraints: BoxConstraints(maxHeight: height * 0.88),
-      decoration: const BoxDecoration(
-        color: Color(0xFF111A2E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        // Üstte takım renginde şerit, aşağı doğru koyu zemine iner.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: const Alignment(0, -0.4),
+          colors: [
+            Color.alphaBlend(
+              _team.withValues(alpha: 0.30),
+              const Color(0xFF111A2E),
+            ),
+            const Color(0xFF111A2E),
+          ],
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -588,9 +654,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
             child: Container(
               height: 4,
               decoration: BoxDecoration(
-                color: i < _step
-                    ? kAdminAccent
-                    : Colors.white.withValues(alpha: 0.12),
+                color: i < _step ? _team : Colors.white.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -601,26 +665,12 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
   );
 
   Widget _crumbs() {
-    final kind = switch (widget.kind) {
-      _Kind.goal => switch (_goalMode) {
-        'own' => 'Kendi kalesine',
-        'pen' => 'Penaltı golü',
-        'miss' => 'Penaltı kaçtı',
-        _ => 'Gol',
-      },
-      _Kind.card =>
-        _card == null
-            ? 'Kart'
-            : _card == 'red_card'
-            ? 'Kırmızı'
-            : 'Sarı',
-      _Kind.sub => 'Değişiklik',
-    };
+    // Takım ve olay başlıkta yazılı; yalnız seçilen oyuncu gösterilir.
     final items = [
-      '${shortTeamName(widget.teamName)} · $kind',
       if (_player != null)
         '${widget.kind == _Kind.sub ? '↓ ' : ''}${_player!.name}',
     ];
+    if (items.isEmpty) return const SizedBox(height: 2);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
       child: Wrap(
@@ -820,6 +870,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       case _Kind.sub:
         return _grid(
           _player == null ? own.onPitch : own.bench,
+          locked: _player == null ? const [] : own.locked,
           empty: _player == null ? 'Sahada oyuncu yok.' : 'Girecek yedek yok.',
         );
     }
@@ -862,8 +913,12 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
     ),
   );
 
-  Widget _grid(List<_Pick> list, {String empty = 'Sahada oyuncu yok.'}) {
-    if (list.isEmpty) {
+  Widget _grid(
+    List<_Pick> list, {
+    List<_Pick> locked = const [],
+    String empty = 'Sahada oyuncu yok.',
+  }) {
+    if (list.isEmpty && locked.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Text(
@@ -873,57 +928,86 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
         ),
       );
     }
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 1.25,
-      children: [
-        for (final p in list)
-          Material(
-            color: const Color(0xFF1E293B),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _saving ? null : () => _onPick(p),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      p.number.isEmpty ? '-' : p.number,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        height: 1.1,
-                      ),
+    final onTeam = _team.computeLuminance() > 0.5
+        ? const Color(0xFF0F172A)
+        : Colors.white;
+    // Alçak kutular, isim tam (iki satıra kadar); takım renginde numara.
+    return LayoutBuilder(
+      builder: (context, c) => GridView(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: (c.maxWidth / 120).floor().clamp(3, 7),
+          mainAxisExtent: 72,
+          mainAxisSpacing: 7,
+          crossAxisSpacing: 7,
+        ),
+        children: [
+          for (final p in [...list, ...locked])
+            Opacity(
+              opacity: locked.contains(p) ? 0.3 : 1,
+              child: Material(
+                color: Color.alphaBlend(
+                  _team.withValues(alpha: 0.10),
+                  const Color(0xFF1E293B),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: _team.withValues(alpha: 0.35)),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _saving || locked.contains(p)
+                      ? null
+                      : () => _onPick(p),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _team,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            p.number.isEmpty ? '-' : p.number,
+                            style: TextStyle(
+                              color: onTeam,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              p.name,
+                              maxLines: 2,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      p.name,
-                      maxLines: 2,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -940,6 +1024,7 @@ Future<void> showPlayerQuickEvent(
   required String number,
   required String homeName,
   required String awayName,
+  Color? teamColor,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final live = MatchClock.liveMinuteParts(match);
@@ -1000,6 +1085,7 @@ Future<void> showPlayerQuickEvent(
         rivalName: teamId == match.homeTeamId ? awayName : homeName,
         kind: kind == 'goal' ? _Kind.goal : _Kind.sub,
         preset: _Pick(playerId, playerName, number),
+        color: teamColor,
       ),
     );
     if (saved != null) _showSaved(messenger, saved);
@@ -1020,7 +1106,7 @@ Future<void> showPlayerQuickEvent(
     await ServiceLocator.matchService.addMatchEvent(event);
     _showSaved(messenger, event);
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+    messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
   }
 }
 

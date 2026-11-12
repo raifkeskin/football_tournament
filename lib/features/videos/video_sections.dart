@@ -85,15 +85,15 @@ class _MatchInterviewsViewState extends State<MatchInterviewsView> {
           );
         }
         return ListView(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 104),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 104),
           children: [
             for (final (kind, items) in shown) ...[
               _groupHead(kind, items.length),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               LayoutBuilder(
                 builder: (context, c) {
                   // Kaydırma yok: ekran genişliğine göre satırda 2-4 video.
-                  final cols = (c.maxWidth / 118).floor().clamp(2, 4);
+                  final cols = (c.maxWidth / 150).floor().clamp(2, 3);
                   final canAdd = widget.canManage && items.length < 4;
                   return GridView.count(
                     crossAxisCount: cols,
@@ -101,11 +101,12 @@ class _MatchInterviewsViewState extends State<MatchInterviewsView> {
                     physics: const NeverScrollableScrollPhysics(),
                     mainAxisSpacing: 6,
                     crossAxisSpacing: 6,
-                    childAspectRatio: 9 / 13,
+                    childAspectRatio: 16 / 10,
                     children: [
                       for (var i = 0; i < items.length; i++)
                         VideoTile(
                           item: items[i],
+                          compact: true,
                           onTap: () => openVideoPlayer(context, items, i),
                           onLongPress: widget.canManage
                               ? () => showVideoActions(context, items[i])

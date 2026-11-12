@@ -189,8 +189,13 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
     var assistantReferees = season?.assistantReferees ?? true;
-    var requireVerifiedId = season?.requireVerifiedId ?? false;
+    var liveStreamEnabled = season?.liveStreamEnabled ?? true;
+    var broadcasterEnabled = season?.broadcasterEnabled ?? true;
+    var photographerEnabled = season?.photographerEnabled ?? true;
+    var verifiedIdMode = season?.verifiedIdMode ?? 'any';
+    var verifiedIdRoster = season?.verifiedIdRoster ?? 'off';
     var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
+    var rollingSubs = season?.rollingSubs ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
     // görünmüyor).
     var formatSaved = false;
@@ -287,8 +292,14 @@ class SeasonManagementScreen extends StatelessWidget {
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
         assistantReferees: assistantReferees,
-        requireVerifiedId: requireVerifiedId,
+        liveStreamEnabled: liveStreamEnabled,
+        broadcasterEnabled: broadcasterEnabled,
+        photographerEnabled: photographerEnabled,
+        requireVerifiedId: verifiedIdMode != 'any',
+        verifiedIdMode: verifiedIdMode,
+        verifiedIdRoster: verifiedIdRoster,
         goalkeeperAddAnytime: goalkeeperAddAnytime,
+        rollingSubs: rollingSubs,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -435,7 +446,7 @@ class SeasonManagementScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: AdminFormTabs(
-                labels: const ['Genel', 'Maç', 'Gruplar'],
+                labels: const ['Genel', 'Maç', 'Gruplar', 'Medya'],
                 selected: tab,
                 onChanged: saving ? null : (i) => setSheetState(() => tab = i),
               ),
@@ -543,6 +554,17 @@ class SeasonManagementScreen extends StatelessWidget {
                               number: true,
                             ),
                             switchRow(
+                              Icons.sync_alt_rounded,
+                              'Tekrar Oyuna Giriş',
+                              rollingSubs
+                                  ? 'Oyundan çıkan oyuncu yeniden girebilir '
+                                        '(halısaha)'
+                                  : 'Kapalı: çıkan oyuncu yedeklerde '
+                                        'seçilemez',
+                              rollingSubs,
+                              (v) => setSheetState(() => rollingSubs = v),
+                            ),
+                            switchRow(
                               Icons.more_time_rounded,
                               'Gol Dakikası',
                               trackGoalMinutes
@@ -565,16 +587,61 @@ class SeasonManagementScreen extends StatelessWidget {
                                     setSheetState(() => assistantReferees = v),
                               ),
                             if (showIdentity)
-                              switchRow(
-                                Icons.verified_outlined,
-                                'Onaylı Kimlik Zorunlu',
-                                requireVerifiedId
-                                    ? 'Kimliği onaylı olmayan oyuncu esameye '
-                                          'eklenemez'
-                                    : 'Kapalı: kimlik onayı istenmez',
-                                requireVerifiedId,
-                                (v) =>
-                                    setSheetState(() => requireVerifiedId = v),
+                              AdminSelectRow(
+                                icon: Icons.verified_outlined,
+                                label: 'Kadroya Kimler Yazılabilir',
+                                value: switch (verifiedIdMode) {
+                                  'chip' => 'Yalnız Kimlik Çip Onaylı',
+                                  'chip_ibraz' => 'Kimlik Çip + İbraz Onaylı',
+                                  _ => 'Hepsi',
+                                },
+                                placeholder: 'Hepsi',
+                                onTap: () async {
+                                  final v = await showAdminOptionPicker<String>(
+                                    context: context,
+                                    title: 'Kadroya Kimler Yazılabilir',
+                                    items: const ['chip', 'chip_ibraz', 'any'],
+                                    selected: verifiedIdMode,
+                                    labelBuilder: (k) => switch (k) {
+                                      'chip' => 'Yalnız Kimlik Çip Onaylı',
+                                      'chip_ibraz' =>
+                                        'Kimlik Çip + İbraz Onaylı',
+                                      _ => 'Hepsi (onaysız da yazılabilir)',
+                                    },
+                                  );
+                                  if (v != null) {
+                                    setSheetState(() => verifiedIdMode = v);
+                                  }
+                                },
+                              ),
+                            if (showIdentity && verifiedIdMode != 'any')
+                              AdminSelectRow(
+                                icon: Icons.how_to_reg_outlined,
+                                label: 'Kadroya Eklemede Kimlik',
+                                value: switch (verifiedIdRoster) {
+                                  'warn' => 'Uyar',
+                                  'block' => 'Onaysız eklenemez',
+                                  _ => 'Kapalı',
+                                },
+                                placeholder: 'Kapalı',
+                                onTap: () async {
+                                  final v = await showAdminOptionPicker<String>(
+                                    context: context,
+                                    title: 'Kadroya Eklemede Kimlik',
+                                    items: const ['off', 'warn', 'block'],
+                                    selected: verifiedIdRoster,
+                                    labelBuilder: (k) => switch (k) {
+                                      'warn' =>
+                                        'Uyar (onaysız oyuncu eklenebilir)',
+                                      'block' =>
+                                        'Onaysız oyuncu kadroya eklenemez',
+                                      _ => 'Kapalı (kimlik yalnız esamede aranır)',
+                                    },
+                                  );
+                                  if (v != null) {
+                                    setSheetState(() => verifiedIdRoster = v);
+                                  }
+                                },
                               ),
                             switchRow(
                               Icons.sports_handball_rounded,
@@ -615,6 +682,43 @@ class SeasonManagementScreen extends StatelessWidget {
                                   : 'Her eşleşme tek maç',
                               isDoubleRound,
                               (v) => setSheetState(() => isDoubleRound = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (tab == 3)
+                      AdminFormSection(
+                        title: 'Medya',
+                        child: AdminFieldGroup(
+                          children: [
+                            switchRow(
+                              Icons.live_tv_rounded,
+                              'Canlı Yayın',
+                              liveStreamEnabled
+                                  ? 'Maçlar yayınlanır: yayın linki istenir'
+                                  : 'Yayın yok: panelde yayın linki gösterilmez',
+                              liveStreamEnabled,
+                              (v) => setSheetState(() => liveStreamEnabled = v),
+                            ),
+                            switchRow(
+                              Icons.mic_external_on_outlined,
+                              'Yayıncı',
+                              broadcasterEnabled
+                                  ? 'Maçlara yayıncı atanır'
+                                  : 'Yayıncı yok: panelde gösterilmez',
+                              broadcasterEnabled,
+                              (v) =>
+                                  setSheetState(() => broadcasterEnabled = v),
+                            ),
+                            switchRow(
+                              Icons.photo_camera_outlined,
+                              'Fotoğrafçı',
+                              photographerEnabled
+                                  ? 'Maçlara fotoğrafçı atanır'
+                                  : 'Fotoğrafçı yok: panelde gösterilmez',
+                              photographerEnabled,
+                              (v) =>
+                                  setSheetState(() => photographerEnabled = v),
                             ),
                           ],
                         ),

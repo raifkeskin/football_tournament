@@ -74,9 +74,13 @@ class VideoItem {
     this.logoUrl = '',
     this.teamId,
     this.players = const [],
+    this.createdAt,
   });
 
   final String? teamId;
+
+  /// Eklenme zamanı (kutucukta tarih olarak gösterilir).
+  final DateTime? createdAt;
 
   /// Etiketlenen futbolcular (haber verisinden; listelerde boş).
   final List<VideoTag> players;
@@ -137,6 +141,9 @@ class VideoItem {
       coverUrl: (r['cover_url'] ?? '').toString().trim(),
       logoUrl: (league['logo_url'] ?? '').toString().trim(),
       teamId: r['team_id']?.toString(),
+      createdAt: DateTime.tryParse(
+        (r['created_at'] ?? '').toString(),
+      )?.toLocal(),
     );
   }
 
@@ -301,6 +308,12 @@ class VideoService {
     changed.value++;
   }
 
+  /// Maç röportajının türü: pre / live / post.
+  static Future<void> setKind(String id, VideoKind kind) async {
+    await _db.rpc('video_set_kind', params: {'p_id': id, 'p_kind': kind.code});
+    changed.value++;
+  }
+
   static Future<void> setPinned(String id, bool pinned) async {
     await _db.rpc('video_set_pinned', params: {'p_id': id, 'p_pinned': pinned});
     changed.value++;
@@ -338,6 +351,7 @@ class VideoTile extends StatelessWidget {
     this.onLongPress,
     this.caption,
     this.large = false,
+    this.compact = false,
   });
 
   final VideoItem item;
@@ -348,8 +362,134 @@ class VideoTile extends StatelessWidget {
   final String? caption;
   final bool large;
 
+  /// Yatay küçük kutu: ortada takım arması, altında ad ve tarih.
+  final bool compact;
+
+  Widget _compactTile() {
+    final c = item.kind.color;
+    final logo = item.teamLogo.isNotEmpty ? item.teamLogo : item.logoUrl;
+    const shadow = [Shadow(color: Colors.black, blurRadius: 4)];
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(c, const Color(0xFF0F172A), 0.45)!,
+                const Color(0xFF0F172A),
+              ],
+            ),
+          ),
+          child: Stack(
+            children: [
+              if (item.coverUrl.isNotEmpty)
+                Positioned.fill(
+                  child: WebSafeImage(url: item.coverUrl, fit: BoxFit.cover),
+                ),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF58529), Color(0xFFDD2A7B)],
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_rounded,
+                    size: 10,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              if (item.pinned)
+                const Positioned(
+                  right: 26,
+                  top: 6,
+                  child: Icon(
+                    Icons.push_pin_rounded,
+                    size: 14,
+                    color: Color(0xFFFBBF24),
+                  ),
+                ),
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: Color(0x8C000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (logo.isNotEmpty)
+                        WebSafeImage(
+                          url: logo,
+                          width: 38,
+                          height: 38,
+                          fit: BoxFit.contain,
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.label,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                          shadows: shadow,
+                        ),
+                      ),
+                      if (item.createdAt != null)
+                        Text(
+                          _dmy(item.createdAt!),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            shadows: shadow,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (compact) return _compactTile();
     final c = item.kind.color;
     return Material(
       color: Colors.transparent,
@@ -491,6 +631,21 @@ class VideoTile extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (item.createdAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          _dmy(item.createdAt!),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: large ? 11 : 9.5,
+                            fontWeight: FontWeight.w600,
+                            shadows: const [
+                              Shadow(color: Colors.black, blurRadius: 4),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -500,6 +655,9 @@ class VideoTile extends StatelessWidget {
       ),
     );
   }
+
+  static String _dmy(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
 }
 
 /// Videoları tam ekranda oynatır; yana kaydırınca listedeki diğer video.
@@ -667,6 +825,18 @@ Future<void> showVideoActions(
               ),
               onTap: () => Navigator.pop(ctx, 'tag'),
             ),
+          if (v.matchId != null)
+            ListTile(
+              leading: const Icon(
+                Icons.swap_horiz_rounded,
+                color: Colors.white70,
+              ),
+              title: Text(
+                'Türünü değiştir (şu an: ${v.kind.label})',
+                style: const TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.pop(ctx, 'kind'),
+            ),
           ListTile(
             leading: const Icon(Icons.image_outlined, color: Colors.white70),
             title: Text(
@@ -735,6 +905,19 @@ Future<void> showVideoActions(
       await VideoService.setPlayers(v.id, picked);
       messenger.showSnackBar(
         const SnackBar(content: Text('Etiketler kaydedildi.')),
+      );
+    } else if (action == 'kind') {
+      final picked = await showAdminOptionPicker<VideoKind>(
+        context: context,
+        title: 'Röportaj Türü',
+        items: VideoKind.interviews,
+        selected: v.kind,
+        labelBuilder: (k) => k.label,
+      );
+      if (picked == null || picked == v.kind) return;
+      await VideoService.setKind(v.id, picked);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Tür "${picked.label}" olarak değiştirildi.')),
       );
     } else if (action == 'uncover') {
       await VideoService.setCover(v.id, null);

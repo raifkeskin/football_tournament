@@ -41,7 +41,7 @@ extension NewsItemKind on NewsItem {
     if (autoKind == 'interviews') return 'RÖPORTAJ';
     if (autoKind == 'video') return 'VİDEO';
     if (isInstagram) return 'INSTAGRAM';
-    return 'DUYURU';
+    return (kicker ?? '').isNotEmpty ? kicker! : 'DUYURU';
   }
 }
 
@@ -95,6 +95,8 @@ class NewsArticle {
     if (h.isNotEmpty) a = a.withHeadline(h);
     final body = (n.article ?? '').trim();
     if (body.isNotEmpty) a = a.withBody(body);
+    final deck = (n.deck ?? '').trim();
+    if (deck.isNotEmpty) a = a.withDeck(deck);
     return a;
   }
 
@@ -112,6 +114,17 @@ class NewsArticle {
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList(),
+    home: home,
+    away: away,
+    hs: hs,
+    as: as,
+  );
+
+  NewsArticle withDeck(String d) => NewsArticle(
+    kicker: kicker,
+    headline: headline,
+    deck: d,
+    paragraphs: paragraphs,
     home: home,
     away: away,
     hs: hs,
@@ -622,7 +635,7 @@ class NewsArticle {
     final title = nl > 0 && nl <= 140 ? t.substring(0, nl).trim() : t;
     final body = nl > 0 && nl <= 140 ? t.substring(nl + 1).trim() : '';
     return NewsArticle(
-      kicker: 'DUYURU',
+      kicker: (n.kicker ?? '').isNotEmpty ? n.kicker! : 'DUYURU',
       headline: title,
       paragraphs: body
           .split(RegExp(r'\n\s*\n'))

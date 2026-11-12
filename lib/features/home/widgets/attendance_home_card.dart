@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/friendly_error.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -16,6 +17,9 @@ class AttendanceHomeCard extends StatefulWidget {
 
   /// Ana sayfa yenilenince artırılır.
   static final refresh = ValueNotifier<int>(0);
+
+  /// Bir yanıt kaydedilince artar; anket sayacını gösteren yerler yenilenir.
+  static final answerSaved = ValueNotifier<int>(0);
 
   /// Bütün sorgular yanıtlandıysa kart kalkar; selamlamada yeşil tikli
   /// katılım ikonu çıkar (ilk cevabın durumu: yes / no).
@@ -128,6 +132,7 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
           'p_status': status,
         },
       );
+      AttendanceHomeCard.answerSaved.value++;
       final prev = p['status'];
       if (prev == 'yes') p['yes_count'] = _count(p, 'yes_count') - 1;
       if (prev == 'no') p['no_count'] = _count(p, 'no_count') - 1;
@@ -143,7 +148,7 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+        ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: ${friendlyErrorText(e)}')));
       }
     } finally {
       if (mounted) setState(() => _busy = null);

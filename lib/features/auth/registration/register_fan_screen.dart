@@ -182,8 +182,9 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
       setState(() => _error = 'Geçerli bir cep telefonu numarası girin.');
       return;
     }
-    if (_province == null || _district == null) {
-      setState(() => _error = 'İl ve ilçe seçin.');
+    // İl/ilçe isteğe bağlı; il seçildiyse ilçe de seçilmeli.
+    if (_province != null && _district == null) {
+      setState(() => _error = 'İlçeyi de seçin ya da ili boş bırakın.');
       return;
     }
     if (!_termsAccepted) {
@@ -257,7 +258,7 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
     final code = _code.text.trim();
     final password = _password.text;
     final passwordAgain = _passwordAgain.text;
-    if (phone == null || _province == null || _district == null) {
+    if (phone == null) {
       setState(() => _error = 'Kayıt bilgileri eksik. Lütfen tekrar başlayın.');
       return;
     }
@@ -286,8 +287,8 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
         password: password,
         firstName: _firstName.text.trim(),
         lastName: _lastName.text.trim(),
-        provinceId: _province!.id,
-        districtId: _district!.id,
+        provinceId: _province?.id,
+        districtId: _district?.id,
         termsAccepted: _termsAccepted,
       );
       if (!mounted) return;
@@ -491,13 +492,13 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
       _textField(label: 'Ad', controller: _firstName),
       _textField(label: 'Soyad', controller: _lastName),
       _locationButton(
-        label: 'İl',
+        label: 'İl (isteğe bağlı)',
         value: _province?.name,
         icon: Icons.location_city_outlined,
         onTap: () => _pickLocation(province: true),
       ),
       _locationButton(
-        label: 'İlçe',
+        label: 'İlçe (isteğe bağlı)',
         value: _district?.name,
         icon: Icons.place_outlined,
         onTap: _province == null
@@ -633,10 +634,7 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
     child: Text(
       _error!,
       textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: kAdminDanger,
-        fontWeight: FontWeight.w700,
-      ),
+      style: const TextStyle(color: kAdminDanger, fontWeight: FontWeight.w700),
     ),
   );
 

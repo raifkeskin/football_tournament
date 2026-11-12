@@ -3,6 +3,7 @@ import 'core/widgets/app_snack_messenger.dart';
 import 'core/services/screen_trail.dart';
 import 'core/services/keyboard_dismiss_observer.dart';
 import 'core/app_navigator.dart';
+import 'core/utils/orientation_lock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -38,6 +39,8 @@ bool _showLoginGate() {
 /// Uygulama giriş noktası.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Telefonda hep dik; tablette serbest.
+  await OrientationLock.init();
   // Hatalar kaydedilir; ekran yerleşemezse "Bir sorun oluştu" kartı.
   ErrorReporter.init();
   await Supabase.initialize(
@@ -278,6 +281,18 @@ class _MyAppState extends State<MyApp> {
         if (s.playerId != null) 'player',
       ];
       return roles.isEmpty ? s.role : roles.join('+');
+    };
+    // Oturum kendiliğinden kapandı (arka plandan dönüşte yenilenemedi):
+    // açık ekran misafir yetkisiyle kalmasın, giriş ekranı açılır.
+    AppSessionController.onSessionLost = () async {
+      await GuestMode.set(false);
+      appNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'LoginScreen'),
+          builder: (_) => const LoginScreen(gate: true),
+        ),
+        (_) => false,
+      );
     };
     // Yenile: tüm sayfalar kapanır; oturum varsa ana sayfa, yoksa giriş.
     ErrorReporter.restartHandler = () {

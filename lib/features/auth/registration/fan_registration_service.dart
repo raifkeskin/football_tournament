@@ -81,8 +81,8 @@ class FanRegistrationService {
     required String password,
     required String firstName,
     required String lastName,
-    required int provinceId,
-    required int districtId,
+    int? provinceId,
+    int? districtId,
     required bool termsAccepted,
   }) async {
     final result = await _client.rpc(
@@ -116,8 +116,7 @@ class FanRegistrationService {
     'not_configured' =>
       'Kod gönderimi şu an yapılandırılmamış. Lütfen daha sonra deneyin.',
     'expired' => 'Kodun süresi doldu. Yeni kod isteyin.',
-    'too_many_attempts' =>
-      'Çok fazla hatalı deneme yapıldı. Yeni kod isteyin.',
+    'too_many_attempts' => 'Çok fazla hatalı deneme yapıldı. Yeni kod isteyin.',
     'wrong_code' => 'Kod hatalı. Lütfen kontrol edin.',
     'weak_password' =>
       'Şifre 6-10 karakter olmalı ve en az bir rakam veya özel karakter içermeli.',

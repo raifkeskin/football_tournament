@@ -42,8 +42,10 @@ class NewsItem {
     this.week,
     this.autoData,
     this.linkUrl,
+    this.kicker,
     this.headline,
     this.article,
+    this.deck,
     this.pendingUntil,
     this.reactions = const {},
     this.commentCount = 0,
@@ -68,12 +70,18 @@ class NewsItem {
   /// Elle yazılan haberin dış bağlantısı (Instagram gönderisi vb.).
   final String? linkUrl;
 
+  /// Elle yazılan haberin tür etiketi (DUYURU, TRANSFER, MAÇ GÜNÜ, GENEL).
+  final String? kicker;
+
   /// Sorumlunun düzenlediği manşet; null ise kurallarla yazılan başlık.
   final String? headline;
 
   /// Sorumlunun düzenlediği haber metni (paragraflar boş satırla ayrılır);
   /// null ise kurallarla yazılan metin.
   final String? article;
+
+  /// Spor editörü tarzı haberin spotu; null ise kurallarla yazılan spot.
+  final String? deck;
 
   /// Onay bekleyen otomatik haber: bu saatte kendiliğinden yayınlanır.
   final DateTime? pendingUntil;

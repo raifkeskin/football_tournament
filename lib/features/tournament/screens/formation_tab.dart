@@ -1,9 +1,16 @@
 import 'dart:async';
+import '../../../core/utils/friendly_error.dart';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/utils/orientation_lock.dart';
 import '../../../core/services/photo_cutouts.dart';
 
+import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/match_event_icons.dart';
 import '../../match/insights/insight_widgets.dart';
 import '../../match/insights/match_insights.dart';
@@ -15,6 +22,11 @@ import '../../match/models/match.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/services/service_locator.dart';
 import '../../match/services/supabase/supabase_match_service.dart';
+import '../../match/utils/match_clock.dart';
+import '../../match/utils/season_match_settings.dart';
+import '../../match/widgets/minute_input_dialog.dart';
+
+part 'live_pitch_screen.dart';
 
 const _accent = Color(0xFF10B981);
 const _midText = Color(0xFF94A3B8);
@@ -333,9 +345,10 @@ _Layout? _withSubs(
   _Layout? l,
   MatchInsights? ins,
   List<MatchRosterModel> rosters,
-  Map<String, PlayerModel> players,
-) {
-  if (l == null || ins == null || ins.subs.isEmpty) return l;
+  Map<String, PlayerModel> players, {
+  bool enabled = true,
+}) {
+  if (!enabled || l == null || ins == null || ins.subs.isEmpty) return l;
   final byId = {for (final r in rosters) r.playerId: r};
   final lines = [
     for (final line in l.lines) [...line],
@@ -419,11 +432,20 @@ class FormationTab extends StatefulWidget {
     this.onPlayerTap,
     this.collapsed = false,
     this.onToggleCollapsed,
+    this.onFullscreen,
+    this.showSubs = false,
   });
+
+  /// Canlı maçta yetkiliye: oyuna giren oyuncu sahada çıkanın yerinde.
+  /// Kapalıyken (diğerleri / maç bitti) saha ilk 11'i gösterir.
+  final bool showSubs;
 
   /// Gömülü dizilişte gizle/göster: kapalıyken yalnız başlık çubuğu.
   final bool collapsed;
   final VoidCallback? onToggleCollapsed;
+
+  /// Başlıkta "Tam ekran" (yatay hızlı giriş); null ise düğme yok.
+  final VoidCallback? onFullscreen;
 
   /// Kadro sekmesine gömülü: kaydırma ve kenar boşluğu dışarıda; ilk 11
   /// girilmemişse hiçbir şey çizilmez.
@@ -658,7 +680,7 @@ class _FormationTabState extends State<FormationTab>
       setState(() => _saveFailed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Kaydedilemedi: $e'),
+          content: Text('Kaydedilemedi: ${friendlyErrorText(e)}'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -756,6 +778,7 @@ class _FormationTabState extends State<FormationTab>
                   insights,
                   rosterSnap.data!,
                   players,
+                  enabled: widget.showSubs,
                 );
                 if (layout == null) {
                   if (widget.embedded) return const SizedBox.shrink();
@@ -784,112 +807,123 @@ class _FormationTabState extends State<FormationTab>
 
                 final fold = widget.onToggleCollapsed;
                 if (widget.embedded && fold != null && widget.collapsed) {
-                  return LineupFoldHeader(open: false, onTap: fold);
+                  return LineupFoldHeader(
+                    open: false,
+                    onTap: fold,
+                    onFullscreen: widget.onFullscreen,
+                  );
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (widget.embedded && fold != null) ...[
-                      LineupFoldHeader(open: true, onTap: fold),
-                      const SizedBox(height: 6),
-                    ],
-                    Row(
-                      children: [
-                        if (!widget.embedded || fold == null) ...[
-                          const Icon(
-                            Icons.grid_view_rounded,
-                            color: _midText,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Diziliş',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
+                    Builder(
+                      builder: (context) {
+                        final controls = <Widget>[
+                          if (_saveFailed)
+                            _SaveStatus(
+                              dirty: dirty,
+                              saving: _saving,
+                              failed: _saveFailed,
+                              onRetry: () {
+                                setState(() => _saveFailed = false);
+                                _autoSave(_selected);
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                        ],
-                        _FormationPicker(
-                          value: formation,
-                          options: options,
-                          enabled: _canEdit && options.length > 1,
-                          onChanged: _changeFormation,
-                        ),
-                        const Spacer(),
-                        // Gösterim tercihi diziliş afişine de uygulanır.
-                        // Yalnız ikon: yazılarla dar ekranda taşıyordu.
-                        PitchTokenStyleToggle(compact: true, showPhoto: true),
-                        if (_canShare && widget.onShare != null)
-                          IconButton(
-                            tooltip: 'Diziliş afişini paylaş',
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 34,
-                              minHeight: 34,
+                          const PitchStyleMenuButton(showPhoto: true),
+                          if (_canShare && widget.onShare != null)
+                            _ShareButton(
+                              onTap: () async {
+                                final teamId = _teamId;
+                                await _flush();
+                                if (!mounted) return;
+                                widget.onShare!(teamId);
+                              },
                             ),
-                            icon: const Icon(
-                              Icons.ios_share_rounded,
-                              color: Colors.white,
-                              size: 20,
+                        ];
+                        if (widget.embedded && fold != null) {
+                          return LineupFoldHeader(
+                            open: true,
+                            onTap: fold,
+                            onFullscreen: widget.onFullscreen,
+                            trailing: controls,
+                          );
+                        }
+                        return Row(
+                          children: [
+                            const Icon(
+                              Icons.grid_view_rounded,
+                              color: _midText,
+                              size: 16,
                             ),
-                            onPressed: () async {
-                              final teamId = _teamId;
-                              await _flush();
-                              if (!mounted) return;
-                              widget.onShare!(teamId);
-                            },
-                          ),
-                        if (_canEdit) ...[
-                          const SizedBox(width: 8),
-                          _SaveStatus(
-                            dirty: dirty,
-                            saving: _saving,
-                            failed: _saveFailed,
-                            onRetry: () {
-                              setState(() => _saveFailed = false);
-                              _autoSave(_selected);
-                            },
-                          ),
-                        ],
-                      ],
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Diziliş',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const Spacer(),
+                            for (var i = 0; i < controls.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 8),
+                              controls[i],
+                            ],
+                          ],
+                        );
+                      },
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     AspectRatio(
                       // Kaleciye kadar tüm saha telefon ekranına sığar.
                       aspectRatio: 0.8,
-                      child: ValueListenableBuilder<PitchTokenStyle>(
-                        valueListenable: PitchTokenStylePref.notifier,
-                        builder: (context, style, _) =>
-                            ValueListenableBuilder<Map<String, String>>(
-                              valueListenable: PhotoCutouts.map,
-                              builder: (context, cutouts, _) => _Pitch(
-                                lines: pitchLines,
-                                cutouts: PhotoCutouts.visible(context)
-                                    ? cutouts
-                                    : const {},
-                                teamColor: teamColor,
-                                style: style,
-                                insights: insights,
-                                onSwap: _canEdit
-                                    ? (from, to) => _swap(currentIds, from, to)
-                                    : null,
-                                picked: _picked,
-                                onPick: _canEdit
-                                    ? (id) => _pick(currentIds, id)
-                                    : null,
-                                onTapPlayer: widget.onPlayerTap == null
-                                    ? null
-                                    : (p) => widget.onPlayerTap!(
-                                        _teamId,
-                                        p.id,
-                                        p.name,
-                                        p.number,
-                                      ),
-                              ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ValueListenableBuilder<PitchTokenStyle>(
+                            valueListenable: PitchTokenStylePref.notifier,
+                            builder: (context, style, _) =>
+                                ValueListenableBuilder<Map<String, String>>(
+                                  valueListenable: PhotoCutouts.map,
+                                  builder: (context, cutouts, _) => _Pitch(
+                                    lines: pitchLines,
+                                    cutouts: PhotoCutouts.visible(context)
+                                        ? cutouts
+                                        : const {},
+                                    teamColor: teamColor,
+                                    style: style,
+                                    insights: insights,
+                                    onSwap: _canEdit
+                                        ? (from, to) =>
+                                              _swap(currentIds, from, to)
+                                        : null,
+                                    picked: _picked,
+                                    onPick: _canEdit
+                                        ? (id) => _pick(currentIds, id)
+                                        : null,
+                                    onTapPlayer: widget.onPlayerTap == null
+                                        ? null
+                                        : (p) => widget.onPlayerTap!(
+                                            _teamId,
+                                            p.id,
+                                            p.name,
+                                            p.number,
+                                          ),
+                                  ),
+                                ),
+                          ),
+                          // Formasyon sahanın sol üstünde (oyunculara değmez).
+                          Positioned(
+                            left: 10,
+                            top: 8,
+                            child: _FormationPicker(
+                              value: formation,
+                              options: options,
+                              enabled: _canEdit && options.length > 1,
+                              onChanged: _changeFormation,
+                              onPitch: true,
                             ),
+                          ),
+                        ],
                       ),
                     ),
                     if (_canEdit)
@@ -1110,6 +1144,7 @@ class _FormationPicker extends StatelessWidget {
     required this.options,
     required this.enabled,
     required this.onChanged,
+    this.onPitch = false,
   });
 
   final String value;
@@ -1117,12 +1152,17 @@ class _FormationPicker extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String> onChanged;
 
+  /// Sahanın üstünde: koyu yarı saydam zemin, küçük boy.
+  final bool onPitch;
+
   @override
   Widget build(BuildContext context) {
     final chip = Container(
-      padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+      padding: EdgeInsets.fromLTRB(8, onPitch ? 3 : 5, 4, onPitch ? 3 : 5),
       decoration: BoxDecoration(
-        color: _accent.withValues(alpha: 0.14),
+        color: onPitch
+            ? const Color(0xCC052E1C)
+            : _accent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: _accent.withValues(alpha: 0.45)),
       ),
@@ -1163,6 +1203,43 @@ class _FormationPicker extends StatelessWidget {
           ),
       ],
       child: chip,
+    );
+  }
+}
+
+/// Dolu yeşil Paylaş düğmesi (ikon + yazı).
+class _ShareButton extends StatelessWidget {
+  const _ShareButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _accent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.ios_share_rounded, size: 16, color: Color(0xFF04130D)),
+              SizedBox(width: 5),
+              Text(
+                'Paylaş',
+                style: TextStyle(
+                  color: Color(0xFF04130D),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1430,9 +1507,14 @@ class _PlayerToken extends StatelessWidget {
     this.cutoutUrl,
     this.cutoutH = 52,
     this.compact = false,
+    this.nameSize,
   });
 
   final _PitchPlayer player;
+
+  /// Tam ekran sahada ayarlanan ad boyu (soyad bundan küçük); verilmezse
+  /// [compact]'a göre varsayılan.
+  final double? nameSize;
 
   /// Dekupe boyu: hatlar sıkışınca küçülür (bkz. [_fitTokens]).
   final double cutoutH;
@@ -1606,7 +1688,7 @@ class _PlayerToken extends StatelessWidget {
 
   TextStyle get _firstStyle => TextStyle(
     color: Colors.white,
-    fontSize: compact ? 10 : 12,
+    fontSize: nameSize ?? (compact ? 10 : 12),
     fontWeight: FontWeight.w800,
     height: 1.1,
     shadows: _shadow,
@@ -1614,7 +1696,7 @@ class _PlayerToken extends StatelessWidget {
 
   TextStyle get _lastStyle => TextStyle(
     color: Colors.white.withValues(alpha: 0.92),
-    fontSize: compact ? 10.5 : 12.5,
+    fontSize: nameSize != null ? nameSize! * 0.82 : (compact ? 10.5 : 12.5),
     fontWeight: FontWeight.w400,
     height: 1.1,
     letterSpacing: 0.2,
@@ -1907,11 +1989,19 @@ class VsFormationPitch extends StatelessWidget {
     this.onPlayerTap,
     this.collapsed = false,
     this.onToggleCollapsed,
+    this.onFullscreen,
+    this.showSubs = false,
   });
 
   final MatchModel match;
+
+  /// Canlı maçta yetkiliye: giren oyuncu sahada (bkz. FormationTab).
+  final bool showSubs;
   final Color? homeColor;
   final Color? awayColor;
+
+  /// Başlıkta "Tam ekran" (yatay hızlı giriş); null ise düğme yok.
+  final VoidCallback? onFullscreen;
 
   /// Gizle/göster: kapalıyken yalnız başlık çubuğu.
   final bool collapsed;
@@ -1953,6 +2043,7 @@ class VsFormationPitch extends StatelessWidget {
               insights,
               rosterSnap.data ?? const [],
               players,
+              enabled: showSubs,
             ),
           );
         },
@@ -1973,7 +2064,11 @@ class VsFormationPitch extends StatelessWidget {
           if (home == null && away == null) return const SizedBox.shrink();
           final fold = onToggleCollapsed;
           if (fold != null && collapsed) {
-            return LineupFoldHeader(open: false, onTap: fold);
+            return LineupFoldHeader(
+              open: false,
+              onTap: fold,
+              onFullscreen: onFullscreen,
+            );
           }
           final pitch = AspectRatio(
             aspectRatio: 0.55,
@@ -2000,7 +2095,11 @@ class VsFormationPitch extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LineupFoldHeader(open: true, onTap: fold),
+              LineupFoldHeader(
+                open: true,
+                onTap: fold,
+                onFullscreen: onFullscreen,
+              ),
               const SizedBox(height: 6),
               pitch,
             ],
@@ -2098,10 +2197,22 @@ class VsFormationPitch extends StatelessWidget {
 /// Kadro sekmesindeki dizilişin başlık çubuğu: solda "Diziliş", sağ üstte
 /// kalın aşağı/yukarı ok ile gizle/göster.
 class LineupFoldHeader extends StatelessWidget {
-  const LineupFoldHeader({super.key, required this.open, required this.onTap});
+  const LineupFoldHeader({
+    super.key,
+    required this.open,
+    required this.onTap,
+    this.onFullscreen,
+    this.trailing = const [],
+  });
 
   final bool open;
   final VoidCallback onTap;
+
+  /// Başlık satırında oktan önce yer alan düğmeler (gösterim, Paylaş).
+  final List<Widget> trailing;
+
+  /// Tam ekran yatay saha (hızlı olay girişi); null ise düğme yok.
+  final VoidCallback? onFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -2122,6 +2233,45 @@ class LineupFoldHeader extends StatelessWidget {
               ),
             ),
             const Spacer(),
+            if (onFullscreen != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Material(
+                  color: _accent.withValues(alpha: 0.16),
+                  shape: const StadiumBorder(),
+                  child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: onFullscreen,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.screen_rotation_rounded,
+                            size: 15,
+                            color: _accent,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Tam ekran',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            for (final w in trailing)
+              Padding(padding: const EdgeInsets.only(right: 8), child: w),
             Tooltip(
               message: open ? 'Dizilişi gizle' : 'Dizilişi göster',
               child: Container(

@@ -1349,6 +1349,28 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 }
 
 /// Bantla yapıştırılmış, kenarları yırtık gazete küpürü.
+/// Uzatma dakikaları ("70+3"): küpür yazı tipinde artı işareti iri
+/// görünür; o işaret küçültülerek yazılır.
+TextSpan _plusSpans(String text, TextStyle style) {
+  final re = RegExp(r'(?<=\d)\+(?=\d)');
+  final spans = <InlineSpan>[];
+  var last = 0;
+  for (final m in re.allMatches(text)) {
+    if (m.start > last) {
+      spans.add(TextSpan(text: text.substring(last, m.start)));
+    }
+    spans.add(
+      TextSpan(
+        text: '+',
+        style: TextStyle(fontSize: (style.fontSize ?? 15) * 0.62),
+      ),
+    );
+    last = m.end;
+  }
+  if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
+  return TextSpan(style: style, children: spans);
+}
+
 class _Clipping extends StatelessWidget {
   const _Clipping({
     required this.item,
@@ -1357,10 +1379,21 @@ class _Clipping extends StatelessWidget {
     this.maxParagraphs,
     this.tilt = true,
     this.brand = false,
+    this.lineHeight = 1.55,
+    this.from = 0,
+    this.continued = false,
   });
 
   final NewsItem item;
   final NewsArticle article;
+
+  /// Metin satır aralığı (hikâyede daha sıkı).
+  final double lineHeight;
+
+  /// Hikâyenin 2. sayfası: metnin kaldığı paragraftan devam eder; manşet ve
+  /// skor kutusu yoktur.
+  final int from;
+  final bool continued;
 
   /// Instagram hikâyesinde üst satırın sağında Lig Masası arması ve adı.
   final bool brand;
@@ -1386,11 +1419,11 @@ class _Clipping extends StatelessWidget {
       if (item.leagueName.isNotEmpty) item.leagueName,
       if (date.isNotEmpty) date,
     ].join(' · ');
-    const body = TextStyle(
+    final body = TextStyle(
       fontFamily: 'OldStandard',
       color: _ink,
       fontSize: 15,
-      height: 1.55,
+      height: lineHeight,
     );
     final paper = ClipPath(
       clipper: _TornClipper(item.id.hashCode),
@@ -1410,7 +1443,7 @@ class _Clipping extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    a.kicker,
+                    continued ? '${a.kicker} · DEVAMI' : a.kicker,
                     style: _cond(
                       12.5,
                       color: _kickRed,
@@ -1430,63 +1463,67 @@ class _Clipping extends StatelessWidget {
                 ],
               ],
             ),
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    a.headline,
-                    style: const TextStyle(
-                      fontFamily: 'PlayfairDisplay',
-                      fontWeight: FontWeight.w900,
-                      color: _ink,
-                      fontSize: 27,
-                      height: 1.08,
+            if (!continued) ...[
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      a.headline,
+                      style: const TextStyle(
+                        fontFamily: 'PlayfairDisplay',
+                        fontWeight: FontWeight.w900,
+                        color: _ink,
+                        fontSize: 27,
+                        height: 1.08,
+                      ),
                     ),
                   ),
+                  if (onEdit != null)
+                    IconButton(
+                      tooltip: 'Haberi düzenle',
+                      onPressed: onEdit,
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.edit_outlined, color: _ink2),
+                    ),
+                ],
+              ),
+              if (a.home != null && a.away != null) ...[
+                const SizedBox(height: 12),
+                _ScoreBox(
+                  article: a,
+                  time: (item.autoData?['time'] ?? '').toString(),
+                  seed: item.id,
                 ),
-                if (onEdit != null)
-                  IconButton(
-                    tooltip: 'Haberi düzenle',
-                    onPressed: onEdit,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.edit_outlined, color: _ink2),
-                  ),
               ],
-            ),
-            if (a.home != null && a.away != null) ...[
-              const SizedBox(height: 12),
-              _ScoreBox(
-                article: a,
-                time: (item.autoData?['time'] ?? '').toString(),
-              ),
-            ],
-            // Maç sonucunda skor kutusu zaten var; skor satırı tekrar yazılmaz.
-            if (a.deck.isNotEmpty && a.hs == null) ...[
-              const SizedBox(height: 10),
-              Text(
-                a.deck,
-                style: const TextStyle(
-                  fontFamily: 'OldStandard',
-                  fontStyle: FontStyle.italic,
-                  color: _ink2,
-                  fontSize: 15,
-                  height: 1.35,
+              // Maç sonucunda skor kutusu zaten var; skor satırı tekrar yazılmaz.
+              if (a.deck.isNotEmpty && a.hs == null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  a.deck,
+                  style: const TextStyle(
+                    fontFamily: 'OldStandard',
+                    fontStyle: FontStyle.italic,
+                    color: _ink2,
+                    fontSize: 15,
+                    height: 1.35,
+                  ),
                 ),
-              ),
+              ],
             ],
             const SizedBox(height: 10),
             Container(height: 1, color: _ink.withValues(alpha: 0.45)),
             const SizedBox(height: 10),
-            for (final p in a.paragraphs.take(
-              maxParagraphs ?? a.paragraphs.length,
-            ))
+            for (final p
+                in a.paragraphs
+                    .skip(from)
+                    .take(maxParagraphs ?? a.paragraphs.length))
               Padding(
                 padding: const EdgeInsets.only(bottom: 9),
                 child: maxParagraphs == null
-                    ? SelectableText(p, style: body)
-                    : Text(p, style: body),
+                    ? SelectableText.rich(_plusSpans(p, body))
+                    : Text.rich(_plusSpans(p, body)),
               ),
             const SizedBox(height: 4),
             Container(height: 1, color: _ink.withValues(alpha: 0.35)),
@@ -1549,88 +1586,157 @@ class _Clipping extends StatelessWidget {
 }
 
 /// Küpürdeki skor kutusu: armalar ve skor (maç gününde saat).
+/// Küpürdeki maç kutusu. Takım adları tam görünsün diye iki düzen; hangisi
+/// olduğu habere göre sabit (aynı haber hep aynı düzen, haberler arası
+/// karışık): A = logo üstte ad altında, saat ortada; B = takımlar alt alta,
+/// saat sağ bölmede.
 class _ScoreBox extends StatelessWidget {
-  const _ScoreBox({required this.article, required this.time});
+  const _ScoreBox({
+    required this.article,
+    required this.time,
+    required this.seed,
+  });
 
   final NewsArticle article;
   final String time;
+  final String seed;
+
+  bool get _stacked =>
+      seed.codeUnits.fold<int>(0, (a, c) => (a + c) & 0x7fffffff).isOdd;
+
+  String get _center {
+    final a = article;
+    if (a.hs != null) return '${a.hs}–${a.as}';
+    return time.length >= 5 ? time.substring(0, 5) : time;
+  }
+
+  /// En uzun kelime satıra sığana kadar küçülen takım adı (iki satıra
+  /// kadar; kelime ortadan bölünmez).
+  Widget _name(ArticleTeam t, TextAlign align, double size) => LayoutBuilder(
+    builder: (context, box) {
+      final name = t.name.trUpper;
+      var style = _cond(size, color: _ink).copyWith(letterSpacing: 0.3);
+      final longest = name
+          .split(RegExp(r'\s+'))
+          .fold('', (a, w) => w.length > a.length ? w : a);
+      final width = (TextPainter(
+        text: TextSpan(text: longest, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout()).width;
+      if (width > box.maxWidth && box.maxWidth > 0) {
+        style = style.copyWith(
+          fontSize: (size * box.maxWidth / width).clamp(9.0, size),
+        );
+      }
+      return Text(
+        name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: align,
+        style: style.copyWith(height: 1.05),
+      );
+    },
+  );
+
+  static const _big = TextStyle(
+    fontFamily: 'PlayfairDisplay',
+    fontWeight: FontWeight.w900,
+    color: _ink,
+    fontSize: 26,
+    height: 1,
+  );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      _stacked ? _rows(context) : _columns(context);
+
+  /// A: logo üstte, ad altında; saat / skor ortada.
+  Widget _columns(BuildContext context) {
     final a = article;
-    Widget team(ArticleTeam t, {required bool end}) => Expanded(
-      child: Row(
-        mainAxisAlignment: end
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+    Widget team(ArticleTeam t) => Expanded(
+      child: Column(
         children: [
-          if (!end) _crest(t),
-          if (!end) const SizedBox(width: 8),
-          Flexible(
-            // Uzun tek kelime (GAZİOSMANPAŞA) satırda bölünmesin: en uzun
-            // kelime sığana kadar yazı küçülür.
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final name = t.name.trUpper;
-                var style = _cond(14, color: _ink).copyWith(letterSpacing: 0.3);
-                final longest = name
-                    .split(RegExp(r'\s+'))
-                    .fold('', (a, w) => w.length > a.length ? w : a);
-                final width = (TextPainter(
-                  text: TextSpan(text: longest, style: style),
-                  textDirection: TextDirection.ltr,
-                  textScaler: MediaQuery.textScalerOf(context),
-                )..layout()).width;
-                if (width > box.maxWidth && box.maxWidth > 0) {
-                  style = style.copyWith(
-                    fontSize: (14 * box.maxWidth / width).clamp(9.0, 14.0),
-                  );
-                }
-                return Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: end ? TextAlign.right : TextAlign.left,
-                  style: style,
-                );
-              },
-            ),
-          ),
-          if (end) const SizedBox(width: 8),
-          if (end) _crest(t),
+          _crest(t, 36),
+          const SizedBox(height: 6),
+          _name(t, TextAlign.center, 15),
         ],
       ),
     );
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(border: Border.all(color: _ink, width: 1.5)),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          team(a.home!, end: false),
+          team(a.home!),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              a.hs != null ? '${a.hs}–${a.as}' : time,
-              style: const TextStyle(
-                fontFamily: 'PlayfairDisplay',
-                fontWeight: FontWeight.w900,
-                color: _ink,
-                fontSize: 26,
-                height: 1,
-              ),
-            ),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+            child: Text(_center, style: _big),
           ),
-          team(a.away!, end: true),
+          team(a.away!),
         ],
       ),
     );
   }
 
-  Widget _crest(ArticleTeam t) => SizedBox(
-    width: 30,
-    height: 30,
+  /// B: iki takım alt alta tam adla; saat / skor sağ bölmede.
+  Widget _rows(BuildContext context) {
+    final a = article;
+    Widget team(ArticleTeam t) => Row(
+      children: [
+        _crest(t, 28),
+        const SizedBox(width: 10),
+        Expanded(child: _name(t, TextAlign.left, 15)),
+      ],
+    );
+    return Container(
+      decoration: BoxDecoration(border: Border.all(color: _ink, width: 1.5)),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    team(a.home!),
+                    const SizedBox(height: 8),
+                    team(a.away!),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              width: 86,
+              decoration: const BoxDecoration(
+                border: Border(left: BorderSide(color: _ink, width: 1.5)),
+              ),
+              alignment: Alignment.center,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(_center, style: _big),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _crest(ArticleTeam t, double size) => SizedBox(
+    width: size,
+    height: size,
     child: t.logo.isEmpty
-        ? const Icon(Icons.shield_rounded, size: 24, color: _ink2)
+        ? Icon(Icons.shield_rounded, size: size * 0.8, color: _ink2)
         : WebSafeImage(url: t.logo, fit: BoxFit.contain),
   );
 }
@@ -1850,6 +1956,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
   final _shot = GlobalKey();
   bool _busy = false;
 
+  /// Uzun haber iki hikâyeye bölünür: görünen sayfa (0 / 1).
+  int _page = 0;
+
   /// Hikâyede kullanılacak fotoğraf (birden fazlaysa seçilir).
   late int _photo = widget.initialPhoto.clamp(
     0,
@@ -1886,6 +1995,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
         messenger.showSnackBar(
           const SnackBar(content: Text('Instagram açılamadı.')),
         );
+      } else if (_storyPlan().length > _page + 1 && mounted) {
+        // 1/2 paylaşıldı: sıradaki sayfa hazır.
+        setState(() => _page++);
       }
     } catch (e) {
       messenger.showSnackBar(
@@ -1920,13 +2032,15 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                     key: _shot,
                     child: SizedBox(
                       width: 360,
-                      height: widget.card ? 450 : 640,
+                      // WhatsApp görseli haberin boyuna göre uzar (en az 4:5).
+                      height: widget.card ? null : 640,
                       child: widget.card ? _shareCard(n) : _story(n),
                     ),
                   ),
                 ),
               ),
             ),
+            if (!widget.card && _storyPlan().length > 1) _pageChips(),
             if (n.imageUrls.length > 1) _photoPicker(n.imageUrls),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -1952,7 +2066,11 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
                   label: Text(
                     _busy
                         ? 'Hazırlanıyor…'
-                        : (widget.card ? 'PAYLAŞ' : 'HİKÂYEDE PAYLAŞ'),
+                        : (widget.card
+                              ? 'PAYLAŞ'
+                              : _storyPlan().length > 1
+                              ? 'HİKÂYEDE PAYLAŞ · ${_page + 1}/${_storyPlan().length}'
+                              : 'HİKÂYEDE PAYLAŞ'),
                     style: const TextStyle(
                       fontFamily: 'BarlowCondensed',
                       fontWeight: FontWeight.w800,
@@ -1968,6 +2086,9 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
               child: Text(
                 widget.card
                     ? 'Görsel, manşet ve haberin linkiyle gider.'
+                    : _storyPlan().length > 1
+                    ? 'Haber uzun olduğu için ${_storyPlan().length} hikâyeye bölündü: '
+                          'sırayla paylaş.'
                     : 'Instagram\'da o an açık olan hesaptan paylaşılır.',
                 style: const TextStyle(color: _muted, fontSize: 12.5),
               ),
@@ -1977,6 +2098,25 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
       ),
     );
   }
+
+  /// Uzun haberde hikâye sayfası seçimi (1/2, 2/2).
+  Widget _pageChips() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < _storyPlan().length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChoiceChip(
+              label: Text('${i + 1}/${_storyPlan().length}'),
+              selected: _page == i,
+              onSelected: (_) => setState(() => _page = i),
+            ),
+          ),
+      ],
+    ),
+  );
 
   /// Fotoğraf seçimi: küçük kareler, seçili olan çerçeveli.
   Widget _photoPicker(List<String> urls) => Padding(
@@ -2052,6 +2192,60 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
           ],
         );
 
+  /// Hikâyenin üst bandı: turnuva logosu ve adı ortada (fotoğraf üstünde
+  /// okunsun diye koyu geçişli).
+  Widget _storyLeague(NewsItem n) {
+    final logo = (n.leagueLogoUrl ?? '').trim();
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xAA000000), Color(0x00000000)],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (logo.isNotEmpty) ...[
+              WebSafeImage(url: logo, width: 30, height: 30),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Text(
+                n.leagueName.trUpper,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _cond(
+                  16,
+                  color: Colors.white,
+                ).copyWith(letterSpacing: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Hikâyenin alt satırı: Lig Masası arması ve adı, büyük puntoyla ortada.
+  Widget _storyBrand() => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Image.asset(AppLogo.asset, width: 30, height: 30),
+      const SizedBox(width: 8),
+      Text(
+        'LİG MASASI',
+        style: _cond(
+          22,
+          color: Colors.white,
+        ).copyWith(fontStyle: FontStyle.italic, letterSpacing: 1.2),
+      ),
+    ],
+  );
+
   /// Alt satır: turnuva logosu ve adı (görselde ayrıca site adresi).
   Widget _footer(NewsItem n, {bool site = false}) {
     final logo = (n.leagueLogoUrl ?? '').trim();
@@ -2078,7 +2272,8 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     );
   }
 
-  /// WhatsApp görseli (4:5): fotoğraf, üzerinde küpür, altta turnuva.
+  /// WhatsApp görseli: fotoğraf, üzerinde küpür (tüm paragraflar), altta
+  /// turnuva. En az 4:5; haber uzunsa görsel aşağı doğru uzar.
   Widget _shareCard(NewsItem n) => DecoratedBox(
     decoration: const BoxDecoration(
       gradient: LinearGradient(
@@ -2096,20 +2291,16 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
           height: 190,
           child: _photoHeader(n),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 150,
-          bottom: 44,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.topCenter,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 450),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 150, bottom: 44),
             child: SizedBox(
               width: 360,
               child: _Clipping(
                 item: n,
                 article: widget.article,
-                maxParagraphs: 1,
+                maxParagraphs: widget.article.paragraphs.length,
                 tilt: false,
                 brand: true,
               ),
@@ -2126,7 +2317,106 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
     ),
   );
 
+  /// Hikâye sayfaları: [başlangıç, bitiş) paragraf aralıkları. Önce tümü tek
+  /// sayfaya okunur ölçekte (>= 0,66) sığıyor mu bakılır; sığmıyorsa 2, o da
+  /// yetmezse 3 sayfaya bölünür (hepsi okunur kalacak en dengeli yerden).
+  /// 3 sayfaya da sığmayan çok uzun haberde sondaki paragraflar atılır.
+  List<(int, int)> _storyPlan() {
+    final a = widget.article;
+    const baseW = 420.0, pad = 36.0, availW = 320.0, availH = 384.0;
+    final tw = baseW - pad;
+    double h(String t, TextStyle st) {
+      final tp = TextPainter(
+        text: _plusSpans(t, st),
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.noScaling,
+      )..layout(maxWidth: tw);
+      return tp.height;
+    }
+
+    const body = TextStyle(
+      fontFamily: 'OldStandard',
+      fontSize: 15,
+      height: 1.42,
+    );
+    final head = h(
+      a.headline,
+      const TextStyle(
+        fontFamily: 'PlayfairDisplay',
+        fontWeight: FontWeight.w900,
+        fontSize: 27,
+        height: 1.08,
+      ),
+    );
+    // Küpürün paragraf dışı yüksekliği: 1. sayfada manşet + skor kutusu.
+    var fixed1 = 44.0 + 22 + 6 + head + 21 + 4 + 28 + 10;
+    if (a.home != null && a.away != null) fixed1 += 12 + 120;
+    if (a.deck.isNotEmpty && a.hs == null) {
+      fixed1 += 10 + h(a.deck, body.copyWith(fontStyle: FontStyle.italic));
+    }
+    final fixed2 = 44.0 + 22 + 21 + 4 + 28 + 10;
+    final ph = [for (final p in a.paragraphs) h(p, body) + 9];
+    double sum(int from, int to) {
+      var t = 0.0;
+      for (var i = from; i < to; i++) {
+        t += ph[i];
+      }
+      return t;
+    }
+
+    double scale(double fixed, int from, int to) =>
+        (availH / (fixed + sum(from, to))).clamp(0.0, availW / baseW);
+    const minScale = 0.66;
+    final n = ph.length;
+    if (n == 0 || scale(fixed1, 0, n) >= minScale) return [(0, n)];
+    double sc(int page, int from, int to) =>
+        scale(page == 0 ? fixed1 : fixed2, from, to);
+    // İki sayfa: ikisi de okunur kalan bölünmeler arasında en büyük ölçek.
+    var best2 = -1;
+    var bestScale = 0.0;
+    for (var k = 1; k < n; k++) {
+      final m = math.min(sc(0, 0, k), sc(1, k, n));
+      if (m >= minScale && m > bestScale) {
+        best2 = k;
+        bestScale = m;
+      }
+    }
+    if (best2 > 0) return [(0, best2), (best2, n)];
+    // Üç sayfa: aynı ölçüt.
+    var b1 = -1, b2 = -1;
+    bestScale = 0.0;
+    for (var k1 = 1; k1 < n - 1; k1++) {
+      for (var k2 = k1 + 1; k2 < n; k2++) {
+        final m = math.min(sc(0, 0, k1), math.min(sc(1, k1, k2), sc(1, k2, n)));
+        if (m >= minScale && m > bestScale) {
+          b1 = k1;
+          b2 = k2;
+          bestScale = m;
+        }
+      }
+    }
+    if (b1 > 0) return [(0, b1), (b1, b2), (b2, n)];
+    // Çok uzun: her sayfaya okunur kalacak kadar paragraf, gerisi atılır.
+    final out = <(int, int)>[];
+    var from = 0;
+    for (var page = 0; page < 3 && from < n; page++) {
+      var to = from + 1;
+      while (to < n && sc(page, from, to + 1) >= minScale) {
+        to++;
+      }
+      out.add((from, to));
+      from = to;
+    }
+    return out;
+  }
+
   Widget _story(NewsItem n) {
+    final plan = _storyPlan();
+    final r = plan[_page.clamp(0, plan.length - 1)];
+    return _storyBody(n, r.$1, r.$2, continued: r.$1 > 0);
+  }
+
+  Widget _storyBody(NewsItem n, int from, int to, {required bool continued}) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -2144,27 +2434,36 @@ class _NewsStoryScreenState extends State<_NewsStoryScreen> {
             height: 300,
             child: _photoHeader(n),
           ),
+          // Üstte ortada turnuva logosu ve adı.
+          Positioned(left: 0, right: 0, top: 0, child: _storyLeague(n)),
           Positioned(
-            left: 0,
-            right: 0,
-            top: 262,
-            bottom: 52,
+            // Yanlarda 20'şer boşluk: kısa haberde küpür kenardan kenara
+            // uzamaz, en fazla ekranın ~%90'ı olur.
+            left: 20,
+            right: 20,
+            // Küpür skorun hemen altından başlar (taban genişlik 420: metin
+            // daha az satıra yayılır, ölçek büyür).
+            top: 200,
+            bottom: 56,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.topCenter,
               child: SizedBox(
-                width: 360,
+                width: 420,
                 child: _Clipping(
                   item: n,
                   article: widget.article,
-                  maxParagraphs: 2,
+                  from: from,
+                  maxParagraphs: to - from,
+                  continued: continued,
+                  lineHeight: 1.42,
                   tilt: false,
-                  brand: true,
                 ),
               ),
             ),
           ),
-          Positioned(left: 18, right: 18, bottom: 14, child: _footer(n)),
+          // Altta ortada Lig Masası arması ve adı (büyük).
+          Positioned(left: 18, right: 18, bottom: 12, child: _storyBrand()),
         ],
       ),
     );

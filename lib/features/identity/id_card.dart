@@ -10,6 +10,9 @@ class IdCardKey {
     required this.birthDate,
     required this.expiryDate,
     this.alternatives = const [],
+    this.mrzFirstName = '',
+    this.mrzLastName = '',
+    this.mrzTc = '',
   });
 
   final String documentNumber;
@@ -19,6 +22,16 @@ class IdCardKey {
   /// OCR'dan çıkan, sağlamaları tutan diğer seri no adayları: ilki çipi
   /// açmazsa sırayla denenir.
   final List<String> alternatives;
+
+  /// Arka yüzdeki satırlardan okunan ad, soyad ve TC (çipsiz devam için).
+  /// Ad ve soyad büyük harfli, Türkçe karaktersizdir ("SIMSEK").
+  final String mrzFirstName;
+  final String mrzLastName;
+  final String mrzTc;
+
+  /// Çip okunamazsa arka yüzdeki bilgiyle devam edilebilir mi.
+  bool get canGoChipless =>
+      mrzFirstName.isNotEmpty && mrzLastName.isNotEmpty && tcValid(mrzTc);
 
   IdCardKey copyWith({
     String? documentNumber,
@@ -30,6 +43,9 @@ class IdCardKey {
     expiryDate: expiryDate ?? this.expiryDate,
     // Elle düzeltilen bilgide adaylar geçersizdir.
     alternatives: documentNumber == null ? alternatives : const [],
+    mrzFirstName: mrzFirstName,
+    mrzLastName: mrzLastName,
+    mrzTc: mrzTc,
   );
 }
 
@@ -41,12 +57,16 @@ class IdCardData {
     required this.lastName,
     required this.birthDate,
     required this.tc,
+    this.chipless = false,
   });
 
   final String firstName;
   final String lastName;
   final DateTime birthDate;
   final String tc;
+
+  /// Çip okunamadı; bilgiler arka yüzdeki satırlardan geldi (turuncu tik).
+  final bool chipless;
 
   String get fullName => '$firstName $lastName'.trim();
 }
@@ -228,7 +248,25 @@ IdCardKey? parseIdCardMrz(String ocrText) {
     if (ok.isNotEmpty) picks = ok;
   }
   final doc = picks.first;
+  // 3. satır: SOYAD<<AD<AD2<<<... (büyük harf, Türkçe karaktersiz).
+  String last = '', first = '';
+  for (final l in lines) {
+    final t = l.replaceAllMapped(
+      RegExp(r'[0-9]'),
+      (m) => _toLetter[m.group(0)!] ?? m.group(0)!,
+    );
+    final m = RegExp(r'^([A-Z]+)<<([A-Z<]+?)<*$').firstMatch(t);
+    if (m != null && !t.startsWith('I<')) {
+      last = m.group(1)!;
+      first = m.group(2)!.split('<').where((e) => e.isNotEmpty).join(' ');
+      break;
+    }
+  }
+  final tc = tcFromText([l1.substring(15), l2 ?? '']) ?? '';
   return IdCardKey(
+    mrzFirstName: first,
+    mrzLastName: last,
+    mrzTc: tc,
     documentNumber: doc.replaceAll('<', ''),
     birthDate: birth,
     expiryDate: expiry,
@@ -236,4 +274,28 @@ IdCardKey? parseIdCardMrz(String ocrText) {
       for (final d in picks.skip(1).take(2)) d.replaceAll('<', ''),
     ],
   );
+}
+
+/// Türkçe harfleri sadeleştirip büyük harfe çevirir (MRZ ile karşılaştırma).
+String idFold(String s) {
+  const map = {
+    'ç': 'C',
+    'Ç': 'C',
+    'ğ': 'G',
+    'Ğ': 'G',
+    'ı': 'I',
+    'İ': 'I',
+    'i': 'I',
+    'ö': 'O',
+    'Ö': 'O',
+    'ş': 'S',
+    'Ş': 'S',
+    'ü': 'U',
+    'Ü': 'U',
+  };
+  final b = StringBuffer();
+  for (final ch in s.trim().split('')) {
+    b.write(map[ch] ?? ch.toUpperCase());
+  }
+  return b.toString().replaceAll(RegExp(r'\s+'), ' ');
 }

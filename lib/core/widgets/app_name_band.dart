@@ -95,10 +95,22 @@ class AppNameBand extends StatelessWidget {
                       Positioned(
                         left: 4,
                         bottom: 3,
-                        child: _BandBackButton(onTap: page.onBack),
+                        child: _BandBackButton(
+                          onTap: page.onBack,
+                          home: page.home,
+                        ),
                       ),
+                      // Geri düğmesiyle (48) aynı yükseklikte ortalı: alt
+                      // çizgiye taşmaz.
                       if (page.trailing != null)
-                        Positioned(right: 4, bottom: 3, child: page.trailing!),
+                        Positioned(
+                          right: 4,
+                          bottom: 3,
+                          child: SizedBox(
+                            height: 48,
+                            child: Center(child: page.trailing!),
+                          ),
+                        ),
                     ],
                   );
                 }
@@ -106,7 +118,10 @@ class AppNameBand extends StatelessWidget {
                   return _TournamentBand(
                     theme: pageTheme!,
                     top: top,
-                    leading: _BandBackButton(onTap: page.onBack),
+                    leading: _BandBackButton(
+                      onTap: page.onBack,
+                      home: page.home,
+                    ),
                     trailing: page.trailing,
                     subtitle: page.subtitle,
                   );
@@ -525,7 +540,11 @@ class PageBand {
     required this.onBack,
     this.trailing,
     this.subtitle,
+    this.home = false,
   });
+
+  /// true: soldaki düğme geri oku yerine ev (Ana Sayfa).
+  final bool home;
 
   /// null: kişinin aktif turnuvasının bandı (yoksa uygulama bandı).
   final TournamentTheme? theme;
@@ -546,9 +565,13 @@ class BandBackPage extends StatefulWidget {
     this.subtitle,
     this.theme,
     this.trailing,
+    this.home = false,
   });
 
   final Widget child;
+
+  /// Soldaki düğme ev simgesi (Ana Sayfa'ya döner).
+  final bool home;
 
   /// Bantta sağda (ör. arama ekranında kapat).
   final Widget? trailing;
@@ -578,9 +601,31 @@ class _BandBackPageState extends State<BandBackPage> {
         theme: widget.theme,
         subtitle: widget.subtitle,
         trailing: widget.trailing,
+        home: widget.home,
         onBack: () => Navigator.of(context).maybePop(),
       ),
     );
+  }
+
+  /// Tema / başlık değişirse bant da güncellenir (ör. panelde turnuva
+  /// seçimi).
+  @override
+  void didUpdateWidget(covariant BandBackPage old) {
+    super.didUpdateWidget(old);
+    if (old.theme?.leagueId != widget.theme?.leagueId ||
+        old.subtitle != widget.subtitle ||
+        (old.trailing == null) != (widget.trailing == null)) {
+      LeagueSwitchScope.setPageBand(
+        _route,
+        PageBand(
+          theme: widget.theme,
+          subtitle: widget.subtitle,
+          trailing: widget.trailing,
+          home: widget.home,
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+      );
+    }
   }
 
   @override
@@ -608,9 +653,10 @@ Rect? bandRectInOverlay() {
 
 /// Bantta geri düğmesi (en solda).
 class _BandBackButton extends StatelessWidget {
-  const _BandBackButton({required this.onTap});
+  const _BandBackButton({required this.onTap, this.home = false});
 
   final VoidCallback onTap;
+  final bool home;
 
   @override
   Widget build(BuildContext context) {
@@ -618,11 +664,12 @@ class _BandBackButton extends StatelessWidget {
       type: MaterialType.transparency,
       child: IconButton(
         onPressed: onTap,
-        icon: const Icon(
-          Icons.arrow_back_ios_new_rounded,
+        tooltip: home ? 'Ana Sayfa' : null,
+        icon: Icon(
+          home ? Icons.home_rounded : Icons.arrow_back_ios_new_rounded,
           color: Colors.white,
-          size: 22,
-          semanticLabel: 'Geri',
+          size: home ? 26 : 22,
+          semanticLabel: home ? 'Ana Sayfa' : 'Geri',
         ),
       ),
     );
@@ -1009,11 +1056,11 @@ class _TournamentBand extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (LeagueSwitchScope.tabAction.value != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: LeagueSwitchScope.tabAction.value!,
-              ),
+            // Zil ile aynı hizada (ortalı), arada küçük boşluk.
+            if (LeagueSwitchScope.tabAction.value != null) ...[
+              LeagueSwitchScope.tabAction.value!,
+              const SizedBox(width: 4),
+            ],
             const NotificationBell(),
             if (actions?.onLogout != null)
               actions!.logoutButton()
@@ -1023,7 +1070,10 @@ class _TournamentBand extends StatelessWidget {
         );
     // İki yan eşit genişlikte: turnuva kimliği tam ortada kalır. Yan
     // genişlik sağdaki içeriğe göre (zil tek başına daha dar).
-    final side = trailing != null || actions?.onLogout != null
+    // Sağda tek simge düğmesi (ör. panelde turnuva seçici) zil kadar yer
+    // kaplar; ad kesilmesin.
+    final iconOnly = trailing is IconButton || trailing is BandIconButton;
+    final side = (trailing != null && !iconOnly) || actions?.onLogout != null
         ? 104.0
         : LeagueSwitchScope.tabAction.value != null
         ? 88.0
@@ -1071,14 +1121,17 @@ class _TournamentBand extends StatelessWidget {
                           : Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  _trUpper(theme.name),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: _BandTitle._style.copyWith(
-                                    fontSize: 14,
-                                    letterSpacing: 0.8,
-                                    height: 1.1,
+                                // Uzun ad kesilmez, sığana kadar küçülür.
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _trUpper(theme.name),
+                                    maxLines: 1,
+                                    style: _BandTitle._style.copyWith(
+                                      fontSize: 14,
+                                      letterSpacing: 0.8,
+                                      height: 1.1,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 2),

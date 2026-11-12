@@ -1,4 +1,5 @@
 import '../../identity/id_card_reader.dart';
+import '../../../core/utils/friendly_error.dart';
 import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
@@ -602,7 +603,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           'age_rules, starting_player_count, sub_player_count, '
           'match_period_duration, number_of_player_changes, '
           'transfer_start_date, transfer_end_date, goalkeeper_add_anytime, '
-          'require_verified_id',
+          'require_verified_id, verified_id_mode',
         )
         .eq('id', seasonId)
         .maybeSingle()
@@ -824,7 +825,10 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         'Kadro ekleme dönemi: ${start ?? '…'} – ${end ?? '…'}'
             '${r['goalkeeper_add_anytime'] == true ? ' (kaleci her zaman eklenebilir)' : ''}.',
       if (r['require_verified_id'] == true)
-        'Esameye yalnız kimliği doğrulanmış (mavi tikli) oyuncular yazılır.',
+        r['verified_id_mode'] == 'chip_ibraz'
+            ? 'Esameye yalnız Kimlik Çip Onaylı ya da Kimlik İbraz Onaylı '
+                  'oyuncular yazılır.'
+            : 'Esameye yalnız Kimlik Çip Onaylı oyuncular yazılır.',
       if (a.playerMaxYear != null)
         'Oyuncular ${a.playerMaxYear} ve öncesi doğumlu olmalı.',
       if (a.gkMaxYear != null)
@@ -1060,7 +1064,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         msg.contains('23505')) {
       return 'Bu futbolcu için zaten onay bekleyen bir talebiniz var.';
     }
-    return msg.replaceFirst('Exception: ', '').trim();
+    return friendlyErrorText(msg);
   }
 
   bool _isLoadingTournaments = true;
@@ -1283,7 +1287,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       ).showSnackBar(const SnackBar(content: Text('Kadrodan kaldırıldı.')));
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      final msg = friendlyErrorText(e);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Silinemedi: $msg')));
@@ -1516,7 +1520,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      final msg = friendlyErrorText(e);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Güncellenemedi: $msg')));
@@ -1627,7 +1631,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         used.add(next);
         done++;
       } catch (e) {
-        error = e.toString().replaceFirst('Exception: ', '').trim();
+        error = friendlyErrorText(e);
         break;
       }
     }
@@ -3270,6 +3274,10 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     }
 
     final birthDate = _birthDateController.text.trim();
+    if (birthDate.isEmpty) {
+      _showError('Doğum tarihi boş geçilemez.', tab: 0);
+      return;
+    }
     if (!_isValidBirthDate(birthDate)) {
       _showError('Doğum tarihi DD-MM-YYYY formatında olmalı.', tab: 0);
       return;
@@ -3448,6 +3456,32 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString();
+      if (msg.contains('players_phone_uq')) {
+        setState(() => _saving = false);
+        String who = 'başka bir futbolcuya';
+        try {
+          final o = await Supabase.instance.client.rpc(
+            'player_phone_owner',
+            params: {'p_phone': _rawPhone()},
+          );
+          if (o is Map) {
+            final teams = (o['teams'] as List? ?? const []).join(', ');
+            final bd = '${o['birth_date'] ?? ''}';
+            who =
+                '${o['name']}${bd.isEmpty ? '' : ' (${bd.split('-').reversed.join('.')})'}'
+                '${teams.isEmpty ? '' : ' · $teams'} adlı futbolcuya';
+          }
+        } catch (_) {}
+        if (!mounted) return;
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Telefon zaten kayıtlı',
+          message:
+              'Bu numara $who ait. Aynı kişiyse yeni kayıt açmayın; '
+              'mevcut kaydı kadroya ekleyin.',
+        );
+        return;
+      }
       // Düzenlemede ad/soyad/doğum tarihi başka bir kayıtla çakışırsa da.
       final text =
           msg.contains(kPlayerAlreadyRegistered) ||
@@ -3459,7 +3493,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ? 'Futbolcunun kişisel bilgilerini (ad, doğum tarihi, telefon, '
                 'fotoğraf vb.) yalnızca kurucu başkan veya bölge sorumlusu '
                 'değiştirebilir. Forma numarasını değiştirebilirsiniz.'
-          : msg.replaceFirst('Exception: ', '').trim();
+          : friendlyErrorText(msg);
       _showError(text);
       setState(() => _saving = false);
     }
@@ -5469,7 +5503,7 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
     } catch (e) {
       if (!mounted || seq != _requestSeq) return;
       setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '').trim();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -5507,7 +5541,7 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
               msg.contains('pending_actions_one_open_per_player') ||
                       msg.contains('23505')
                   ? '${p.name}: zaten onay bekleyen bir talep var'
-                  : '${p.name}: ${msg.replaceFirst('Exception: ', '').trim()}',
+                  : '${p.name}: ${friendlyErrorText(msg)}',
             );
           }
         }
@@ -5536,7 +5570,7 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      final msg = friendlyErrorText(e);
       // Popup'ın üstünde göster (SnackBar arkada kalıyordu).
       await showAdminInfoDialog(
         context: context,
