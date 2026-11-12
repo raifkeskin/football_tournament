@@ -114,6 +114,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   /// Çip okuma ilerlemesi (0-1); kart algılanmadan önce null.
   double? _progress;
   bool _busy = false;
+
+  /// Kılıf uyarısı bu ekranda bir kez gösterilir (TEKRAR DENE'de çıkmaz).
+  bool _caseWarned = false;
   int _count = 0;
 
   /// Kart aranırken kaçıncı deneme (1..3); okuma başlayınca/bitince 0.
@@ -283,6 +286,27 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     if (card == null || !mounted) return;
     setState(() => _error = null);
     await _afterCard(card);
+  }
+
+  /// İlk okumadan önce: telefon kılıfı çipin okunmasını engelleyebilir.
+  Future<void> _startChip() async {
+    if (!_caseWarned) {
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: 'Telefon kılıfını çıkarın',
+        message:
+            'Telefon kılıfı kimlik çipinin okunmasını engelleyebilir. '
+            'Okutmadan önce kılıfı çıkarın, ardından kimliği telefonun '
+            'arkasına düz yaslayın.',
+        confirmLabel: 'DEVAM ET',
+        cancelLabel: 'VAZGEÇ',
+        destructive: false,
+        icon: Icons.phone_android_rounded,
+      );
+      if (!ok || !mounted) return;
+      _caseWarned = true;
+    }
+    await _readChip();
   }
 
   Future<void> _readChip() async {
@@ -685,7 +709,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                 if (_card == null && !_busy) ...[
                   const SizedBox(height: 12),
                   const Text(
-                    '2. adım: ÇİPİ OKU\'ya basın, ardından kartı telefonun '
+                    '2. adım: telefon kılıfını çıkarın, ÇİPİ OKU\'ya basın ve kartı telefonun '
                     'arkasına düz yaslayın.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: kAdminMuted, fontSize: 13),
@@ -694,7 +718,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                   AdminPrimaryButton(
                     label: 'ÇİPİ OKU',
                     icon: Icons.nfc_rounded,
-                    onPressed: _readChip,
+                    onPressed: _startChip,
                   ),
                   if (_canChipless && _error == null) ...[
                     const SizedBox(height: 10),
@@ -1599,7 +1623,11 @@ class _Steps extends StatelessWidget {
             'Kimlik kartının arka yüzünü kameraya gösterin; kart '
                 'kendiliğinden okunur.',
           ),
-          step('2', 'Kartı telefonun arkasına yaslayın; çip okunur.'),
+          step(
+            '2',
+            'Telefon kılıfını çıkarın, kartı telefonun arkasına yaslayın; '
+                'çip okunur.',
+          ),
           step(
             '3',
             'Eşleşen profili onaylayın; profil mavi tikle '
