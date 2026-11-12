@@ -37,6 +37,7 @@ import '../../admin_panel/admin_panel_screen.dart';
 import '../../match/screens/esame_edit_screen.dart';
 import '../../match/widgets/attendance_card.dart';
 import 'my_week_card.dart';
+import 'season_health_card.dart';
 import '../screens/main_navigator.dart';
 import 'overdue_results_banner.dart';
 import 'referee_home_card.dart';
@@ -1196,6 +1197,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
                   UnassignedRefereesBanner(leagueId: widget.league.id),
                   UnscheduledMatchesBanner(leagueId: widget.league.id),
                 ],
+                if (session.playerId != null &&
+                    SeasonHealthCard.enabledFor(session))
+                  const SeasonHealthCard(),
                 const RefereeHomeCard(),
                 NotifInviteBanner(
                   leagueId: widget.league.id,
@@ -1728,7 +1732,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
               );
             },
           ),
-        if (isOwner && pendingHere > 0) ...[
+        // Yönetim Paneli açık olanlarda onay uyarıları panelde gösterilir.
+        if (!AdminPanelAccess.visible(session) &&
+            isOwner &&
+            pendingHere > 0) ...[
           // Dokununca ceza onayları ekranı, ana sayfada seçili turnuva,
           // sezon ve grupla süzülmüş olarak.
           _alert(
@@ -1751,7 +1758,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ],
         // Onay bekleyen otomatik haberler: admin, kurucu başkan, bölge
         // sorumlusu (yeni haber ekranları kapalı olsa da).
-        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
+        if (!AdminPanelAccess.visible(session) &&
+            (session.panelLeagueIds?.contains(widget.league.id) ?? true))
           StreamBuilder<List<NewsItem>>(
             stream: ServiceLocator.leagueService.watchNewsFeed(
               leagueId: widget.league.id,
@@ -1777,7 +1785,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
             },
           ),
         // Onay bekleyen yorumlar (haber sorumluları).
-        if (session.panelLeagueIds?.contains(widget.league.id) ?? true)
+        if (!AdminPanelAccess.visible(session) &&
+            (session.panelLeagueIds?.contains(widget.league.id) ?? true))
           FutureBuilder<int>(
             future: NewsTalkService.pendingCount(widget.league.id),
             builder: (context, snap) {

@@ -34,8 +34,6 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
   final _passwordFocus = FocusNode();
 
   _FanRegistrationStep _step = _FanRegistrationStep.details;
-  LocationOption? _province;
-  LocationOption? _district;
   bool _termsAccepted = false;
   bool _busy = false;
   String? _error;
@@ -131,45 +129,6 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
     );
   }
 
-  Future<void> _pickLocation({required bool province}) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final options = province
-          ? await FanRegistrationService.provinces()
-          : await FanRegistrationService.districts(_province!.id);
-      if (!mounted) return;
-      final selected = await showAdminOptionPicker<LocationOption>(
-        context: context,
-        title: province ? 'İl Seç' : 'İlçe Seç',
-        items: options,
-        selected: province ? _province : _district,
-        labelBuilder: (option) => option.name,
-        emptyText: province ? 'İl listesi bulunamadı.' : 'İlçe bulunamadı.',
-      );
-      if (!mounted || selected == null) return;
-      setState(() {
-        if (province) {
-          _province = selected;
-          _district = null;
-        } else {
-          _district = selected;
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(
-          () => _error =
-              'İl/ilçe listesi yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _sendCode() async {
     final first = _firstName.text.trim();
     final last = _lastName.text.trim();
@@ -180,11 +139,6 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
     }
     if (phone.length != 10 || !phone.startsWith('5')) {
       setState(() => _error = 'Geçerli bir cep telefonu numarası girin.');
-      return;
-    }
-    // İl/ilçe isteğe bağlı; il seçildiyse ilçe de seçilmeli.
-    if (_province != null && _district == null) {
-      setState(() => _error = 'İlçeyi de seçin ya da ili boş bırakın.');
       return;
     }
     if (!_termsAccepted) {
@@ -287,8 +241,6 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
         password: password,
         firstName: _firstName.text.trim(),
         lastName: _lastName.text.trim(),
-        provinceId: _province?.id,
-        districtId: _district?.id,
         termsAccepted: _termsAccepted,
       );
       if (!mounted) return;
@@ -367,58 +319,6 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
     );
   }
 
-  Widget _locationButton({
-    required String label,
-    required String? value,
-    required VoidCallback onTap,
-    required IconData icon,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _busy ? null : onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-            child: Row(
-              children: [
-                Icon(icon, color: const Color(0xFF94A3B8), size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        value ?? 'Seçin',
-                        style: TextStyle(
-                          color: value == null ? Colors.white54 : Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.expand_more, color: Colors.white70),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _termsCheckbox() => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -491,20 +391,6 @@ class _RegisterFanScreenState extends State<RegisterFanScreen> {
       const SizedBox(height: 18),
       _textField(label: 'Ad', controller: _firstName),
       _textField(label: 'Soyad', controller: _lastName),
-      _locationButton(
-        label: 'İl (isteğe bağlı)',
-        value: _province?.name,
-        icon: Icons.location_city_outlined,
-        onTap: () => _pickLocation(province: true),
-      ),
-      _locationButton(
-        label: 'İlçe (isteğe bağlı)',
-        value: _district?.name,
-        icon: Icons.place_outlined,
-        onTap: _province == null
-            ? () => setState(() => _error = 'Önce il seçin.')
-            : () => _pickLocation(province: false),
-      ),
       _textField(
         label: 'Cep Telefonu',
         controller: _phone,

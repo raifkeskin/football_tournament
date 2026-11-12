@@ -2,56 +2,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'fan_membership_terms.dart';
 
-class LocationOption {
-  const LocationOption({required this.id, required this.name});
-
-  final int id;
-  final String name;
-
-  factory LocationOption.fromMap(Map<String, dynamic> row) => LocationOption(
-    id: (row['id'] as num).toInt(),
-    name: row['name'].toString(),
-  );
-}
-
 class FanRegistrationService {
   FanRegistrationService._();
 
   static const termsVersion = fanMembershipTermsVersion;
 
   static SupabaseClient get _client => Supabase.instance.client;
-
-  static List<LocationOption>? _provinces;
-  static final Map<int, List<LocationOption>> _districts = {};
-
-  static Future<List<LocationOption>> provinces() async {
-    final cached = _provinces;
-    if (cached != null) return cached;
-    final rows = await _client
-        .from('turkey_provinces')
-        .select('id, name')
-        .order('name');
-    final options = rows
-        .map((row) => LocationOption.fromMap(row))
-        .toList(growable: false);
-    _provinces = options;
-    return options;
-  }
-
-  static Future<List<LocationOption>> districts(int provinceId) async {
-    final cached = _districts[provinceId];
-    if (cached != null) return cached;
-    final rows = await _client
-        .from('turkey_districts')
-        .select('id, name')
-        .eq('province_id', provinceId)
-        .order('name');
-    final options = rows
-        .map((row) => LocationOption.fromMap(row))
-        .toList(growable: false);
-    _districts[provinceId] = options;
-    return options;
-  }
 
   static Future<String> sendCode({
     required String phone,
@@ -81,8 +37,6 @@ class FanRegistrationService {
     required String password,
     required String firstName,
     required String lastName,
-    int? provinceId,
-    int? districtId,
     required bool termsAccepted,
   }) async {
     final result = await _client.rpc(
@@ -93,8 +47,9 @@ class FanRegistrationService {
         'p_password': password,
         'p_first': firstName,
         'p_last': lastName,
-        'p_province_id': provinceId,
-        'p_district_id': districtId,
+        // İl/ilçe artık alınmıyor (2026-11-12); RPC imzası aynı kalır.
+        'p_province_id': null,
+        'p_district_id': null,
         'p_terms_version': termsVersion,
         'p_terms_accepted': termsAccepted,
       },
@@ -106,7 +61,6 @@ class FanRegistrationService {
     'disabled' => 'Taraftar kaydı şu an kapalı. Lütfen daha sonra deneyin.',
     'invalid_phone' => 'Geçerli bir cep telefonu numarası girin.',
     'invalid_name' => 'Adınızı ve soyadınızı kontrol edin.',
-    'invalid_location' => 'İl ve ilçe seçiminizi kontrol edin.',
     'terms_required' => 'Üyelik sözleşmesini kabul etmeniz gerekiyor.',
     'has_account' =>
       'Bu numarayla zaten hesap var. Giriş yapın veya şifrenizi yenileyin.',

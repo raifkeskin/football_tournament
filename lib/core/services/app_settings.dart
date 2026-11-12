@@ -44,6 +44,8 @@ class AppSettings {
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
   static const _kNewsScreen = 'news_screen_enabled';
   static const _kNewsComments = 'news_comments_enabled';
+  static const _kSeasonHealth = 'season_health_enabled';
+  static const _kConsentPreviewUsers = 'consent_preview_users';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -183,6 +185,15 @@ class AppSettings {
   /// yalnız admin görür. Veritabanı da aynı kuralı uygular.
   static final newsCommentsEnabled = ValueNotifier<bool>(false);
 
+  /// Ana sayfada sezon bazlı sağlık beyanı kartı herkese açık mı; kapalıyken
+  /// yalnız admin. Veritabanı da aynı kuralı uygular (season_health_on).
+  static final seasonHealthEnabled = ValueNotifier<bool>(false);
+
+  /// Onay deneme listesi (auth uid): taslak onay metinlerini (avukat onayı
+  /// bekleyen sürüm) ve sağlık beyanı kartını görür. Veritabanında
+  /// consent_preview_on() aynı listeyi kullanır.
+  static final consentPreviewUsers = ValueNotifier<Set<String>>({});
+
   /// Oyuncu kartındaki "Mevki" sekmesi (asıl mevki + oynayabildiği en çok 3
   /// mevki) herkese açık mı; kapalıyken yalnız admin görür. Veritabanı da
   /// kaydı aynı anahtarla açar (`positions_tab_allowed`).
@@ -238,6 +249,14 @@ class AppSettings {
           newsScreenEnabled.value = r['value'] == true;
         } else if (r['key'] == _kNewsComments) {
           newsCommentsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kSeasonHealth) {
+          seasonHealthEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kConsentPreviewUsers) {
+          final v = r['value'];
+          consentPreviewUsers.value = {
+            if (v is List)
+              for (final x in v) x.toString(),
+          };
         } else if (r['key'] == _kBiometricLogin) {
           biometricLoginEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMatchPosterDesigns) {

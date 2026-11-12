@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:io' show File, Platform;
 
 import 'package:dmrtd/dmrtd.dart';
@@ -93,54 +94,101 @@ class IdCardReader {
     }
   }
 
+  /// NFC anteni telefonun üst kısmında mı (iPhone) yoksa ortada mı.
+  static bool get antennaTop => Platform.isIOS;
+
   /// Kartın nereye konacağı: iPhone'un NFC anteni üst kenarda (kameranın
   /// yanında); Android'de çoğunlukla arka ortada.
   static String get placementHint => Platform.isIOS
       ? 'Kartı iPhone\'un arkasında üst kısma, kameranın hemen altına düz '
             'yaslayın'
-      : 'Kartı telefonun arka ortasına düz yaslayın';
+      : 'Kimliğinizi telefonun arkasına, tam ortaya düz yaslayın';
 
   /// Okuma yarıda koparsa (kart kaydı, temas kesildi) bu kadar kez kendi
   /// kendine yeniden denenir; kullanıcı baştan başlamak zorunda kalmaz.
   static const _attempts = 3;
 
+  /// Kart bu kadar kez [_pollWindow] içinde algılanmazsa okuma bırakılır
+  /// (kullanıcıya çipsiz devam seçeneği sunulur).
+  static const detectTries = 3;
+
+  /// Tek arama turu: kart bu sürede algılanmazsa arama yeniden başlar.
+  static const _pollWindow = Duration(seconds: 5);
+
+  /// Kart algılandıktan sonra okumanın (kilit açma + veri) en uzun süresi;
+  /// normalde 2-4 sn. Aşılırsa okuma takılmış sayılır, kendiliğinden
+  /// yeniden başlatılır.
+  static const _readCap = Duration(seconds: 8);
+
+  /// Karta giden tek komutun cevap süresi (Android; normalde <0,1 sn).
+  /// Kütüphanenin varsayılanı 10 sn: temas bir an kesilince ekran donuyordu.
+  static const _commandTimeout = Duration(seconds: 2);
+
   /// Çipi okur: önce PACE (destekliyorsa), olmazsa BAC. [onStatus] okuma
   /// adımlarını, [onProgress] ilerlemeyi (0-1) bildirir (Android ekranı;
-  /// iPhone'da sistem penceresinde yüzde yazar). Bağlantı koparsa
-  /// [_attempts] kez yeniden denenir.
+  /// iPhone'da sistem penceresinde yüzde yazar). [onAttempt] kaçıncı
+  /// denemenin yapıldığını (1, 2, 3…) bildirir. Kart 5 sn'de
+  /// algılanmazsa arama yeniden başlar; [detectTries] denemede de
+  /// algılanmazsa [IdCardNotDetected]. Bağlantı koparsa [_attempts] kez
+  /// yeniden denenir.
   static Future<IdCardData> readChip(
     IdCardKey key, {
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
+    void Function(int attempt)? onAttempt,
   }) async {
-    for (var attempt = 1; ; attempt++) {
+    var interrupts = 0;
+    var searches = 0;
+    var resumed = false;
+    // PACE bir kez olmadıysa yeniden denemede doğrudan BAC (zaman kazanır).
+    final pace = _PaceState();
+    while (true) {
+      if (!resumed) {
+        searches++;
+        onAttempt?.call(searches + interrupts);
+        onStatus?.call(
+          searches == 1
+              ? placementHint
+              : 'Kimlik algılanamadı, tekrar deneniyor…\nKartı sabit tutun',
+        );
+      }
       try {
         return await _readChipOnce(
           key,
-          attempt: attempt,
+          resumed: resumed,
+          pace: pace,
           onStatus: onStatus,
           onProgress: onProgress,
         );
+      } on _NotDetected {
+        if (resumed || searches >= detectTries) {
+          throw const IdCardNotDetected();
+        }
       } on _ReadInterrupted {
-        if (attempt >= _attempts) {
+        interrupts++;
+        if (interrupts >= _attempts) {
           throw const IdCardError(
             'Okuma yarıda kaldı. Kartı okuma bitene kadar oynatmadan, '
             'telefona tam yaslı tutun ve tekrar deneyin.',
           );
         }
-        onProgress?.call(0);
-        onStatus?.call('Bağlantı koptu, yeniden deneniyor… kartı sabit tutun');
+        resumed = true;
+        onAttempt?.call(searches + interrupts);
+        onStatus?.call(
+          'Okuma yapılamadı, tekrar deneniyor…\nKartı sabit tutun',
+        );
       }
     }
   }
 
   static Future<IdCardData> _readChipOnce(
     IdCardKey key, {
-    required int attempt,
+    required bool resumed,
+    required _PaceState pace,
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
   }) async {
-    final nfc = NfcProvider();
+    final nfc = NfcProvider()..timeout = _commandTimeout;
     var detected = false;
     Future<void> step(double p) async {
       onProgress?.call(p);
@@ -151,21 +199,39 @@ class IdCardReader {
       } catch (_) {}
     }
 
-    Future<void> connect() => nfc.connect(
-      timeout: const Duration(seconds: 45),
-      iosAlertMessage: attempt == 1
-          ? '$placementHint ve okuma bitene kadar oynatmayın.'
-          : 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden okunuyor.',
-    );
-
-    try {
-      if (attempt == 1) onStatus?.call(placementHint);
-      await connect();
-      if (!nfc.isConnected()) {
-        throw const IdCardError('Kart algılanamadı. Tekrar deneyin.');
+    // Kart 5 sn içinde algılanmazsa arama kapatılır (_NotDetected).
+    // iPhone'da zaman aşımı sistem penceresine uygulanmadığından burada
+    // kesilir ve pencere kapatılır.
+    Future<void> connect() async {
+      if (Platform.isAndroid) {
+        try {
+          return await nfc.connect(timeout: _pollWindow);
+        } catch (e) {
+          if (_isTimeout(e)) throw const _NotDetected();
+          rethrow;
+        }
       }
-      detected = true;
-      onStatus?.call('Okunuyor, kartı oynatmayın…');
+      final f = nfc.connect(
+        timeout: _pollWindow,
+        iosAlertMessage: resumed
+            ? 'Bağlantı koptu. Kartı aynı yere sabit tutun, yeniden okunuyor.'
+            : '$placementHint ve okuma bitene kadar oynatmayın.',
+      );
+      try {
+        await f.timeout(_pollWindow);
+      } on TimeoutException {
+        f.ignore();
+        try {
+          await FlutterNfcKit.finish(iosErrorMessage: 'Kimlik algılanamadı');
+        } catch (_) {}
+        throw const _NotDetected();
+      } catch (e) {
+        if (_isTimeout(e)) throw const _NotDetected();
+        rethrow;
+      }
+    }
+
+    Future<IdCardData> read() async {
       await step(0.1);
 
       var passport = Passport(nfc);
@@ -176,7 +242,7 @@ class IdCardReader {
       await step(0.25);
 
       var opened = false;
-      if (cardAccess != null) {
+      if (cardAccess != null && !pace.failed) {
         try {
           await passport.startSessionPACE(
             DBAKey(
@@ -190,6 +256,7 @@ class IdCardReader {
           opened = true;
         } catch (_) {
           // PACE olmadı: bağlantıyı yenileyip BAC ile denenir.
+          pace.failed = true;
           await nfc.disconnect();
           await connect();
           passport = Passport(nfc);
@@ -231,15 +298,32 @@ class IdCardReader {
         birthDate: mrz.dateOfBirth,
         tc: tc,
       );
+    }
+
+    try {
+      await connect();
+      if (!nfc.isConnected()) {
+        throw const IdCardError('Kart algılanamadı. Tekrar deneyin.');
+      }
+      detected = true;
+      onStatus?.call('Okunuyor, kartı oynatmayın…');
+      final f = read();
+      try {
+        return await f.timeout(_readCap);
+      } on TimeoutException {
+        f.ignore();
+        rethrow;
+      }
+    } on _NotDetected {
+      rethrow;
     } on IdCardError catch (e) {
       await _close(nfc, e.message);
       rethrow;
     } catch (e) {
-      final timeout =
-          e.toString().contains('408') ||
-          e.toString().toLowerCase().contains('timeout');
-      // Kart algılandı ama okuma koptu: sessizce kapatıp yeniden denenir.
-      if (detected && !timeout) {
+      final timeout = _isTimeout(e);
+      // Kart algılandı ama okuma koptu ya da takıldı: sessizce kapatıp
+      // yeniden denenir.
+      if (detected) {
         try {
           await nfc.disconnect(
             iosErrorMessage: 'Bağlantı koptu, yeniden deneniyor',
@@ -257,11 +341,26 @@ class IdCardReader {
     }
   }
 
+  static bool _isTimeout(Object e) {
+    final s = e.toString();
+    return s.contains('408') || s.toLowerCase().contains('timeout');
+  }
+
   static Future<void> _close(NfcProvider nfc, String message) async {
     try {
       await nfc.disconnect(iosErrorMessage: message);
     } catch (_) {}
   }
+}
+
+/// Tek okuma isteği boyunca PACE'in olmadığı bilgisi.
+class _PaceState {
+  bool failed = false;
+}
+
+/// Kart arama süresinde algılanmadı.
+class _NotDetected implements Exception {
+  const _NotDetected();
 }
 
 /// Kart algılandıktan sonra okuma koptu (yeniden denenecek).

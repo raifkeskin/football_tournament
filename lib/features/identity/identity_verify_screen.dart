@@ -114,10 +114,13 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   /// Çip okuma ilerlemesi (0-1); kart algılanmadan önce null.
   double? _progress;
   bool _busy = false;
+
+  /// Kılıf uyarısı bu ekranda bir kez gösterilir (TEKRAR DENE'de çıkmaz).
+  bool _caseWarned = false;
   int _count = 0;
 
-  /// Çip okuma başarısızlık sayısı (her biri 3 iç denemeyle).
-  int _chipFails = 0;
+  /// Kart aranırken kaçıncı deneme (1..3); okuma başlayınca/bitince 0.
+  int _searchTry = 0;
 
   /// Kadroda okutma: sıradaki oyuncu ve son okumanın sonucu.
   int _ti = 0;
@@ -258,10 +261,24 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     });
   }
 
-  /// Çip okunamadı: arka yüzdeki bilgiyle devam (turuncu tik, onay yok).
+  /// Çip okutulmadan arka yüzdeki bilgiyle devam (turuncu tik, onay yok).
+  /// Önce profilin tam onaylı olmayacağı uyarısı onaylatılır.
   Future<void> _continueChipless() async {
     final key = _key;
     if (key == null || !key.canGoChipless) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Çipsiz devam edilsin mi?',
+      message:
+          'Profiliniz tam onaylı olmayacağından bazı turnuvalara '
+          'katılımınız alınmayabilir. Çipi daha sonra okutarak tam onay '
+          'alabilirsiniz. Onaylıyor musunuz?',
+      confirmLabel: 'ONAYLIYORUM',
+      cancelLabel: 'VAZGEÇ',
+      destructive: false,
+      icon: Icons.warning_amber_rounded,
+    );
+    if (!ok || !mounted) return;
     final card = await showDialog<IdCardData>(
       context: context,
       builder: (_) => _ChiplessDialog(key_: key),
@@ -269,6 +286,27 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     if (card == null || !mounted) return;
     setState(() => _error = null);
     await _afterCard(card);
+  }
+
+  /// İlk okumadan önce: telefon kılıfı çipin okunmasını engelleyebilir.
+  Future<void> _startChip() async {
+    if (!_caseWarned) {
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: 'Dikkat',
+        message:
+            'Telefon kılıfı kimlik çipinin okunmasını engelleyebilir. '
+            'Okutmadan önce kılıfı çıkarın, ardından kimliği telefonun '
+            'arkasına düz yaslayın.',
+        confirmLabel: 'DEVAM ET',
+        cancelLabel: 'VAZGEÇ',
+        destructive: false,
+        icon: Icons.warning_amber_rounded,
+      );
+      if (!ok || !mounted) return;
+      _caseWarned = true;
+    }
+    await _readChip();
   }
 
   Future<void> _readChip() async {
@@ -295,6 +333,15 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
         },
+        onAttempt: (n) {
+          // Yeni denemede kart yeniden aranır: yerleştirme animasyonu döner.
+          if (mounted) {
+            setState(() {
+              _searchTry = n;
+              _progress = null;
+            });
+          }
+        },
       );
       if (!mounted) return;
       await _afterCard(card);
@@ -302,7 +349,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       if (mounted) {
         setState(() {
           _error = e.message;
-          _chipFails++;
         });
       }
     } catch (e) {
@@ -313,6 +359,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           _busy = false;
           _status = null;
           _progress = null;
+          _searchTry = 0;
         });
       }
     }
@@ -630,13 +677,10 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                   busy: _busy,
                   onPressed: _scanBack,
                 ),
-                const SizedBox(height: 6),
-                TextButton(
+                const SizedBox(height: 10),
+                AdminSecondaryButton(
+                  label: 'OKUNMUYORSA ELLE GİR',
                   onPressed: _busy ? null : _manualKey,
-                  child: const Text(
-                    'Okunmuyorsa bilgileri elle girin',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
                 ),
               ],
             )
@@ -665,7 +709,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                 if (_card == null && !_busy) ...[
                   const SizedBox(height: 12),
                   const Text(
-                    '2. adım: ÇİPİ OKU\'ya basın, ardından kartı telefonun '
+                    '2. adım: telefon kılıfını çıkarın, ÇİPİ OKU\'ya basın ve kartı telefonun '
                     'arkasına düz yaslayın.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: kAdminMuted, fontSize: 13),
@@ -674,8 +718,15 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                   AdminPrimaryButton(
                     label: 'ÇİPİ OKU',
                     icon: Icons.nfc_rounded,
-                    onPressed: _readChip,
+                    onPressed: _startChip,
                   ),
+                  if (_canChipless && _error == null) ...[
+                    const SizedBox(height: 10),
+                    AdminSecondaryButton(
+                      label: 'ÇİPSİZ DEVAM ET',
+                      onPressed: _continueChipless,
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -692,26 +743,66 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     ),
     child: Column(
       children: [
-        const Icon(Icons.contactless_rounded, color: _blue, size: 56),
-        const SizedBox(height: 12),
-        Text(
-          _status ?? '',
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
+        // Kart algılanınca (ilerleme gelince) yerleştirme animasyonu kapanır.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: _progress == null
+              ? const _PlaceCardAnimation(key: ValueKey('place'))
+              : const Icon(
+                  Icons.contactless_rounded,
+                  key: ValueKey('read'),
+                  color: _blue,
+                  size: 56,
+                ),
         ),
+        const SizedBox(height: 12),
+        if (_searchTry > 1) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: kAdminAmber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kAdminAmber.withValues(alpha: 0.5)),
+            ),
+            child: Text(
+              '$_searchTry. deneme yapılıyor',
+              style: const TextStyle(
+                color: kAdminAmber,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        // Durum iki satır olabilir: üstte ne olduğu, altta ne yapılacağı.
+        for (final (i, line) in (_status ?? '').split('\n').indexed)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 4),
+            child: Text(
+              line,
+              textAlign: TextAlign.center,
+              style: i == 0
+                  ? const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    )
+                  : const TextStyle(
+                      color: kAdminAmber,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+            ),
+          ),
         const SizedBox(height: 6),
-        if (_progress == null)
-          Text(
-            '${IdCardReader.placementHint}; okuma bitene kadar oynatmayın '
-            '(birkaç saniye). Okumazsa kartı birkaç santim kaydırıp bekleyin.',
+        if (_progress == null && _searchTry <= 1)
+          const Text(
+            'Okuma birkaç saniye sürer; bitene kadar oynatmayın.',
             textAlign: TextAlign.center,
             style: TextStyle(color: kAdminMuted, fontSize: 12.5),
           )
-        else
+        else if (_progress != null)
           const Text(
             'Lütfen kartı oynatmayın',
             textAlign: TextAlign.center,
@@ -782,30 +873,26 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
           ],
         ),
         if (_key != null && _card == null) ...[
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: _busy ? null : _readChip,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Tekrar dene'),
-            ),
+          const SizedBox(height: 12),
+          AdminPrimaryButton(
+            label: 'TEKRAR DENE',
+            icon: Icons.refresh_rounded,
+            onPressed: _busy ? null : _readChip,
           ),
-          if (widget.allowChipless &&
-              _chipFails >= 1 &&
-              (_key?.canGoChipless ?? false))
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _busy ? null : _continueChipless,
-                icon: const Icon(Icons.badge_outlined),
-                label: const Text('Çipsiz devam et'),
-              ),
+          if (_canChipless) ...[
+            const SizedBox(height: 10),
+            AdminSecondaryButton(
+              label: 'ÇİPSİZ DEVAM ET',
+              onPressed: _busy ? null : _continueChipless,
             ),
+          ],
         ],
       ],
     ),
   );
+
+  bool get _canChipless =>
+      widget.allowChipless && (_key?.canGoChipless ?? false);
 
   /// Ekranda kimlik bilgileri maskeli: seri noyu ve tarihlerin gün/ayını
   /// yanınızdaki göremez.
@@ -1536,7 +1623,11 @@ class _Steps extends StatelessWidget {
             'Kimlik kartının arka yüzünü kameraya gösterin; kart '
                 'kendiliğinden okunur.',
           ),
-          step('2', 'Kartı telefonun arkasına yaslayın; çip okunur.'),
+          step(
+            '2',
+            'Telefon kılıfını çıkarın, kartı telefonun arkasına yaslayın; '
+                'çip okunur.',
+          ),
           step(
             '3',
             'Eşleşen profili onaylayın; profil mavi tikle '
@@ -1741,6 +1832,152 @@ class _DateFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: t,
       selection: TextSelection.collapsed(offset: t.length),
+    );
+  }
+}
+
+/// Kartın telefonun arkasında nereye konacağını gösterir: kart kayarak
+/// anten noktasına (iPhone üst, Android orta) oturur, nokta dalgalanır.
+class _PlaceCardAnimation extends StatefulWidget {
+  const _PlaceCardAnimation({super.key});
+
+  @override
+  State<_PlaceCardAnimation> createState() => _PlaceCardAnimationState();
+}
+
+class _PlaceCardAnimationState extends State<_PlaceCardAnimation>
+    with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const phoneW = 104.0, phoneH = 200.0, cardW = 120.0, cardH = 76.0;
+    const blue = kVerifiedBlue;
+    final targetY = IdCardReader.antennaTop ? 34.0 : (phoneH - cardH) / 2;
+    return ClipRect(
+      child: SizedBox(
+        width: 200,
+        height: phoneH + 8,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, _) {
+            final t = _c.value;
+            // 0-0.45 kayarak gelir, 0.45-0.85 yerinde durur, sonra solar.
+            final slide = Curves.easeOutCubic.transform(
+              (t / 0.45).clamp(0.0, 1.0),
+            );
+            final fade = t < 0.85 ? 1.0 : 1 - (t - 0.85) / 0.15;
+            final pulse = t < 0.45 ? 0.0 : ((t - 0.45) / 0.4).clamp(0.0, 1.0);
+            final y = targetY + (1 - slide) * 150;
+            const left = (200 - cardW) / 2;
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Telefonun arkası.
+                Positioned(
+                  left: (200 - phoneW) / 2,
+                  top: 4,
+                  child: Container(
+                    width: phoneW,
+                    height: phoneH,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white24, width: 2),
+                    ),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        margin: const EdgeInsets.all(8),
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Anten noktası dalgası.
+                Positioned(
+                  left: 100 - 40,
+                  top: 4 + targetY + cardH / 2 - 40,
+                  child: Opacity(
+                    opacity: (1 - pulse) * 0.8,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      transform: Matrix4.diagonal3Values(
+                        0.5 + pulse,
+                        0.5 + pulse,
+                        1,
+                      ),
+                      transformAlignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: blue, width: 3),
+                      ),
+                    ),
+                  ),
+                ),
+                // Kimlik kartı.
+                Positioned(
+                  left: left,
+                  top: 4 + y,
+                  child: Opacity(
+                    opacity: fade.clamp(0.0, 1.0) * (0.35 + 0.65 * slide),
+                    child: Container(
+                      width: cardW,
+                      height: cardH,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE0F2FE), Color(0xFF93C5FD)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black45, blurRadius: 8),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 18,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBBF24),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const Spacer(),
+                          for (var i = 0; i < 3; i++)
+                            Container(
+                              margin: const EdgeInsets.only(top: 3),
+                              height: 4,
+                              width: cardW - 30 - i * 12,
+                              color: Colors.black26,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

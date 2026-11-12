@@ -9,7 +9,11 @@ class IdCardReader {
   static const supported = false;
 
   static String get placementHint =>
-      'Kartı telefonun arka ortasına düz yaslayın';
+      'Kimliğinizi telefonun arkasına, tam ortaya düz yaslayın';
+
+  static const antennaTop = false;
+
+  static const detectTries = 3;
 
   static Future<NfcState> nfcState() async => NfcState.unsupported;
 
@@ -25,5 +29,6 @@ class IdCardReader {
     IdCardKey key, {
     void Function(String status)? onStatus,
     void Function(double progress)? onProgress,
+    void Function(int attempt)? onAttempt,
   }) async => throw const IdCardError('Kimlik okuma yalnız uygulamada.');
 }

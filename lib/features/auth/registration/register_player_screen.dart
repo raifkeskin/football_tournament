@@ -653,6 +653,14 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
           ],
         ),
       ),
+      const Padding(
+        padding: EdgeInsets.fromLTRB(4, 0, 4, 14),
+        child: Text(
+          'Boy ve kilo isteğe bağlıdır. Girersen profilinde herkese '
+          'görünür; boş bırakırsan kimseye gösterilmez.',
+          style: TextStyle(color: kAdminMuted, fontSize: 12),
+        ),
+      ),
       AdminFormSection(
         title: 'Kullandığı Ayak',
         child: _chips(
