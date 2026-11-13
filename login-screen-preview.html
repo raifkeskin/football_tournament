@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lig Masası - Giriş Ekranı Taslak Önizleme</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at 50% -12%, rgba(16, 185, 129, .20), transparent 40%),
+        #0f172a;
+    }
+
+    .phone {
+      width: min(100%, 430px);
+      min-height: 900px;
+      margin: 0 auto;
+      padding: 18px 22px 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .status {
+      height: 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #dbe5e7;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      height: 96px;
+      margin-top: 15px;
+    }
+
+    .crest {
+      width: 76px;
+      height: 76px;
+      border: 3px solid #e8c75e;
+      outline: 1px solid rgba(232, 199, 94, .42);
+      outline-offset: 4px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #f2d879;
+      font-size: 35px;
+      font-weight: 950;
+      background: radial-gradient(circle, #164638 0, #082f26 68%);
+      box-shadow: 0 0 25px rgba(16, 185, 129, .12);
+    }
+
+    .brand-name {
+      font-size: 27px;
+      font-weight: 950;
+      font-style: italic;
+      letter-spacing: 1px;
+    }
+
+    .choices {
+      flex: 1;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px 2px;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .3px;
+    }
+
+    .roles {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .role {
+      min-width: 0;
+      min-height: 118px;
+      padding: 15px 14px;
+      border-radius: 20px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      border: 2px solid transparent;
+      transition: border-color .16s, transform .16s;
+    }
+
+    .role:active, .wide:active { transform: scale(.99); }
+    .role.selected { border-color: white; }
+    .role.green { background: linear-gradient(135deg, #22c55e, #0f6b35); }
+    .role.amber { background: linear-gradient(135deg, #f59e0b, #9a5b06); }
+    .role::after {
+      content: attr(data-icon);
+      position: absolute;
+      right: -3px;
+      top: -13px;
+      color: rgba(255,255,255,.2);
+      font-size: 70px;
+      line-height: 1;
+    }
+    .role strong {
+      display: block;
+      position: relative;
+      z-index: 1;
+      font-size: clamp(20px, 6vw, 25px);
+      line-height: 1;
+      font-weight: 950;
+      font-style: italic;
+      white-space: nowrap;
+    }
+    .role small {
+      display: block;
+      position: relative;
+      z-index: 1;
+      margin-top: 8px;
+      color: rgba(255,255,255,.9);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .wide {
+      width: 100%;
+      min-height: 74px;
+      padding: 13px 15px;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      border-radius: 17px;
+      text-align: left;
+      transition: transform .16s, border-color .16s;
+    }
+
+    .fan {
+      margin-top: 14px;
+      background: linear-gradient(110deg, #2563eb, #172554);
+      border: 2px solid transparent;
+    }
+    .fan.selected { border-color: #bfdbfe; }
+    .register {
+      margin-top: 14px;
+      background: linear-gradient(110deg, #334155, #1e293b);
+      min-height: 68px;
+    }
+    .icon {
+      width: 35px;
+      flex: 0 0 35px;
+      text-align: center;
+      font-size: 25px;
+      line-height: 1;
+    }
+    .wide-copy { min-width: 0; flex: 1; }
+    .wide-copy strong {
+      display: block;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: .3px;
+    }
+    .wide-copy small {
+      display: block;
+      margin-top: 3px;
+      color: #d5deea;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    .arrow { color: #dbeafe; font-size: 26px; font-weight: 300; }
+
+    .form {
+      display: none;
+      margin-top: 14px;
+      animation: show .22s ease-out;
+    }
+    .form.visible { display: block; }
+    @keyframes show {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hint {
+      margin: 1px 2px 12px;
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .field {
+      min-height: 61px;
+      margin-bottom: 11px;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      background: #1e293b;
+      padding: 10px 15px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      color: #e2e8f0;
+    }
+    .field label { color: #94a3b8; font-size: 11px; }
+    .field span { margin-top: 4px; font-size: 15px; font-weight: 750; }
+    .form-links {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #cbd5e1;
+      font-size: 12px;
+      margin: 1px 2px 13px;
+    }
+    .login-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .submit {
+      min-height: 58px;
+      flex: 1;
+      border-radius: 15px;
+      background: #16a34a;
+      font-weight: 900;
+      letter-spacing: .7px;
+    }
+    .bio {
+      width: 62px;
+      min-height: 58px;
+      border: 1px solid #10b981;
+      color: #10b981;
+      background: transparent;
+      border-radius: 15px;
+      font-size: 25px;
+    }
+
+    .tournament {
+      margin-top: auto;
+      width: 100%;
+      min-height: 75px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(251,191,36,.55);
+      border-radius: 17px;
+      background: rgba(30,41,59,.75);
+      text-align: left;
+    }
+    .tournament .icon { color: #fbbf24; }
+    .tournament .wide-copy strong {
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .tournament .wide-copy small { color: #94a3b8; }
+    .request { color: #fbbf24; font-size: 11px; font-weight: 800; white-space: nowrap; }
+
+    .bio-sheet {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+      background: rgba(2, 6, 23, .62);
+      backdrop-filter: blur(3px);
+    }
+    .bio-sheet.show { display: flex; }
+    .dialog {
+      width: 100%;
+      padding: 25px 20px 20px;
+      border: 1px solid #334155;
+      border-radius: 22px;
+      background: #1e293b;
+      box-shadow: 0 18px 50px #020617aa;
+      text-align: center;
+    }
+    .dialog .finger { font-size: 34px; color: #34d399; }
+    .dialog h2 { margin: 12px 0 6px; font-size: 18px; }
+    .dialog p { margin: 0 0 18px; color: #94a3b8; font-size: 13px; }
+    .dialog button {
+      padding: 9px 18px;
+      border-radius: 10px;
+      background: #334155;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    @media (max-height: 760px) {
+      .phone { min-height: 760px; gap: 12px; }
+      .choices { min-height: 360px; }
+      .brand { margin-top: 3px; height: 80px; }
+      .role { min-height: 105px; }
+      .tournament { min-height: 68px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <div class="status"><span>11:17 ◈</span><span>◉ 5G&nbsp;&nbsp; ▰ 88%</span></div>
+    <header class="brand">
+      <div class="crest">M</div>
+      <div class="brand-name">LİG MASASI</div>
+    </header>
+    <div class="choices">
+      <section>
+        <p class="eyebrow">Giriş türünü seç</p>
+        <div class="roles">
+          <button class="role green" data-role="Saha" data-icon="⚽">
+            <strong>SAHA</strong><small>Futbolcuyum</small>
+          </button>
+          <button class="role amber" data-role="Kulübe" data-icon="♟">
+            <strong>KULÜBE</strong><small>Turnuva / Takım Sorumlusuyum</small>
+          </button>
+        </div>
+      </section>
+      <button class="wide fan" data-role="Taraftar">
+        <span class="icon">◉</span>
+        <span class="wide-copy">
+          <strong>TARAFTAR GİRİŞİ</strong>
+          <small>Turnuvaları hesabınla takip et</small>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="wide register">
+        <span class="icon">♙+</span>
+        <span class="wide-copy">
+          <strong>KAYIT OL</strong>
+          <small>Hesabın yok mu? Telefonunla hesap aç</small>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+      <section class="form" id="form">
+        <p class="hint" id="hint">Seçtiğin hesapla giriş yap.</p>
+        <div class="field"><label>Telefon Numarası</label><span>0 (5XX) XXX XX XX</span></div>
+        <div class="field"><label>Şifre</label><span style="color:#94a3b8">••••••••</span></div>
+        <div class="form-links"><span>□ &nbsp; Beni Hatırla</span><u>Şifremi Unuttum</u></div>
+        <div class="login-actions">
+          <button class="submit" id="submit">GİRİŞ YAP</button>
+          <button class="bio" aria-label="Biyometrik giriş">◎</button>
+        </div>
+      </section>
+    </div>
+    <button class="tournament">
+      <span class="icon">🏆</span>
+      <span class="wide-copy">
+        <strong>Turnuva mı düzenleyeceksin?</strong>
+        <small>Lig Masası'nda kur.</small>
+      </span>
+      <span class="request">Talep oluştur ›</span>
+    </button>
+    <div class="bio-sheet" id="bioSheet">
+      <div class="dialog">
+        <div class="finger">◎</div>
+        <h2>Lig Masası’na giriş yap</h2>
+        <p>Yüzünü göster veya parmak izini okut</p>
+        <button id="cancelBio">VAZGEÇ</button>
+      </div>
+    </div>
+  </main>
+  <script>
+    const roles = [...document.querySelectorAll('[data-role]')];
+    const form = document.getElementById('form');
+    const hint = document.getElementById('hint');
+    const submit = document.getElementById('submit');
+    roles.forEach((button) => button.addEventListener('click', () => {
+      roles.forEach((item) => item.classList.remove('selected'));
+      button.classList.add('selected');
+      const role = button.dataset.role;
+      hint.textContent = role === 'Taraftar'
+        ? 'Taraftar hesabının telefon numarası ve şifresiyle giriş yap.'
+        : role === 'Kulübe'
+          ? 'Takım, bölge veya turnuva sorumlusu hesabınla giriş yap.'
+          : 'Takımına kayıtlı telefon numaranla giriş yap.';
+      submit.textContent = role === 'Taraftar'
+        ? 'TRİBÜNE ÇIK'
+        : role === 'Kulübe' ? 'KULÜBEYE GEÇ' : 'SAHAYA ÇIK';
+      form.classList.add('visible');
+    }));
+    document.querySelector('.bio').addEventListener('click', () => {
+      document.getElementById('bioSheet').classList.add('show');
+    });
+    document.getElementById('cancelBio').addEventListener('click', () => {
+      document.getElementById('bioSheet').classList.remove('show');
+    });
+    if (new URLSearchParams(location.search).get('biometric') === '1') {
+      setTimeout(() => document.getElementById('bioSheet').classList.add('show'), 700);
+    }
+  </script>
+</body>
+</html>
