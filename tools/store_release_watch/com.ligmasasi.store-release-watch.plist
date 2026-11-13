@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.ligmasasi.store-release-watch</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/python3</string><string>-I</string>
+    <string>/Users/raifkeskin/football_tournament/tools/store_release_watch/store_release_watch.py</string>
+    <string>1.0.8</string><string>257</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartInterval</key><integer>900</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/raifkeskin/Library/Logs/ligmasasi-store-release-watch.log</string>
+  <key>StandardErrorPath</key><string>/Users/raifkeskin/Library/Logs/ligmasasi-store-release-watch.log</string>
+</dict></plist>

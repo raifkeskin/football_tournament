@@ -367,3 +367,11 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Alt yaş sınırı 14 (13 altı Play çocuk politikalarını tetikler; kapsam dışı).
 - **Avukata soruldu (2026-11-13):** tek veli onayı fotoğraf/video ve sağlık beyanı için yeterli mi; SMS koduyla onay ispat için yeterli mi yoksa imzalı form şart mı; veli için ayrı aydınlatma metni gerekir mi.
 - **Sıra:** avukat cevabı → ekran önizlemesi ve plan → onaydan sonra kod. Mağaza beyanları (çocuk verisi) ayrıca güncellenir.
+
+## 36. Lisans Yönetimi'nde TC girişi (kimlik okutulana kadar bekleyen özet) — SONRA (2026-11-13)
+- **İstek:** Kimliğini getirmeyen ama TC'sini gönderen futbolcu için admin TC'yi Lisans Yönetimi'nden girsin; futbolcu sonra kimlik okutunca doğrulansın.
+- **Öneri:** TC düz saklanmaz; girildiği anda mevcut `_identity_hash` (HMAC-SHA256, anahtar app_private_settings'te) ile özeti alınır ve "bekleyen TC" olarak kaydedilir. Mavi tik vermez; kartta "TC girildi, kimlik bekleniyor".
+- **Kimlik okutulunca:** çipteki TC'nin özeti bekleyenle karşılaştırılır; eşleşirse doğrulama tamamlanır, eşleşmezse admine uyarı.
+- **Hemen kazanılan:** aynı TC'nin ikinci profile girilmesi engellenir; kendi kaydında eşleşme kolaylaşır. Yanlış girilen bekleyen TC admin tarafından silinebilir (görmeden).
+- **Mağaza:** TC zaten beyanlı, yeni veri türü yok. **KVKK:** aydınlatma metnine "TC'nizi turnuva yönetimi de girebilir, yalnız geri çevrilemez özet olarak saklanır" cümlesi (avukata sorulacak); "futbolcu TC'sini gönderdi" onay kutusu.
+- **Sıra:** 1.0.8 mağazaya çıktıktan sonra; önce form önizlemesi, onaydan sonra kod.

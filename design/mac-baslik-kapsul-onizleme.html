@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maç başlığı – kapsül yerleşimi</title>
+<style>
+body{margin:0;background:#0b1020;color:#cbd5e1;font-family:Roboto,Arial,sans-serif;padding:20px}
+h1{font-size:16px;margin:0 0 14px}
+.row{display:flex;gap:22px;flex-wrap:wrap}
+.col{width:411px}
+.col h2{font-size:13px;margin:0 0 4px;color:#fff}
+.col p{font-size:12px;margin:0 0 8px;color:#94a3b8;min-height:32px}
+.hdr{position:relative;width:411px;border-radius:0 0 26px 26px;overflow:hidden;color:#fff;
+background:linear-gradient(90deg,#d6a900 0%,#16213a 50%,#0a3bbf 100%);padding-bottom:9px;box-shadow:0 0 0 1px #1e293b}
+.bar{height:44px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.bar span{border:1px solid #fff8;border-radius:10px;padding:5px 12px;background:#0003}
+.date{text-align:center;font-size:11px;font-weight:800;letter-spacing:.3px;text-shadow:0 1px 4px #000}
+.main{display:flex;padding:0 14px}
+.team{flex:1;text-align:center;font-weight:800;font-size:15px;text-shadow:0 1px 4px #000}
+.logo{width:56px;height:56px;border-radius:50%;margin:0 auto 6px;border:3px solid #fff6}
+.mid{width:118px;text-align:center}
+.score{font-size:27px;font-weight:800;text-shadow:0 1px 4px #000;line-height:1.2}
+.pill{display:inline-flex;align-items:center;gap:6px;background:#080c14d1;border:1px solid #ffffff47;border-radius:99px;padding:1px 11px 1px 9px;font-weight:900;font-size:18px;line-height:1.15}
+.pill i{width:9px;height:9px;border-radius:50%;background:#10b981;display:block}
+.pill.s{font-size:14px;padding:0 9px 0 7px}.pill.s i{width:7px;height:7px}
+.foot{text-align:center;font-size:12px;font-weight:700;margin-top:6px;text-shadow:0 1px 4px #000}
+.foot b{color:#34d399;margin-left:8px}
+.line{height:4px;background:linear-gradient(90deg,#15803d 50%,#facc15 50%);margin-top:9px;position:absolute;left:0;right:0;bottom:0}
+</style></head><body>
+<h1>Maç başlığı: MS / dakika kapsülü skorun üstünde, tarih ile skor arasında</h1>
+<div class="row">
+
+<div class="col"><h2>A · Aynı kapsül, başlık uzar</h2>
+<p>Tarih → kapsül → skor. Skor logolarla aynı hizada kalır; logolar ve skor ~28px aşağı iner.</p>
+<div class="hdr"><div class="bar"><span>📺 Canlı Yayın</span></div>
+<div class="date">7 Kasım 2026 Cumartesi · 21:00</div>
+<div style="height:4px"></div>
+<div class="main">
+<div class="team" style="padding-top:34px"><div class="logo" style="background:#facc15"></div>Aras Geoteknik</div>
+<div class="mid"><div class="pill"><i></i>MS</div><div class="score">4 - 0</div></div>
+<div class="team" style="padding-top:34px"><div class="logo" style="background:#b8860b"></div>Fenerbahçe 1907 FK</div>
+</div>
+<div class="foot">📍 Beşiktaş İsmet İnönü Stadı <b>Yol tarifi ›</b></div><div style="height:13px"></div><div class="line"></div></div></div>
+
+<div class="col"><h2>B · Küçük kapsül, başlık az uzar</h2>
+<p>Kapsül daha ince (yazı 14). Başlık yalnız ~14px uzar, her şey biraz daha sıkı.</p>
+<div class="hdr"><div class="bar"><span>📺 Canlı Yayın</span></div>
+<div class="date">7 Kasım 2026 Cumartesi · 21:00</div>
+<div style="height:3px"></div>
+<div class="main">
+<div class="team" style="padding-top:22px"><div class="logo" style="background:#facc15"></div>Aras Geoteknik</div>
+<div class="mid"><div class="pill s"><i></i>MS</div><div class="score">4 - 0</div></div>
+<div class="team" style="padding-top:22px"><div class="logo" style="background:#b8860b"></div>Fenerbahçe 1907 FK</div>
+</div>
+<div class="foot">📍 Beşiktaş İsmet İnönü Stadı <b>Yol tarifi ›</b></div><div style="height:13px"></div><div class="line"></div></div></div>
+
+<div class="col"><h2>C · Tarih kapsülle aynı satırda</h2>
+<p>Üst satırda solda tarih, ortada kapsül değil: tarih skorun üstünde, kapsül tarihin hemen altında küçük; başlık uzamaz, logolar yerinde kalır.</p>
+<div class="hdr"><div class="bar"><span>📺 Canlı Yayın</span></div>
+<div class="date" style="font-size:10.5px">7 Kasım 2026 Cumartesi · 21:00</div>
+<div class="main">
+<div class="team" style="padding-top:10px"><div class="logo" style="background:#facc15"></div>Aras Geoteknik</div>
+<div class="mid" style="padding-top:0"><div class="pill s" style="margin-top:1px"><i></i>MS</div><div class="score" style="line-height:1.1">4 - 0</div></div>
+<div class="team" style="padding-top:10px"><div class="logo" style="background:#b8860b"></div>Fenerbahçe 1907 FK</div>
+</div>
+<div class="foot">📍 Beşiktaş İsmet İnönü Stadı <b>Yol tarifi ›</b></div><div style="height:13px"></div><div class="line"></div></div></div>
+
+</div></body></html>

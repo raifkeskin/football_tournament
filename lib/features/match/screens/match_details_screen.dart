@@ -358,14 +358,21 @@ class _MatchPhaseLabel extends StatelessWidget {
             match.status == MatchStatus.live ||
             match.status == MatchStatus.halftime ||
             match.status == MatchStatus.finished;
+        // Kapsülsüz durum (ERTELENEN MAÇ…): dar sütunda harf ortasından
+        // bölünmesin; kelimeler alt alta, sığmazsa yazı küçülür.
         final Widget label = !pill
-            ? Text(
-                text,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                  shadows: shadows,
+            ? FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  text.split(' ').join('\n'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    height: 1.15,
+                    shadows: shadows,
+                  ),
                 ),
               )
             : Container(

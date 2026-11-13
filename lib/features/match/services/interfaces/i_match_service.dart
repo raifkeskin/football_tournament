@@ -137,6 +137,9 @@ abstract class IMatchService {
     required MatchStatus status,
     String? matchDate,
     String? matchTime,
+
+    /// true: tarih ve saat silinir (ertelendi, yeni tarih belirlenmedi).
+    bool clearDate = false,
   });
 
   /// [detailsPending]: olaylar sonradan girilecek ("Maç detayları

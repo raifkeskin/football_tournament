@@ -539,7 +539,7 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                     borderRadius: BorderRadius.circular(12),
                     onTap: _busy ? null : () => onChanged(values[i]),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Column(
                         children: [
                           Text(
@@ -578,206 +578,198 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   @override
   Widget build(BuildContext context) {
     final size = _format.size;
-    final maxH =
-        MediaQuery.sizeOf(context).height *
-        (widget.controls != null
-            ? 0.36
-            : widget.formats.length > 1 || _plainOption
-            ? 0.42
-            : 0.6);
+    final safe = MediaQuery.paddingOf(context);
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: EdgeInsets.fromLTRB(12, safe.top + 8, 12, safe.bottom + 8),
       child: AdminDialogCloseOverlay(
         onClose: _busy ? null : () => Navigator.pop(context),
         child: Container(
-          padding: const EdgeInsets.all(18),
+          width: double.infinity,
+          height: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
           decoration: adminDialogDecoration(),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Başlık yok; sağ üstteki kapat düğmesine yer. Tasarım
-                // seçiminden gelindiyse geri oku ve tasarımın adı.
-                if (widget.backTitle == null)
-                  const SizedBox(height: 34)
-                else
-                  SizedBox(
-                    height: 40,
-                    child: Row(
-                      children: [
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          onPressed: _busy
-                              ? null
-                              : () => Navigator.pop(context, true),
-                          icon: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
-                            size: 20,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Başlık yok; sağ üstteki kapat düğmesine yer. Tasarım
+              // seçiminden gelindiyse geri oku ve tasarımın adı.
+              if (widget.backTitle == null)
+                const SizedBox(height: 32)
+              else
+                SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        onPressed: _busy
+                            ? null
+                            : () => Navigator.pop(context, true),
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      Text(
+                        '${widget.backTitle!} Afişi',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (widget.formats.length > 1) ...[
+                _segment<PosterFormat>(
+                  values: widget.formats,
+                  selected: _format,
+                  title: (f) => f.label,
+                  onChanged: (f) => _set(() => _format = f),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (widget.controls != null) ...[
+                widget.controls!,
+                const SizedBox(height: 4),
+              ],
+              if (_plainOption) ...[
+                _segment<bool>(
+                  values: const [false, true],
+                  selected: _plain,
+                  title: (v) => v ? 'Sade' : 'Fotoğraf',
+                  onChanged: (v) => _set(() => _plain = v),
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (widget.scorersOption)
+                SwitchListTile.adaptive(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 2),
+                  dense: false,
+                  value: _scorers,
+                  activeTrackColor: kAdminAccent,
+                  onChanged: _busy ? null : (v) => _set(() => _scorers = v),
+                  title: const Text(
+                    'Gol atanlar gösterilsin',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                ),
+              if (widget.photoPoster != null &&
+                  widget.photoChoices.length > 1) ...[
+                SizedBox(
+                  height: 56,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.photoChoices.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final url = widget.photoChoices[i];
+                      final on =
+                          url == _choice ||
+                          (_choice.isEmpty &&
+                              _picked == null &&
+                              url == (widget.photoUrl ?? '').trim());
+                      return GestureDetector(
+                        onTap: _busy ? null : () => _useChoice(url),
+                        child: Container(
+                          width: 50,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: on ? kAdminAccent : Colors.white24,
+                              width: on ? 2.5 : 1,
+                            ),
+                          ),
+                          child: Image.network(
+                            url,
+                            fit: BoxFit.cover,
+                            cacheWidth: 150,
+                            errorBuilder: (_, _, _) =>
+                                const ColoredBox(color: Colors.white10),
                           ),
                         ),
-                        Text(
-                          '${widget.backTitle!} Afişi',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (widget.photoPoster != null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _pickPhoto,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('FOTOĞRAF SEÇ'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(40),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: const TextStyle(
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                if (widget.formats.length > 1) ...[
-                  _segment<PosterFormat>(
-                    values: widget.formats,
-                    selected: _format,
-                    title: (f) => f.label,
-                    subtitle: (f) => f.pixels,
-                    onChanged: (f) => _set(() => _format = f),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (widget.controls != null) ...[
-                  widget.controls!,
-                  const SizedBox(height: 4),
-                ],
-                if (_plainOption) ...[
-                  _segment<bool>(
-                    values: const [false, true],
-                    selected: _plain,
-                    title: (v) => v ? 'Sade' : 'Fotoğraf',
-                    onChanged: (v) => _set(() => _plain = v),
-                  ),
-                  const SizedBox(height: 6),
-                ],
-                if (widget.scorersOption)
-                  SwitchListTile.adaptive(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 2),
-                    dense: false,
-                    value: _scorers,
-                    activeTrackColor: kAdminAccent,
-                    onChanged: _busy ? null : (v) => _set(() => _scorers = v),
-                    title: const Text(
-                      'Gol atanlar gösterilsin',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14.5,
                       ),
                     ),
-                  ),
-                if (widget.photoPoster != null &&
-                    widget.photoChoices.length > 1) ...[
-                  SizedBox(
-                    height: 64,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: widget.photoChoices.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) {
-                        final url = widget.photoChoices[i];
-                        final on =
-                            url == _choice ||
-                            (_choice.isEmpty &&
-                                _picked == null &&
-                                url == (widget.photoUrl ?? '').trim());
-                        return GestureDetector(
-                          onTap: _busy ? null : () => _useChoice(url),
-                          child: Container(
-                            width: 56,
-                            clipBehavior: Clip.antiAlias,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: on ? kAdminAccent : Colors.white24,
-                                width: on ? 2.5 : 1,
-                              ),
-                            ),
-                            child: Image.network(
-                              url,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
-                                  const ColoredBox(color: Colors.white10),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (widget.photoPoster != null) ...[
-                  Row(
-                    children: [
+                    if (_picked != null) ...[
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _busy ? null : _pickPhoto,
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: const Text('FOTOĞRAF SEÇ'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(44),
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.25),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            textStyle: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                            ),
+                        child: TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => setState(() {
+                                  _choice = '';
+                                  _picked = null;
+                                  _frame = const PhotoFrame();
+                                }),
+                          style: TextButton.styleFrom(
+                            foregroundColor: kAdminAccent,
+                            minimumSize: const Size.fromHeight(40),
+                          ),
+                          child: Text(
+                            _profile == null
+                                ? 'FOTOĞRAFI KALDIR'
+                                : 'PROFİL FOTOĞRAFI',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
                       ),
-                      if (_picked != null) ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => setState(() {
-                                    _choice = '';
-                                    _picked = null;
-                                    _frame = const PhotoFrame();
-                                  }),
-                            style: TextButton.styleFrom(
-                              foregroundColor: kAdminAccent,
-                              minimumSize: const Size.fromHeight(44),
-                            ),
-                            child: Text(
-                              _profile == null
-                                  ? 'FOTOĞRAFI KALDIR'
-                                  : 'PROFİL FOTOĞRAFI',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
-                  if (_photo != null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text(
-                        'Fotoğrafı sürükleyerek kaydır, iki parmakla yakınlaştır.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white60, fontSize: 12.5),
-                      ),
+                  ],
+                ),
+                if (_photo != null)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Fotoğrafı sürükleyerek kaydır, iki parmakla yakınlaştır.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
                     ),
-                  const SizedBox(height: 6),
-                ],
-                const SizedBox(height: 8),
-                FutureBuilder<void>(
+                  ),
+              ],
+              const SizedBox(height: 10),
+              // Önizleme kalan alana sığar: düğmeler kaydırmadan görünür.
+              Expanded(
+                child: FutureBuilder<void>(
                   future: _ready,
                   builder: (context, snap) {
                     final done = snap.connectionState == ConnectionState.done;
-                    return ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: maxH),
+                    return Center(
                       child: AspectRatio(
                         aspectRatio: size.width / size.height,
                         child: !done
@@ -839,130 +831,124 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                     );
                   },
                 ),
-                if (_notice != null) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+              ),
+              if (_notice != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _notice!.error
+                          ? Icons.info_outline_rounded
+                          : Icons.check_circle_rounded,
+                      size: 18,
+                      color: _notice!.error
+                          ? const Color(0xFFFBBF24)
+                          : kAdminAccent,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _notice!.text,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    if (_notice!.gallery)
+                      TextButton(
+                        onPressed: () => Gal.open(),
+                        child: const Text(
+                          'GALERİDE AÇ',
+                          style: TextStyle(
+                            color: kAdminAccent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+              FutureBuilder<bool>(
+                future: _instagram,
+                builder: (context, snap) {
+                  final instagram = snap.data == true;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(
-                        _notice!.error
-                            ? Icons.info_outline_rounded
-                            : Icons.check_circle_rounded,
-                        size: 18,
-                        color: _notice!.error
-                            ? const Color(0xFFFBBF24)
-                            : kAdminAccent,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _notice!.text,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                      if (_notice!.gallery)
-                        TextButton(
-                          onPressed: () => Gal.open(),
-                          child: const Text(
-                            'GALERİDE AÇ',
-                            style: TextStyle(
-                              color: kAdminAccent,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 14),
-                FutureBuilder<bool>(
-                  future: _instagram,
-                  builder: (context, snap) {
-                    final instagram = snap.data == true;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _actionButton(
-                                label: _saved ? 'Kaydedildi' : 'İndir',
-                                glyph: Icon(
-                                  _saved
-                                      ? Icons.check_rounded
-                                      : Icons.download_rounded,
-                                  color: Colors.white,
-                                  size: 26,
-                                ),
-                                busy: _saving,
-                                onTap: _download,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Color(0xFF3B82F6),
-                                    Color(0xFF1D4ED8),
-                                  ],
-                                ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _actionButton(
+                              label: _saved ? 'Kaydedildi' : 'İndir',
+                              glyph: Icon(
+                                _saved
+                                    ? Icons.check_rounded
+                                    : Icons.download_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                              busy: _saving,
+                              onTap: _download,
+                              gradient: const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
                               ),
                             ),
+                          ),
+                          Expanded(
+                            child: _actionButton(
+                              label: 'Paylaş',
+                              glyph: const Icon(
+                                Icons.share_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              busy: _sharing,
+                              onTap: _share,
+                              gradient: const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Color(0xFF5BE374), Color(0xFF1FB94A)],
+                              ),
+                            ),
+                          ),
+                          if (instagram)
                             Expanded(
                               child: _actionButton(
-                                label: 'Paylaş',
-                                glyph: const Icon(
-                                  Icons.share_rounded,
+                                label: 'Instagram',
+                                glyph: const FaIcon(
+                                  FontAwesomeIcons.instagram,
                                   color: Colors.white,
                                   size: 24,
                                 ),
-                                busy: _sharing,
-                                onTap: _share,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
+                                busy: _instagramBusy,
+                                onTap: _shareInstagram,
+                                gradient: const RadialGradient(
+                                  center: Alignment(-0.6, 1.2),
+                                  radius: 1.5,
                                   colors: [
-                                    Color(0xFF5BE374),
-                                    Color(0xFF1FB94A),
+                                    Color(0xFFFEDA75),
+                                    Color(0xFFFA7E1E),
+                                    Color(0xFFD62976),
+                                    Color(0xFF962FBF),
+                                    Color(0xFF4F5BD5),
                                   ],
+                                  stops: [0, 0.25, 0.5, 0.75, 1],
                                 ),
                               ),
                             ),
-                            if (instagram)
-                              Expanded(
-                                child: _actionButton(
-                                  label: 'Instagram',
-                                  glyph: const FaIcon(
-                                    FontAwesomeIcons.instagram,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                  busy: _instagramBusy,
-                                  onTap: _shareInstagram,
-                                  gradient: const RadialGradient(
-                                    center: Alignment(-0.6, 1.2),
-                                    radius: 1.5,
-                                    colors: [
-                                      Color(0xFFFEDA75),
-                                      Color(0xFFFA7E1E),
-                                      Color(0xFFD62976),
-                                      Color(0xFF962FBF),
-                                      Color(0xFF4F5BD5),
-                                    ],
-                                    stops: [0, 0.25, 0.5, 0.75, 1],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
