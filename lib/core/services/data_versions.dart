@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,6 +11,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// tablo adı (`teams`, `players`, `leagues`, `seasons`, `pitches` ...).
 /// Satır değişince sayaç artar; uygulama sayacı değişmeyen veriyi yeniden
 /// indirmez.
+///
+/// Sürümlerle aynı istekte hesabın yetki özeti de gelir (bkz.
+/// 20261113120000_access_stamp.sql): sorumlu ataması, gizli turnuvaya kod,
+/// kadroya eklenme gibi görünen veriyi değiştiren her şey özeti değiştirir.
+/// Özet damgaya girer; değişince saklanan veri geçersiz olur.
 ///
 /// Aynı anda istenen kapsamlar tek sorguda birleşir (açılışta başlayan
 /// onlarca akış tek istek atar); sonuç birkaç saniye paylaşılır.
@@ -23,14 +29,29 @@ class DataVersions {
   static Set<String> _pending = {};
   static Completer<void>? _batch;
 
+  /// Son okunan yetki özeti ve ait olduğu hesap.
+  static String? _access;
+  static String? _accessUid;
+
+  /// Aynı hesapta yetki özeti değişti (rol, gizli turnuva, kadro): açık
+  /// listeler ve hesap bilgisi yeniden okunur. Giriş/çıkışta artmaz (hesap
+  /// değişimi ayrıca ele alınıyor).
+  static final accessEpoch = ValueNotifier<int>(0);
+
+  static String get _uid =>
+      Supabase.instance.client.auth.currentUser?.id ?? 'guest';
+
   /// Bu cihaz veri yazdı: paylaşılan sürümler unutulur, sonraki damga
   /// sunucudan okunur.
   static void forget() => _known.clear();
 
-  /// Kapsamların şu anki sürümlerinden oluşan damga; okunamazsa `null`.
+  /// Kapsamların şu anki sürümlerinden ve yetki özetinden oluşan damga;
+  /// okunamazsa `null`.
   static Future<String?> stamp(Iterable<String> scopes) async {
     final list = scopes.toSet().toList()..sort();
     if (list.isEmpty) return null;
+    // Hesap değişti: özet bu hesap için yeniden okunur.
+    if (_accessUid != _uid) _known.clear();
     final now = DateTime.now();
     final stale = list.where((s) {
       final k = _known[s];
@@ -49,7 +70,8 @@ class DataVersions {
         return null;
       }
     }
-    return list.map((s) => '$s=${_known[s]?.version ?? 0}').join('|');
+    final versions = list.map((s) => '$s=${_known[s]?.version ?? 0}');
+    return '${versions.join('|')}|@=${_access ?? ''}';
   }
 
   static Future<void> _flush() async {
@@ -57,26 +79,48 @@ class DataVersions {
     final batch = _batch!;
     _pending = {};
     _batch = null;
+    final uid = _uid;
+    final client = Supabase.instance.client;
     try {
-      final rows = await Supabase.instance.client
-          .from('data_versions')
-          .select('scope, version')
-          .inFilter('scope', scopes.toList());
+      Map<String, dynamic> versions;
+      String? access;
+      try {
+        final res = await client.rpc(
+          'data_versions_for',
+          params: {'p_scopes': scopes.toList()},
+        );
+        final m = Map<String, dynamic>.from(res as Map);
+        versions = Map<String, dynamic>.from(m['v'] as Map? ?? const {});
+        access = m['a']?.toString();
+      } on PostgrestException {
+        // Sunucuda fonksiyon yoksa (eski veritabanı) yalnız sürümler.
+        final rows = await client
+            .from('data_versions')
+            .select('scope, version')
+            .inFilter('scope', scopes.toList());
+        versions = {for (final r in rows) r['scope'].toString(): r['version']};
+      }
       final now = DateTime.now();
       // Hiç değişmemiş kapsamın satırı yoktur: sürüm 0.
       for (final s in scopes) {
-        _known[s] = (version: 0, at: now);
+        _known[s] = (version: (versions[s] as num?)?.toInt() ?? 0, at: now);
       }
-      for (final r in rows) {
-        _known[r['scope'].toString()] = (
-          version: (r['version'] as num).toInt(),
-          at: now,
-        );
-      }
+      _setAccess(uid, access);
       batch.complete();
     } catch (e) {
       batch.completeError(e);
     }
+  }
+
+  static void _setAccess(String uid, String? access) {
+    final changed =
+        _accessUid == uid &&
+        _access != null &&
+        access != null &&
+        _access != access;
+    _accessUid = uid;
+    _access = access;
+    if (changed) accessEpoch.value++;
   }
 }
 
@@ -89,12 +133,13 @@ class DataVersions {
 /// en geç [maxAge] sonra yakalanır.
 ///
 /// Veri görünürlüğü hesaba bağlı olduğundan (gizli turnuva vb.) anahtar
-/// kullanıcıya göre ayrılır; yetki değişikliği sürümü artırmadığı için
-/// saklanan veri en fazla [maxAge] kullanılır.
+/// kullanıcıya göre ayrılır; yetki değişikliği damgadaki yetki özetiyle
+/// yakalanır. [maxAge] yalnızca damga ile veri arasına denk gelen nadir
+/// değişikliğe karşı üst sınırdır.
 class VersionedCache {
   VersionedCache._();
 
-  static const maxAge = Duration(hours: 12);
+  static const maxAge = Duration(days: 3);
   static final Map<String, ({String? stamp, DateTime at})> _meta = {};
 
   static String _key(String key) {

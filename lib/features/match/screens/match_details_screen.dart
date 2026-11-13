@@ -63,6 +63,7 @@ import '../../../core/services/photo_cutouts.dart';
 import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
 import '../widgets/minute_input_dialog.dart';
+import '../services/match_detail_bundle.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
 import '../../videos/video_sections.dart';
@@ -703,6 +704,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
+    // Maç, olaylar, esame, kadrolar, medya ve sezon ayarları tek istekte;
+    // aşağıdaki akışların ilk okumaları bu cevabı bekler.
+    final isAdmin =
+        context
+            .getInheritedWidgetOfExactType<AppSession>()
+            ?.notifier
+            ?.value
+            .isAdmin ??
+        false;
+    if (MatchDetailBundle.enabled(isAdmin: isAdmin)) {
+      MatchDetailBundle.start(widget.match.id, widget.match.seasonId);
+    }
     _matchStream = _matchService.watchMatch(widget.match.id);
     YoutubeAutolinkService()
         .isEnabled(widget.match.leagueId)
