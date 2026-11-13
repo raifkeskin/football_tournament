@@ -356,3 +356,14 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Sağlık/KVKK onayı: takım başına onay vermeyen oyuncu sayısı (`consent_status`, `consent_type` hazır). Esame engeli pazar lansmanına kadar ertelenmişti; yalnız bilgi olarak gösterilir.
   - Cezalı oyuncusu olan takımlar, fotoğraf izni tutulan oyuncu sayısı.
 - **Not:** Takım sayıları tek toplu RPC ile sezon başına bir kez çekilip önbelleğe alınmalı (panel ilk açılışı yavaşlamasın), bölge sorumlusu yalnız kendi bölgesini görmeli, tek tek oyuncu adı yerine sayı gösterilmeli.
+
+## 35. 18 yaş altı için veli onayı — AVUKAT CEVABI BEKLENİYOR (2026-11-13)
+- **İstek:** Lise turnuvaları gibi 18 yaş altı oyuncuların olduğu turnuvalarda veli onayı alınsın. Yaş, doğum tarihinden (kimlik okutulduysa oradaki tarihten) sunucuda hesaplanır.
+- **Öneri:** Veli uygulamaya kayıt olmadan SMS linki + doğrulama koduyla onaylar. Kayıtta velinin adı, yakınlığı ve telefonu girilir; veli linki açar, metni okur, kodu girer. Yedek yol: imzalı form fotoğrafı (takım sorumlusu yükler, kurucu onaylar). Veli taraftar hesabı zorunlu değil; isterse sonradan kayıt olup çocuğunu Takip Listem'e ekler.
+- **Önlemler:** Veli telefonu oyuncunun telefonuyla aynı olamaz; onay kaydında ad, yakınlık, telefon, zaman ve metin sürümü saklanır; kadroda "veli onayı bekliyor / onaylı" durumu görünür.
+- **Karar bekleyenler:**
+  - Onay gelene kadar: kadroya eklenebilir ama esameye yazılamaz, fotoğraf/video yayınlanmaz (öneri).
+  - 18'ini doldurunca veli onayı düşer, oyuncunun kendi onayı istenir.
+  - Alt yaş sınırı 14 (13 altı Play çocuk politikalarını tetikler; kapsam dışı).
+- **Avukata soruldu (2026-11-13):** tek veli onayı fotoğraf/video ve sağlık beyanı için yeterli mi; SMS koduyla onay ispat için yeterli mi yoksa imzalı form şart mı; veli için ayrı aydınlatma metni gerekir mi.
+- **Sıra:** avukat cevabı → ekran önizlemesi ve plan → onaydan sonra kod. Mağaza beyanları (çocuk verisi) ayrıca güncellenir.
