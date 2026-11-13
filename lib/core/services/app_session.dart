@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'active_tournament.dart';
 import 'app_settings.dart';
+import 'data_versions.dart';
 import 'league_access.dart';
 import 'league_scope.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -199,6 +200,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       _onAuthChanged(data.session?.user);
     });
     AppActivity.foreground.addListener(_onForegroundChanged);
+    DataVersions.accessEpoch.addListener(_onAccessChanged);
 
     // İlk açılışta mevcut kullanıcıyı kontrol et
     _onAuthChanged(_supabase.auth.currentUser);
@@ -796,11 +798,22 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     LeagueAccess.bump();
   }
 
+  /// Sunucudaki yetki özeti değişti (ör. sorumlu atandı, gizli turnuvanın
+  /// kadrosuna eklendi): roller ve turnuva kapsamı yeniden okunur; çıkış
+  /// yapıp girmek gerekmez.
+  void _onAccessChanged() {
+    final user = _supabase.auth.currentUser;
+    if (user == null || user.id != _lastAuthId) return;
+    _onAuthChanged(user);
+    ActiveTournament.refresh();
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
     _profileSub?.cancel();
     AppActivity.foreground.removeListener(_onForegroundChanged);
+    DataVersions.accessEpoch.removeListener(_onAccessChanged);
     super.dispose();
   }
 }

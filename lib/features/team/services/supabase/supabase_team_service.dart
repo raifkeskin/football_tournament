@@ -7,6 +7,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/utils/resilient_stream.dart';
 import '../../../tournament/models/league.dart';
 import '../../../match/models/match.dart';
+import '../../../match/services/match_detail_bundle.dart';
 import '../../../player/player_columns.dart';
 import '../../models/team.dart';
 
@@ -561,13 +562,29 @@ class SupabaseTeamService implements ITeamService {
         filters: 'team_id=$team, season_id=$tId | select=jersey_number,players',
       );
       try {
+        // Maç ekranında ilk okuma maç detayı paketinden (aynı satır biçimi).
+        final seed = mId.isEmpty
+            ? null
+            : await MatchDetailBundle.take(
+                mId,
+                'players',
+                key: team,
+                seasonId: tId,
+              );
+        List<Map<String, dynamic>>? rowsOf(Object? v) => v is List
+            ? [for (final r in v) Map<String, dynamic>.from(r as Map)]
+            : null;
+        final seedSquad = seed is Map ? rowsOf(seed['squad']) : null;
+        final seedPlayed = seed is Map ? rowsOf(seed['played']) : null;
         // Tek sorgu: sezon kaydı + oyuncu bilgisi (players FK join).
-        final res = await _client
-            .from('season_team_players')
-            .select('jersey_number, players!inner($kPlayerColumns)')
-            .eq('team_id', team)
-            .eq('season_id', tId)
-            .eq('is_active', true);
+        final res =
+            seedSquad ??
+            await _client
+                .from('season_team_players')
+                .select('jersey_number, players!inner($kPlayerColumns)')
+                .eq('team_id', team)
+                .eq('season_id', tId)
+                .eq('is_active', true);
 
         final list = <PlayerModel>[];
         for (final r in res.cast<Map<String, dynamic>>()) {
@@ -588,11 +605,13 @@ class SupabaseTeamService implements ITeamService {
         // Maçta oynayıp sonradan takımdan ayrılan (transfer) oyuncular.
         if (mId.isNotEmpty) {
           final known = {for (final p in list) p.id};
-          final gone = await _client
-              .from('match_rosters')
-              .select('jersey_number, players!inner($kPlayerColumns)')
-              .eq('match_id', mId)
-              .eq('team_id', team);
+          final gone =
+              seedPlayed ??
+              await _client
+                  .from('match_rosters')
+                  .select('jersey_number, players!inner($kPlayerColumns)')
+                  .eq('match_id', mId)
+                  .eq('team_id', team);
           for (final r in gone.cast<Map<String, dynamic>>()) {
             final p = r['players'];
             if (p is! Map) continue;

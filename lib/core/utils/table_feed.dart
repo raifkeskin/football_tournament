@@ -11,6 +11,23 @@ final Map<String, Stream<List<Map<String, dynamic>>>> _feeds = {};
 final Map<String, List<Map<String, dynamic>>> _cache = {};
 final _local = StreamController<(String, RowChange)>.broadcast();
 
+/// Tüm tablolar için "listeyi yeniden oku" sinyali (kimliksiz değişiklik).
+const _allTables = '*';
+var _accessHooked = false;
+
+/// Hesabın yetkisi değişince (bkz. [DataVersions.accessEpoch]) açık
+/// listeler sunucudan yeniden okunur; görünen satırlar yetkiye bağlı.
+void _hookAccessChanges() {
+  if (_accessHooked) return;
+  _accessHooked = true;
+  DataVersions.accessEpoch.addListener(
+    () => _local.add((
+      _allTables,
+      const RowChange(PostgresChangeEvent.update, {}, {}),
+    )),
+  );
+}
+
 /// Satırı açık listelerden düşürür. Gizlenen (silindi olarak işaretlenen)
 /// satır artık okunamadığı için realtime'dan gelmez; işlemi yapan cihaz
 /// listesini bununla günceller.
@@ -26,7 +43,9 @@ Stream<RowChange> _withLocal(String table, Stream<RowChange> remote) {
   c = StreamController<RowChange>(
     onListen: () {
       a = remote.listen(c.add, onError: c.addError, onDone: c.close);
-      b = _local.stream.where((e) => e.$1 == table).listen((e) => c.add(e.$2));
+      b = _local.stream
+          .where((e) => e.$1 == table || e.$1 == _allTables)
+          .listen((e) => c.add(e.$2));
     },
     onCancel: () async {
       await b?.cancel();
@@ -68,6 +87,7 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
   /// (players) yalnız açık sütunlar istenir.
   String? columns,
 }) {
+  _hookAccessChanges();
   final key =
       '$table|$column=$value|$orderBy|$ascending|${broadcastTopics?.join(',')}'
       '${columns == null ? '' : '|$columns'}';

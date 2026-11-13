@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/match_detail_bundle.dart';
+
 /// Maç ekranlarının ihtiyaç duyduğu sezon ayarları (devre süresi, gol
 /// dakikası tutuluyor mu). Sezon başına bir kez okunur ve önbellekte kalır.
 class SeasonMatchSettings {
@@ -41,15 +43,19 @@ class SeasonMatchSettings {
     if (sid.isEmpty) return Future.value(const SeasonMatchSettings());
     return _futures.putIfAbsent(sid, () async {
       try {
-        final res = await Supabase.instance.client
-            .from('seasons')
-            .select(
-              'match_period_duration, track_goal_minutes, '
-              'ai_esame_enabled, ai_clips_enabled, '
-              'assistant_referees_enabled, rolling_subs',
-            )
-            .eq('id', sid)
-            .limit(1);
+        // Maç ekranı açılırken maç detayı paketinden (ayrı istek yok).
+        final seed = await MatchDetailBundle.takeForSeason(sid, 'settings');
+        final res = seed is Map
+            ? [Map<String, dynamic>.from(seed)]
+            : await Supabase.instance.client
+                  .from('seasons')
+                  .select(
+                    'match_period_duration, track_goal_minutes, '
+                    'ai_esame_enabled, ai_clips_enabled, '
+                    'assistant_referees_enabled, rolling_subs',
+                  )
+                  .eq('id', sid)
+                  .limit(1);
         if (res.isEmpty) return const SeasonMatchSettings();
         final v = res.first['match_period_duration'];
         final m = v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;

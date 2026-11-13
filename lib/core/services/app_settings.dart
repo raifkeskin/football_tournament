@@ -37,6 +37,7 @@ class AppSettings {
   static const _kGoalClipMp4 = 'goal_clip_mp4_enabled';
   static const _kFollowList = 'follow_list_enabled';
   static const _kSearch = 'search_enabled';
+  static const _kMatchBundle = 'match_bundle_enabled';
   static const _kLivePitch = 'live_pitch_enabled';
   static const _kAdminPanel = 'admin_panel_enabled';
   static const _kIbraz = 'ibraz_enabled';
@@ -162,6 +163,10 @@ class AppSettings {
   /// (admin her zaman görür).
   static final searchEnabled = ValueNotifier<bool>(false);
 
+  /// Maç detayı tek istekte (match_detail_bundle) herkese açık mı (admin
+  /// her zaman kullanır). Sorun çıkarsa kapatılır, eski okuma yoluna döner.
+  static final matchBundleEnabled = ValueNotifier<bool>(false);
+
   /// Kadro sekmesinde tam ekran yatay saha (hızlı olay girişi) olay
   /// girebilen herkese açık mı (admin her zaman görür).
   static final livePitchEnabled = ValueNotifier<bool>(false);
@@ -279,6 +284,8 @@ class AppSettings {
           followListEnabled.value = r['value'] == true;
         } else if (r['key'] == _kSearch) {
           searchEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kMatchBundle) {
+          matchBundleEnabled.value = r['value'] == true;
         } else if (r['key'] == _kLivePitch) {
           livePitchEnabled.value = r['value'] == true;
         } else if (r['key'] == _kAdminPanel) {

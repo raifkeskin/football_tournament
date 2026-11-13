@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_navigator.dart';
 import '../../../core/widgets/youtube_player_page.dart';
+import 'match_detail_bundle.dart';
 
 /// YZ'nin maç videosunda bulduğu an (şimdilik gol). Video kesilmez; YouTube
 /// yayınının [startSec]–[endSec] aralığı oynatılır.
@@ -166,12 +167,16 @@ class MatchHighlightService {
 
   /// RLS: herkes onaylıları, yetkili (owns_match) bekleyenleri de görür.
   static Future<List<MatchHighlight>> fetch(String matchId) async {
-    final rows = await _db
-        .from('match_highlights')
-        .select()
-        .eq('match_id', matchId)
-        .neq('status', 'rejected')
-        .order('start_sec');
+    // İlk okuma maç detayı paketinden (aynı süzgeç ve sıra).
+    final seed = await MatchDetailBundle.take(matchId, 'highlights');
+    final rows = seed is List
+        ? [for (final r in seed) Map<String, dynamic>.from(r as Map)]
+        : await _db
+              .from('match_highlights')
+              .select()
+              .eq('match_id', matchId)
+              .neq('status', 'rejected')
+              .order('start_sec');
     // Gol dakikasına göre; dakikası olmayan sona, kendi arasında videodaki
     // sırasıyla.
     final list = [

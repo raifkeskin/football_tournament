@@ -53,7 +53,12 @@ class StatsView extends StatefulWidget {
 class _StatsViewState extends State<StatsView> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
-  late final Stream<List<Team>> _teamsStream = _teamService.watchAllTeams();
+
+  /// Yalnız bu sezonun takımları (önceden tüm sezonların takım listesi
+  /// okunuyordu; turnuva sayısı arttıkça büyür).
+  late final Stream<List<Team>> _teamsStream = _teamService.watchSeasonTeams(
+    widget.seasonId,
+  );
 
   /// Seçili gruptaki takımlar (grup verilmediyse ya da okunamadıysa null:
   /// süzme yok).
