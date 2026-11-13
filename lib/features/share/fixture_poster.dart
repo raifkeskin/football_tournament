@@ -15,6 +15,7 @@ class PosterMatch {
     required this.awayLogo,
     required this.time,
     this.score,
+    this.postponed = false,
   });
 
   final String homeName;
@@ -27,6 +28,9 @@ class PosterMatch {
 
   /// Oynanmış maçta "6 - 1".
   final String? score;
+
+  /// Ertelenmiş maç: saat yerine "ERT." yazar.
+  final bool postponed;
 }
 
 /// Afişte maçı olmayan (bay geçen) takım.
@@ -179,7 +183,10 @@ class FixturePoster extends StatelessWidget {
             m.homeName,
             const BorderRadius.horizontal(left: Radius.circular(8)),
           ),
-          _centerBox(played ? 'MS' : 'SAAT', played ? m.score! : m.time),
+          if (m.postponed)
+            _centerBox('', 'ERT.')
+          else
+            _centerBox(played ? 'MS' : 'SAAT', played ? m.score! : m.time),
           _nameBox(
             m.awayName,
             const BorderRadius.horizontal(right: Radius.circular(8)),

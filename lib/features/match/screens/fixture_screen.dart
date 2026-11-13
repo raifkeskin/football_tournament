@@ -316,6 +316,7 @@ class _FixtureViewState extends State<FixtureView> {
             ? '--.--'
             : (t.length >= 5 ? t.substring(0, 5) : t).replaceAll(':', '.'),
         score: played ? '${m.homeScore} - ${m.awayScore}' : null,
+        postponed: m.status == MatchStatus.postponed,
       );
     }
 
