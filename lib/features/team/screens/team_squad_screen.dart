@@ -3,6 +3,7 @@ import '../../../core/utils/friendly_error.dart';
 import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
+import '../../identity/tc_pending.dart';
 import '../../identity/verified_badge.dart';
 import '../../../core/services/app_settings.dart';
 import 'dart:async';
@@ -2997,6 +2998,15 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final _heightController = TextEditingController();
   final _weightController = TextEditingController();
 
+  /// TC (yalnız admin): sunucuda geri çevrilemez özete dönüşür, hiçbir
+  /// yerde gösterilmez; kimlik okutulunca eşleştirilir (tc_pending.dart).
+  final _tcController = TextEditingController();
+  bool _tcTyped = false;
+  bool _tcSent = false;
+  TcPendingInfo? _tcInfo;
+
+  bool get _isAdmin => AppSession.of(context).value.isAdmin;
+
   static const String _unsetOption = 'Seçilmedi';
 
   static const _mainPositions = <String>[
@@ -3158,9 +3168,44 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _phoneReady = false;
       _loadPhone(e.id);
     }
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _hydrateExistingPhotoFromIdentity(),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hydrateExistingPhotoFromIdentity();
+      _loadTcInfo();
+    });
+    // Rıza kutusu yalnız alana TC yazılınca çıkar.
+    _tcController.addListener(() {
+      final typed = _tcController.text.trim().isNotEmpty;
+      if (typed != _tcTyped && mounted) setState(() => _tcTyped = typed);
+    });
+  }
+
+  Future<void> _loadTcInfo() async {
+    final id = (widget.editing?.id ?? '').trim();
+    if (!mounted || id.isEmpty || !_isAdmin) return;
+    try {
+      final info = await TcPendingService.info(id);
+      if (mounted) setState(() => _tcInfo = info);
+    } catch (_) {}
+  }
+
+  Future<void> _clearTc() async {
+    final id = (widget.editing?.id ?? '').trim();
+    if (id.isEmpty || _saving) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Girilen TC silinsin mi?',
+      message:
+          'Girilen TC silinir; doğrusunu yeniden girebilirsiniz. '
+          'Futbolcunun kaydı etkilenmez.',
     );
+    if (!ok || !mounted) return;
+    try {
+      await TcPendingService.clear(id);
+      final info = await TcPendingService.info(id);
+      if (mounted) setState(() => _tcInfo = info);
+    } catch (e) {
+      _showError(friendlyErrorText('$e'), tab: 0);
+    }
   }
 
   /// Kayıtlı numarayı yetkiliye yükler; yetki yoksa ya da numara yoksa alan
@@ -3211,6 +3256,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     _phoneController.dispose();
     _heightController.dispose();
     _weightController.dispose();
+    _tcController.dispose();
     super.dispose();
   }
 
@@ -3304,6 +3350,23 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _showError('Telefon no 10 haneli olmalı.', tab: 0);
       return;
     }
+    final tc = _isAdmin && _tcInfo?.verified != true
+        ? _tcController.text.trim()
+        : '';
+    if (tc.isNotEmpty) {
+      if (!tcChecksumValid(tc)) {
+        _showError('TC Kimlik No geçersiz. 11 haneyi kontrol edin.', tab: 0);
+        return;
+      }
+      if (!_tcSent) {
+        _showError(
+          'TC\'yi kaydetmek için "Futbolcu TC\'sini kendisi gönderdi" '
+          'kutusunu işaretleyin.',
+          tab: 0,
+        );
+        return;
+      }
+    }
     final isEditing = widget.editing != null;
     final identityChanged =
         !isEditing ||
@@ -3316,6 +3379,18 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
     setState(() => _saving = true);
     try {
+      // Başka profile girilmiş / doğrulanmış TC: futbolcu oluşturulmadan dur.
+      if (tc.isNotEmpty) {
+        final problem = await TcPendingService.check(
+          tc,
+          playerId: isEditing ? widget.editing!.id : null,
+        );
+        if (problem != null) {
+          if (mounted) setState(() => _saving = false);
+          _showError(problem, tab: 0);
+          return;
+        }
+      }
       final sbTeamService = _teamService is SupabaseTeamService
           ? _teamService
           : null;
@@ -3373,6 +3448,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         if (playerId.isEmpty) {
           throw Exception('Oyuncu oluşturulamadı, lütfen tekrar deneyin.');
         }
+      }
+      if (tc.isNotEmpty && playerId.isNotEmpty) {
+        await TcPendingService.set(playerId, tc, sent: _tcSent);
       }
       // Yeni oyuncu tüm bilgileriyle açıldı; yalnız düzenlemede güncellenir.
       if (isEditing && identityChanged) {
@@ -3758,9 +3836,24 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                             prefixText: '0 ',
                             hint: '(5XX) XXX XX XX',
                           ),
+                          if (_isAdmin)
+                            TcPendingRow(
+                              controller: _tcController,
+                              info: _tcInfo,
+                              enabled: !_saving,
+                              onClear: _clearTc,
+                            ),
                         ],
                       ),
                     ),
+                    if (_isAdmin)
+                      TcPendingNote(
+                        info: _tcInfo,
+                        typed: _tcTyped,
+                        sent: _tcSent,
+                        enabled: !_saving,
+                        onSent: (v) => setState(() => _tcSent = v),
+                      ),
                   ],
                   // Takım bilgisi yalnızca kadrodan açılınca (lisansta takım yok).
                   // Takım sorumlusu Takım Yönetimi'nden seçilir.
