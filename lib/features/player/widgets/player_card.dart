@@ -267,6 +267,8 @@ class _PlayerCardState extends State<PlayerCard> {
           .select('name, surname')
           .eq('id', id)
           .single();
+      // Tam tarih yalnız admine döner; boş bırakılıp kaydedilirse sunucu
+      // mevcut tarihi korur.
       row = {...row, 'birth_date': await playerBirthDate(id)};
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Bilgi alınamadı: $e')));
