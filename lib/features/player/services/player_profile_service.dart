@@ -88,6 +88,9 @@ class MyPlayer {
   final String? birthDate;
 
   int? get age {
+    final only = int.tryParse((birthDate ?? '').trim());
+    // Yalnız yıl biliniyorsa yaklaşık yaş.
+    if (only != null) return DateTime.now().year - only;
     final d = DateTime.tryParse(birthDate ?? '');
     if (d == null) return null;
     final now = DateTime.now();
@@ -313,11 +316,27 @@ class PlayerProfileService {
         .from('players')
         .select(
           'id, name, surname, photo_url, height, weight, main_position, '
-          'sub_position, birth_date',
+          'sub_position, birth_year',
         )
         .eq('id', playerId)
         .limit(1);
-    return rows.isEmpty ? null : MyPlayer.fromMap(rows.first);
+    if (rows.isEmpty) return null;
+    // Tam doğum tarihi yalnız oyuncunun kendisine (ve admine) döner;
+    // dönmezse yıl gösterilir.
+    String? full;
+    try {
+      final v = await _client.rpc(
+        'player_birth_date',
+        params: {'p_player_id': playerId},
+      );
+      full = (v ?? '').toString().trim();
+    } catch (_) {}
+    return MyPlayer.fromMap({
+      ...rows.first,
+      'birth_date': (full ?? '').isNotEmpty
+          ? full
+          : (rows.first['birth_year'] ?? '').toString(),
+    });
   }
 
   /// Fotoğraf yayın izni yokken bekleyen kendi fotoğrafı (yalnız ona

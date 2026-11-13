@@ -1766,6 +1766,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     int dd, mm, yyyy;
     final dmy = RegExp(r'^(\d{2})[./-](\d{2})[./-](\d{4})$').firstMatch(s);
     final ymd = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+    final y = RegExp(r'^(\d{4})$').firstMatch(s);
     if (dmy != null) {
       dd = int.parse(dmy.group(1)!);
       mm = int.parse(dmy.group(2)!);
@@ -1774,6 +1775,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       yyyy = int.parse(ymd.group(1)!);
       mm = int.parse(ymd.group(2)!);
       dd = int.parse(ymd.group(3)!);
+    } else if (y != null) {
+      // Herkese açık alan yalnız doğum yılı: yaklaşık yaş.
+      yyyy = int.parse(y.group(1)!);
+      mm = 1;
+      dd = 1;
     } else {
       return null;
     }
@@ -3131,6 +3137,16 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           : parts.sublist(1).join(' ');
       _numberController.text = (e.number ?? '').toString();
       _birthDateController.text = _birthDateToDisplay(e.birthDate);
+      // Listede yalnız doğum yılı var: tam tarih admine yetkili sorguyla
+      // gelir (düzenleme yalnız adminde).
+      if (!_isValidBirthDate(_birthDateController.text.trim())) {
+        _birthDateController.text = '';
+        playerBirthDate(e.id).then((full) {
+          if (!mounted || full == null) return;
+          if (_birthDateController.text.trim().isNotEmpty) return;
+          setState(() => _birthDateController.text = birthDateDbToUi(full));
+        });
+      }
       _mainPosition = _deriveMainPosition(e.mainPosition, e.position);
       _subPosition = _deriveSubPosition(_mainPosition, e.position);
       final pf = (e.preferredFoot ?? '').trim();

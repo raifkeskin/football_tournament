@@ -723,7 +723,11 @@ class PlayerModel {
     final name = (v('playerName', 'player_name') ?? v('name', 'name') ?? '')
         .toString()
         .trim();
-    final birthDate = normalizeBirthDate(v('birthDate', 'birth_date'));
+    // Herkese açık alan doğum yılıdır (birth_year); tam tarih yalnız admine
+    // ve oyuncunun kendisine gelir. Yıl geldiyse birthDate "1989" olur.
+    final birthDate =
+        normalizeBirthDate(v('birthDate', 'birth_date')) ??
+        (v('birthYear', 'birth_year') as num?)?.toInt().toString();
     final mainPosition = (v('mainPosition', 'main_position') as String?)
         ?.trim();
     final position =
