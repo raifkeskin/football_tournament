@@ -24,6 +24,10 @@ const _dot = Color(0xFF38BDF8);
 /// - Popup dışına dokunmak hiçbir şey seçmeden kapatır (sonuç `null`).
 /// - [markedDays] verilirse, döndürdüğü günlerin altına nokta konur
 ///   (ör. maç olan günler). Ay/yıl değiştikçe yeniden çağrılır.
+/// [showAppDatePicker] `noDateLabel` düğmesine basılınca dönen değer
+/// ("tarih belirlenmedi"). Karşılaştırma `identical` ile yapılır.
+final DateTime kNoDatePicked = DateTime.utc(1);
+
 Future<DateTime?> showAppDatePicker({
   required BuildContext context,
   DateTime? initialDate,
@@ -32,6 +36,10 @@ Future<DateTime?> showAppDatePicker({
   // Artık gösterilmiyor (popup başlıksız); çağıranlar için tutuluyor.
   String title = 'Tarih Seçin',
   Future<Set<int>> Function(int year, int month)? markedDays,
+
+  /// Verilirse takvimin altında bu yazıyla düğme çıkar; basılınca
+  /// [kNoDatePicked] döner.
+  String? noDateLabel,
 }) {
   final now = DateTime.now();
   final init = initialDate ?? now;
@@ -239,6 +247,30 @@ Future<DateTime?> showAppDatePicker({
                       );
                     },
                   ),
+                  if (noDateLabel != null) ...[
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(ctx, kNoDatePicked),
+                        icon: const Icon(Icons.event_busy_rounded, size: 20),
+                        label: Text(
+                          noDateLabel,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.35),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

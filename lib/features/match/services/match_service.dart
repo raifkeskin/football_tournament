@@ -144,14 +144,17 @@ class SupabaseMatchService implements IMatchService {
     required MatchStatus status,
     String? matchDate,
     String? matchTime,
+
+    /// true: tarih ve saat silinir (ertelendi, yeni tarih belirlenmedi).
+    bool clearDate = false,
   }) async {
     final rows = await _supabase
         .from('matches')
         .update({
           'status': status.name,
           'is_completed': false,
-          'match_date': ?matchDate,
-          'match_time': ?matchTime,
+          if (clearDate) ...{'match_date': null, 'match_time': null}
+          else ...{'match_date': ?matchDate, 'match_time': ?matchTime},
         })
         .eq('id', matchId)
         .select('id');
