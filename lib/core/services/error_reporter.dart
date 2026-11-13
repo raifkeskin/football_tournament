@@ -42,7 +42,13 @@ class ErrorReporter {
       // plandan döndü): resim kendi yedeğini gösterir, sonra yeniden
       // yüklenir; hata kaydına yazılmaz.
       if (details.library == 'image resource service' &&
-          _isTransientNetwork(details.exception)) {
+          (_isTransientNetwork(details.exception) ||
+              // Web'de uygulama görselleri de ağdan gelir: yüklenememesi
+              // bağlantı sorunudur (telefonda eksik dosya demektir, yazılır).
+              (kIsWeb &&
+                  details.exception.toString().contains(
+                    'Unable to load asset',
+                  )))) {
         return;
       }
       // Taşma (overflow) yalnızca görsel bir uyarıdır (release'de hiç
@@ -142,6 +148,9 @@ class ErrorReporter {
       'Software caused connection abort',
       'timed out',
       'SocketException',
+      // iOS: arka plandan dönüşte kapanmış bağlantı (oturum yenileme
+      // kendiliğinden yeniden dener).
+      'Bad file descriptor',
     ];
     return signs.any(m.contains);
   }

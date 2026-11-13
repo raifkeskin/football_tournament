@@ -231,8 +231,26 @@ class VersionedCache {
     } catch (_) {}
   }
 
+  /// Şu anki hesabın cihazda saklanan bütün kopyalarını siler (fikstür,
+  /// haber, bitmiş maç ...): kullanıcı kendi çıkış yaptığında ve web'de
+  /// "Beni Hatırla" işaretsiz oturum kapanırken (ortak bilgisayar). Misafir
+  /// (herkese açık veri) kopyalarına dokunulmaz. Bedeli: sonraki girişte
+  /// ilk açılış bir kez sunucudan yüklenir.
+  static Future<void> purgeAccount() async {
+    if (Supabase.instance.client.auth.currentUser == null) return;
+    final prefix = _key('');
+    _meta.removeWhere((k, _) => k.startsWith(prefix));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
+    } catch (_) {}
+  }
+
   /// Şu anki hesabın kişisel veri içeren kopyalarını ([personalPrefix])
-  /// cihazdan siler: çıkışta (ortak cihaz / tarayıcı) ve yetki değişince.
+  /// cihazdan siler: yetki değişince.
   static Future<void> purgePersonal() async {
     final prefix = _key(personalPrefix);
     _meta.removeWhere((k, _) => k.startsWith(prefix));

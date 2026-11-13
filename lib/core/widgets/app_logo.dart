@@ -16,8 +16,10 @@ class AppLogo extends StatelessWidget {
 
   final double size;
 
+  // Ön yükleme başarısız olursa (web'de anlık bağlantı kopması) logo ilk
+  // gösterildiğinde yeniden yüklenir.
   static Future<void> precache(BuildContext context) =>
-      precacheImage(const AssetImage(asset), context);
+      precacheImage(const AssetImage(asset), context, onError: (_, _) {});
 
   @override
   Widget build(BuildContext context) {
