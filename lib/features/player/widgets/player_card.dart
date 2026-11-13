@@ -63,6 +63,21 @@ String _subPositionLabel(String sub) {
   return s;
 }
 
+/// Oyuncunun tam doğum tarihi (YYYY-AA-GG): yalnız admine ve oyuncunun
+/// kendisine döner; diğerlerinde ya da okunamazsa `null`.
+Future<String?> playerBirthDate(String playerId) async {
+  try {
+    final v = await Supabase.instance.client.rpc(
+      'player_birth_date',
+      params: {'p_player_id': playerId},
+    );
+    final s = (v ?? '').toString().trim();
+    return s.isEmpty ? null : s;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Oyuncu kartını tam ekran sayfa olarak açar; kapatınca açıldığı ekrana
 /// döner. [playerKey] oyuncu id'si ya da telefonu (istatistik ekranları
 /// telefonla tanımlar). Diğer bilgiler buradan okunur.
@@ -75,17 +90,33 @@ Future<void> showPlayerCard(
   final isId = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   ).hasMatch(key);
+  // Herkes doğum yılını görür; tam tarihi yalnız admin ve oyuncunun kendisi
+  // (yetkili sorguyla, aynı anda).
+  final session = AppSession.of(context).value;
+  final seesFullBirth = session.isAdmin || session.playerId == key;
+  Future<List<Map<String, dynamic>>> load() async {
+    final client = Supabase.instance.client;
+    final rowsF = client
+        .from('players')
+        .select(
+          'id, name, surname, photo_url, birth_year, height, weight, '
+          'main_position, sub_position',
+        )
+        .eq('id', key)
+        .limit(1);
+    final fullF = seesFullBirth ? playerBirthDate(key) : Future.value(null);
+    final rows = await rowsF;
+    final full = await fullF;
+    return [
+      for (final r in rows)
+        {...r, 'birth_date': full ?? (r['birth_year'] ?? '').toString()},
+    ];
+  }
+
   // Oyuncu yalnız id ile açılır (telefon tablodan okunmaz).
   final Future<List<Map<String, dynamic>>> future = !isId
       ? Future.value(const <Map<String, dynamic>>[])
-      : Supabase.instance.client
-            .from('players')
-            .select(
-              'id, name, surname, photo_url, birth_date, height, weight, '
-              'main_position, sub_position',
-            )
-            .eq('id', key)
-            .limit(1);
+      : load();
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
       // Üst bantta solda geri (ör. Kariyerim'den profile dönüş).
@@ -233,9 +264,12 @@ class _PlayerCardState extends State<PlayerCard> {
     try {
       row = await Supabase.instance.client
           .from('players')
-          .select('name, surname, birth_date')
+          .select('name, surname')
           .eq('id', id)
           .single();
+      // Tam tarih yalnız admine döner; boş bırakılıp kaydedilirse sunucu
+      // mevcut tarihi korur.
+      row = {...row, 'birth_date': await playerBirthDate(id)};
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Bilgi alınamadı: $e')));
       return;
@@ -1946,7 +1980,10 @@ class _PlayerCardState extends State<PlayerCard> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               info(
-                'Doğum tarihi',
+                // Yalnız yıl geldiyse (admin ve oyuncunun kendisi dışında).
+                RegExp(r'^\d{4}$').hasMatch(widget.birthDate.trim())
+                    ? 'Doğum yılı'
+                    : 'Doğum tarihi',
                 _birthDateText(),
                 age == null ? '' : '$age yaş',
               ),

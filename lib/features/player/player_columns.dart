@@ -2,7 +2,7 @@
 /// kişisel veri tablodan okunmaz, telefon yalnız yetkiliye `player_phones`
 /// fonksiyonuyla gelir (bkz. 20261025450000_players_privacy_rpcs.sql).
 const kPlayerColumns =
-    'id, name, surname, birth_date, preferred_foot, main_position, '
+    'id, name, surname, birth_year, preferred_foot, main_position, '
     'sub_position, photo_url, height, weight, auth_uid, created_at, '
     'updated_at';
 

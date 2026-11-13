@@ -390,6 +390,13 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
         'No geri dönülemez şekilde şifrelenir, bunlar dışındaki hiçbir '
         'bilgi sisteme kaydedilmez.',
       ),
+      const SizedBox(height: 10),
+      _note(
+        Icons.visibility_off_outlined,
+        'TC Kimlik Numaranı kimse göremez. Tam doğum tarihini yalnız sen ve '
+        'uygulama yöneticisi görür; diğer kullanıcılara yalnız doğum yılın '
+        'görünür.',
+      ),
       if (_error != null) _errorText(),
       AdminPrimaryButton(
         label: 'KİMLİĞİMİ OKUT',
@@ -519,6 +526,13 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
           ),
         ],
       ),
+    ),
+    const SizedBox(height: 10),
+    _note(
+      Icons.visibility_off_outlined,
+      'TC Kimlik Numaranı kimse göremez. Tam doğum tarihini yalnız sen ve '
+      'uygulama yöneticisi görür; diğer kullanıcılara yalnız doğum yılın '
+      'görünür.',
     ),
     if (_error != null) _errorText(),
     AdminPrimaryButton(

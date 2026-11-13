@@ -709,7 +709,7 @@ class SupabaseTeamService implements ITeamService {
   /// alanları var; bkz. [MatchDetailBundle])?
   static bool _partialRows(List<Map<String, dynamic>> rows) => rows.any((r) {
     final p = r['players'];
-    return p is Map && !p.containsKey('birth_date');
+    return p is Map && !p.containsKey('birth_year');
   });
 
   static List<Map<String, dynamic>> _withPlayerDetails(
@@ -1091,7 +1091,7 @@ class SupabaseTeamService implements ITeamService {
           .from('season_team_players')
           // players içindeki gerçek UUID olan 'id'yi mutlaka çekiyoruz[cite: 2]
           .select(
-            'player_id, jersey_number, players!inner(id, name, surname, main_position, birth_date)',
+            'player_id, jersey_number, players!inner(id, name, surname, main_position, birth_year)',
           )
           .eq('team_id', team)
           .eq('season_id', tId)
