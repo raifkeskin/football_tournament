@@ -880,16 +880,20 @@ class _MatchCard extends StatelessWidget {
     }
   }
 
-  /// Erteleme: yeni tarih (isteğe bağlı saat) sorulur; tarih seçilmezse
-  /// maç tarihsiz ertelenmiş kalır.
+  /// Erteleme: yeni tarih (isteğe bağlı saat) sorulur. "Tarih belirlenmedi"
+  /// seçilirse maçın tarihi ve saati silinir (tarihsiz ertelenmiş kalır);
+  /// pencere kapatılırsa hiçbir şey değişmez.
   Future<void> _postpone(BuildContext context) async {
     final current = DateTime.tryParse((match.matchDate ?? '').trim());
-    final date = await showAppDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: current ?? DateTime.now(),
       title: 'Ertelenen Tarih',
+      noDateLabel: 'Tarih belirlenmedi',
     );
-    if (!context.mounted) return;
+    if (!context.mounted || picked == null) return;
+    final noDate = identical(picked, kNoDatePicked);
+    final date = noDate ? null : picked;
     TimeOfDay? time;
     if (date != null) {
       final raw = (match.matchTime ?? '').trim();
@@ -914,6 +918,7 @@ class _MatchCard extends StatelessWidget {
           ? null
           : '${date.year}-${two(date.month)}-${two(date.day)}',
       matchTime: time == null ? null : '${two(time.hour)}:${two(time.minute)}',
+      clearDate: noDate,
     );
   }
 
@@ -923,6 +928,7 @@ class _MatchCard extends StatelessWidget {
     String? confirm,
     String? matchDate,
     String? matchTime,
+    bool clearDate = false,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     if (confirm != null) {
@@ -943,6 +949,7 @@ class _MatchCard extends StatelessWidget {
         status: status,
         matchDate: matchDate,
         matchTime: matchTime,
+        clearDate: clearDate,
       );
       onDataChanged();
     } catch (e) {
