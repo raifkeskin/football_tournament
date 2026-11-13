@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
+import '../../../core/services/data_versions.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -109,188 +110,132 @@ class _MyWeekCardState extends State<MyWeekCard> {
     }
   }
 
+  /// Cihazdaki kopya (kişinin kendi haftası; çıkışta silinir).
+  String _diskKey(String pid) =>
+      '${VersionedCache.personalPrefix}my_week:${widget.leagueId}|$pid';
+
+  /// Önce cihazdaki kopya (uygulama açılır açılmaz kart yerinde olsun),
+  /// sonra tek istekle güncel hâli (bkz. 20261113160000_my_week.sql;
+  /// önceden 4 sıralı tur atılıyor, kart Ana Sayfa'ya geç geliyordu).
   Future<void> _load(String pid) async {
-    try {
-      // Son 7 günde bu turnuvada oynadığı (esamede olduğu ya da gol/asist
-      // yaptığı) en son bitmiş maç.
-      final since = DateTime.now().subtract(const Duration(days: 7));
-      final day =
-          '${since.year}-${since.month.toString().padLeft(2, '0')}-'
-          '${since.day.toString().padLeft(2, '0')}';
-      final (rosters, evs) = await (
-        _sb
-            .from('match_rosters')
-            .select('match_id, team_id')
-            .eq('player_id', pid)
-            .order('created_at', ascending: false)
-            .limit(30),
-        _sb
-            .from('match_events')
-            .select(
-              'id, match_id, player_id, assist_player_id, minute, '
-              'added_minute, is_own_goal',
-            )
-            .eq('event_type', 'goal')
-            .or('player_id.eq.$pid,assist_player_id.eq.$pid')
-            .order('created_at', ascending: false)
-            .limit(60),
-      ).wait;
-      final mine = [
-        for (final e in evs)
-          if (!(e['is_own_goal'] == true && e['player_id'] == pid)) e,
-      ];
-      final ids = {
-        for (final r in rosters) r['match_id'],
-        for (final e in mine) e['match_id'],
-      }..remove(null);
-      _Week? week;
-      if (ids.isNotEmpty) {
-        final matches = await _sb
-            .from('matches')
-            .select(
-              'id, week, season_id, home_team_id, away_team_id, home_score, '
-              'away_score',
-            )
-            .eq('league_id', widget.leagueId)
-            .eq('status', 'finished')
-            .isFilter('deleted_at', null)
-            .gte('match_date', day)
-            .inFilter('id', ids.toList())
-            .order('match_date', ascending: false)
-            .limit(1);
-        if (matches.isNotEmpty) {
-          final m = matches.first;
-          final wk = (m['week'] as num?)?.toInt();
-          final here = [
-            for (final e in mine)
-              if (e['match_id'] == m['id']) e,
-          ];
-          final (teams, clips, media, news) = await (
-            _sb.from('teams').select('id, name, logo_url').inFilter('id', [
-              m['home_team_id'],
-              m['away_team_id'],
-            ]),
-            here.isEmpty
-                ? Future.value(const <Map<String, dynamic>>[])
-                : _sb
-                      .from('match_highlights')
-                      .select(
-                        'match_event_id, video_id, start_sec, end_sec, '
-                        'clip_url, story_url',
-                      )
-                      .eq('match_id', m['id'])
-                      .eq('status', 'approved')
-                      .inFilter('match_event_id', [
-                        for (final e in here) e['id'],
-                      ]),
-            _sb
-                .from('match_media')
-                .select('id, url, media_type, team_id')
-                .eq('match_id', m['id'])
-                .inFilter('media_type', ['Önemli An', 'Takım Fotosu'])
-                .order('created_at')
-                .limit(24),
-            wk == null
-                ? Future.value(const <Map<String, dynamic>>[])
-                : _sb
-                      .from('news')
-                      .select('auto_data')
-                      .eq('season_id', m['season_id'])
-                      .eq('auto_kind', 'week_awards')
-                      .eq('week', wk)
-                      .eq('is_published', true),
-          ).wait;
-          final team = {for (final t in teams) t['id']: t};
-          final clipOf = {for (final c in clips) c['match_event_id']: c};
-          String label(Map e) {
-            final n = (e['minute'] as num?)?.toInt() ?? 0;
-            final a = (e['added_minute'] as num?)?.toInt() ?? 0;
-            if (n <= 0) return '';
-            return a > 0 ? "$n+$a'" : "$n'";
-          }
-
-          _Goal goal(Map e) {
-            final own = e['player_id'] == pid;
-            final c = clipOf[e['id']];
-            return _Goal(
-              id: e['id'].toString(),
-              label: label(e),
-              assist: !own,
-              videoId: c?['video_id']?.toString(),
-              start: (c?['start_sec'] as num?)?.toInt() ?? 0,
-              end: (c?['end_sec'] as num?)?.toInt() ?? 0,
-              clipUrl: c?['clip_url']?.toString(),
-              storyUrl: c?['story_url']?.toString(),
-            );
-          }
-
-          final awards = <({String title, Color color, String mark})>[];
-          for (final n in news) {
-            final d = n['auto_data'];
-            if (d is! Map) continue;
-            final w = WeekAwards.fromJson(d);
-            for (final a in w.awards) {
-              if (a.person?.id == pid) {
-                awards.add((
-                  title: a.kind.full.trUpper,
-                  color: a.kind.color,
-                  mark: a.kind == AwardKind.player ? '★' : '',
-                ));
-              }
-            }
-            if (w.hasEleven && w.eleven.any((e) => e.person.id == pid)) {
-              awards.add((
-                title: "HAFTANIN 11'İ",
-                color: const Color(0xFF34D399),
-                mark: '11',
-              ));
-            }
-          }
-
-          // Fotoğraf sırası: önce kendi takımının takım fotoğrafı, sonra
-          // futbolcunun yıldızladıkları, sonra diğerleri.
-          String? myTeam;
-          for (final r in rosters) {
-            if (r['match_id'] == m['id']) myTeam = r['team_id']?.toString();
-          }
-          var starred = <String>{};
-          if (media.isNotEmpty) {
-            try {
-              final st = await _sb
-                  .from('player_photo_stars')
-                  .select('media_id')
-                  .eq('player_id', pid)
-                  .inFilter('media_id', [for (final r in media) r['id']]);
-              starred = {for (final r in st) r['media_id'].toString()};
-            } catch (_) {}
-          }
-
-          final events = [for (final e in here) goal(e)]
-            ..sort((a, b) => _minute(a.label).compareTo(_minute(b.label)));
-          week = _Week(
-            week: wk,
-            homeName: shortTeamName(
-              (team[m['home_team_id']]?['name'] ?? '').toString(),
-            ),
-            awayName: shortTeamName(
-              (team[m['away_team_id']]?['name'] ?? '').toString(),
-            ),
-            homeLogo: (team[m['home_team_id']]?['logo_url'] ?? '').toString(),
-            awayLogo: (team[m['away_team_id']]?['logo_url'] ?? '').toString(),
-            hs: (m['home_score'] as num?)?.toInt() ?? 0,
-            as: (m['away_score'] as num?)?.toInt() ?? 0,
-            events: events,
-            awards: awards,
-            photos: _orderPhotos(media, myTeam: myTeam, starred: starred),
-          );
-        }
+    final key = '${widget.leagueId}|$pid';
+    if (_data == null) {
+      final saved = await VersionedCache.peek(_diskKey(pid));
+      if (saved is Map && saved.isNotEmpty && mounted && _pid == pid) {
+        try {
+          final week = _build(Map<String, dynamic>.from(saved), pid);
+          _cache.putIfAbsent(key, () => week);
+          if (_data == null) setState(() => _data = week);
+        } catch (_) {}
       }
-      _cache['${widget.leagueId}|$pid'] = week;
+    }
+    try {
+      final raw = await _sb.rpc(
+        'my_week',
+        params: {'p_league_id': widget.leagueId, 'p_player_id': pid},
+      );
+      final data = raw is Map ? Map<String, dynamic>.from(raw) : null;
+      final week = data == null ? null : _build(data, pid);
+      _cache[key] = week;
+      if (data == null) {
+        VersionedCache.remove(_diskKey(pid)).ignore();
+      } else {
+        VersionedCache.save(_diskKey(pid), data, null).ignore();
+      }
       if (!mounted || _pid != pid) return;
       setState(() => _data = week);
     } catch (_) {
-      // Kart isteğe bağlı: okunamazsa görünmez.
+      // Kart isteğe bağlı: okunamazsa cihazdaki kopya (varsa) kalır.
     }
+  }
+
+  static List<Map<String, dynamic>> _rows(Object? v) => [
+    if (v is List)
+      for (final r in v)
+        if (r is Map) Map<String, dynamic>.from(r),
+  ];
+
+  /// Sunucudan (ya da cihazdaki kopyadan) gelen ham veriden kart.
+  static _Week _build(Map<String, dynamic> raw, String pid) {
+    final m = Map<String, dynamic>.from(raw['match'] as Map);
+    final wk = (m['week'] as num?)?.toInt();
+    final here = _rows(raw['events']);
+    final teams = _rows(raw['teams']);
+    final clips = _rows(raw['clips']);
+    final media = _rows(raw['media']);
+    final news = _rows(raw['news']);
+    final team = {for (final t in teams) t['id']: t};
+    final clipOf = {for (final c in clips) c['match_event_id']: c};
+    String label(Map e) {
+      final n = (e['minute'] as num?)?.toInt() ?? 0;
+      final a = (e['added_minute'] as num?)?.toInt() ?? 0;
+      if (n <= 0) return '';
+      return a > 0 ? "$n+$a'" : "$n'";
+    }
+
+    _Goal goal(Map e) {
+      final own = e['player_id'] == pid;
+      final c = clipOf[e['id']];
+      return _Goal(
+        id: e['id'].toString(),
+        label: label(e),
+        assist: !own,
+        videoId: c?['video_id']?.toString(),
+        start: (c?['start_sec'] as num?)?.toInt() ?? 0,
+        end: (c?['end_sec'] as num?)?.toInt() ?? 0,
+        clipUrl: c?['clip_url']?.toString(),
+        storyUrl: c?['story_url']?.toString(),
+      );
+    }
+
+    final awards = <({String title, Color color, String mark})>[];
+    for (final n in news) {
+      final d = n['auto_data'];
+      if (d is! Map) continue;
+      final w = WeekAwards.fromJson(d);
+      for (final a in w.awards) {
+        if (a.person?.id == pid) {
+          awards.add((
+            title: a.kind.full.trUpper,
+            color: a.kind.color,
+            mark: a.kind == AwardKind.player ? '★' : '',
+          ));
+        }
+      }
+      if (w.hasEleven && w.eleven.any((e) => e.person.id == pid)) {
+        awards.add((
+          title: "HAFTANIN 11'İ",
+          color: const Color(0xFF34D399),
+          mark: '11',
+        ));
+      }
+    }
+
+    // Fotoğraf sırası: önce kendi takımının takım fotoğrafı, sonra
+    // futbolcunun yıldızladıkları, sonra diğerleri.
+    final myTeam = raw['my_team']?.toString();
+    final starred = {
+      if (raw['starred'] is List)
+        for (final x in raw['starred'] as List) x.toString(),
+    };
+    final events = [for (final e in here) goal(e)]
+      ..sort((a, b) => _minute(a.label).compareTo(_minute(b.label)));
+    return _Week(
+      week: wk,
+      homeName: shortTeamName(
+        (team[m['home_team_id']]?['name'] ?? '').toString(),
+      ),
+      awayName: shortTeamName(
+        (team[m['away_team_id']]?['name'] ?? '').toString(),
+      ),
+      homeLogo: (team[m['home_team_id']]?['logo_url'] ?? '').toString(),
+      awayLogo: (team[m['away_team_id']]?['logo_url'] ?? '').toString(),
+      hs: (m['home_score'] as num?)?.toInt() ?? 0,
+      as: (m['away_score'] as num?)?.toInt() ?? 0,
+      events: events,
+      awards: awards,
+      photos: _orderPhotos(media, myTeam: myTeam, starred: starred),
+    );
   }
 
   static List<String> _orderPhotos(
