@@ -41,6 +41,10 @@ class DataVersions {
   static String get _uid =>
       Supabase.instance.client.auth.currentUser?.id ?? 'guest';
 
+  /// Şu anki hesabın bilinen yetki özeti (bu oturumda henüz okunmadıysa
+  /// `null`).
+  static String? get currentAccess => _accessUid == _uid ? _access : null;
+
   /// Bu cihaz veri yazdı: paylaşılan sürümler unutulur, sonraki damga
   /// sunucudan okunur.
   static void forget() => _known.clear();
@@ -142,6 +146,11 @@ class VersionedCache {
   static const maxAge = Duration(days: 3);
   static final Map<String, ({String? stamp, DateTime at})> _meta = {};
 
+  /// Kişisel veri içeren kopyaların anahtar öneki (ör. bitmiş maçta ekranda
+  /// görünen oyuncu adları). Bu kopyalar çıkışta ve hesabın yetkisi
+  /// değişince cihazdan silinir (bkz. [purgePersonal]).
+  static const personalPrefix = 'p:';
+
   static String _key(String key) {
     final uid = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
     return 'vc1:$uid:$key';
@@ -149,12 +158,13 @@ class VersionedCache {
 
   /// Saklanan veri (sürümüne bakılmaksızın); yoksa `null`.
   static Future<Object?> peek(String key) async {
+    final k = _key(key);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_key(key));
+      final raw = prefs.getString(k);
       if (raw == null) return null;
       final m = jsonDecode(raw) as Map<String, dynamic>;
-      _meta[_key(key)] = (
+      _meta[k] = (
         stamp: m['s'] as String?,
         at: DateTime.fromMillisecondsSinceEpoch((m['t'] as num).toInt()),
       );
@@ -175,6 +185,19 @@ class VersionedCache {
     return now != null && now == meta.stamp;
   }
 
+  /// [peek] ile okunan kopya sunucuya sorulmadan gösterilebilir mi:
+  /// yeterince yeni olmalı ve hesabın şu anki yetki özetiyle kaydedilmiş
+  /// olmalı (yetkisi değişen hesaba eski kopya gösterilmez). Yetki özeti bu
+  /// oturumda henüz okunmadıysa `false` (önce [unchanged] ile doğrulanır).
+  static bool servable(String key) {
+    final meta = _meta[_key(key)];
+    final stamp = meta?.stamp;
+    final access = DataVersions.currentAccess;
+    if (meta == null || stamp == null || access == null) return false;
+    if (DateTime.now().difference(meta.at) > maxAge) return false;
+    return stamp.endsWith('|@=$access');
+  }
+
   /// [stamp] veriyle birlikte alınmış damga. [persist] false ise yalnızca
   /// bellekte tutulur (kişisel veri cihaza yazılmaz).
   static Future<void> save(
@@ -183,15 +206,42 @@ class VersionedCache {
     String? stamp, {
     bool persist = true,
   }) async {
+    // Anahtar çağrı anındaki hesaba göre (yazma sırasında hesap değişse de
+    // veri başka hesabın anahtarına yazılmaz).
+    final k = _key(key);
     final at = DateTime.now();
-    _meta[_key(key)] = (stamp: stamp, at: at);
+    _meta[k] = (stamp: stamp, at: at);
     if (!persist) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-        _key(key),
+        k,
         jsonEncode({'s': stamp, 't': at.millisecondsSinceEpoch, 'd': data}),
       );
+    } catch (_) {}
+  }
+
+  /// Saklanan kopyayı cihazdan siler.
+  static Future<void> remove(String key) async {
+    final k = _key(key);
+    _meta.remove(k);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(k);
+    } catch (_) {}
+  }
+
+  /// Şu anki hesabın kişisel veri içeren kopyalarını ([personalPrefix])
+  /// cihazdan siler: çıkışta (ortak cihaz / tarayıcı) ve yetki değişince.
+  static Future<void> purgePersonal() async {
+    final prefix = _key(personalPrefix);
+    _meta.removeWhere((k, _) => k.startsWith(prefix));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
     } catch (_) {}
   }
 }

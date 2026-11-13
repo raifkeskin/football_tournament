@@ -166,7 +166,25 @@ class MatchHighlightService {
   static List<MatchHighlight>? cached(String matchId) => _cache[matchId];
 
   /// RLS: herkes onaylıları, yetkili (owns_match) bekleyenleri de görür.
+  static bool _bundleHooked = false;
+
+  /// Cihazdaki maç kopyası eskiymiş, taze paket geldi: gösterilen kesitler
+  /// yeniden okunur (ör. maçtan sonra onaylanan gol kesiti hemen görünsün).
+  static void _hookBundle() {
+    if (_bundleHooked) return;
+    _bundleHooked = true;
+    MatchDetailBundle.addRefreshListener((matchId, _) {
+      if (!_cache.containsKey(matchId)) return;
+      fetch(matchId)
+          .then<void>((_) {
+            changes.value++;
+          })
+          .catchError((Object _) {});
+    });
+  }
+
   static Future<List<MatchHighlight>> fetch(String matchId) async {
+    _hookBundle();
     // İlk okuma maç detayı paketinden (aynı süzgeç ve sıra).
     final seed = await MatchDetailBundle.take(matchId, 'highlights');
     final rows = seed is List
@@ -459,6 +477,8 @@ class MatchHighlightService {
     };
     if (patch.isEmpty) return;
     await _db.from('match_highlights').update(patch).eq('id', h.id);
+    // Bu cihaz kesiti değiştirdi: maç paketi / cihazdaki kopya artık eski.
+    MatchDetailBundle.forget(h.matchId);
     await fetch(h.matchId);
     changes.value++;
   }
@@ -477,6 +497,7 @@ class MatchHighlightService {
         'p_second_half_sec': secondHalfSec,
       },
     );
+    MatchDetailBundle.forget(matchId);
     changes.value++;
   }
 
@@ -487,6 +508,7 @@ class MatchHighlightService {
       'apply_highlight_starts',
       params: {'p_match_id': matchId},
     );
+    MatchDetailBundle.forget(matchId);
     await fetch(matchId);
     changes.value++;
     return (n as num?)?.toInt() ?? 0;

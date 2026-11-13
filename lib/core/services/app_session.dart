@@ -297,6 +297,9 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     await setBiometricSession(false);
     // Oturum kapanmadan (yetki varken) bu cihazın bildirim kaydı silinir.
     await PushService.onSignOut();
+    // Hesabın cihazdaki kişisel veri içeren kopyaları (bitmiş maçlardaki
+    // oyuncu adları vb.) silinir: ortak cihazda / tarayıcıda kalmasın.
+    await VersionedCache.purgePersonal();
     try {
       await _supabase.auth.signOut();
     } catch (e) {
@@ -802,6 +805,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   /// kadrosuna eklendi): roller ve turnuva kapsamı yeniden okunur; çıkış
   /// yapıp girmek gerekmez.
   void _onAccessChanged() {
+    // Eski yetkiyle saklanan kişisel veri kopyaları cihazdan silinir.
+    VersionedCache.purgePersonal();
     final user = _supabase.auth.currentUser;
     if (user == null || user.id != _lastAuthId) return;
     _onAuthChanged(user);
