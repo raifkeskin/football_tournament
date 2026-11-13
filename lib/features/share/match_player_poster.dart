@@ -144,11 +144,11 @@ class MatchPlayerPoster extends StatelessWidget {
     final w = size.width;
     final h = size.height;
     final u = w / 100;
-    // Hikâyede yazılar Instagram'ın üst (profil) ve alt (yanıt) çubuklarının
-    // altında kalmasın.
+    // Hikâyede yazılar Instagram'ın üst (profil) ve alt (yanıt) çubuklarına
+    // değmesin; boşluk dar tutuldu (kullanıcı isteği 2026-11-13).
     final pad = st.isPost
         ? EdgeInsets.all(4.6 * u)
-        : EdgeInsets.fromLTRB(4.6 * u, 22 * u, 4.6 * u, 27 * u);
+        : EdgeInsets.fromLTRB(4.6 * u, 12 * u, 4.6 * u, 14 * u);
 
     return Material(
       type: MaterialType.transparency,
