@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gol Analizi · Lig Masası Tasarım Önizlemesi</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 28px 18px 48px;
+    }
+
+    .eyebrow {
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 8px 0; font-size: 25px; }
+
+    .intro {
+      margin: 0 0 24px;
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .poster {
+      height: 190px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 18px;
+      border: 1px solid #263349;
+      border-radius: 20px;
+      background:
+        radial-gradient(ellipse at 50% 120%, #14532d 0, transparent 53%),
+        linear-gradient(135deg, #172554, #0b1220 70%);
+      color: #e2e8f0;
+      font-weight: 900;
+      letter-spacing: .18em;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid #334155;
+      border-radius: 22px;
+      background: #1e293b;
+      box-shadow: 0 16px 38px #02061755;
+    }
+
+    .heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .spark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: #0f766e;
+      color: #5eead4;
+      font-size: 22px;
+    }
+
+    .heading-copy { flex: 1; min-width: 0; }
+    .heading-copy strong { display: block; font-size: 15px; letter-spacing: .04em; }
+    .heading-copy span { color: #94a3b8; font-size: 12px; }
+
+    button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 12px;
+      color: white;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .rescan {
+      padding: 0 14px;
+      background: #10b981;
+      white-space: nowrap;
+    }
+
+    .result {
+      margin: 18px 0 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #0f172a88;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .result b { color: #fff; }
+
+    .periods {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .period {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid #475569;
+      border-radius: 14px;
+      background: #172235;
+      text-align: left;
+    }
+
+    .period span {
+      display: block;
+      margin-bottom: 7px;
+      color: #94a3b8;
+      font-size: 10px;
+      letter-spacing: .08em;
+    }
+
+    .period b { font-size: 15px; }
+    .period i { float: right; color: #34d399; font-style: normal; }
+
+    .apply {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      background: #059669;
+    }
+
+    .hint {
+      margin: 12px 0 0;
+      color: #94a3b8;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .section {
+      margin: 20px 0 10px;
+      color: #34d399;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .12em;
+    }
+
+    .goal {
+      padding: 16px;
+      border: 1px solid #334155;
+      border-radius: 18px;
+      background: #1e293b;
+    }
+
+    .goal-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .score {
+      margin-left: auto;
+      padding: 5px 10px;
+      border-radius: 9px;
+      background: #064e3b;
+      color: #6ee7b7;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .goal p { margin: 12px 0 0; color: #cbd5e1; font-size: 13px; }
+
+    @media (max-width: 430px) {
+      body { padding: 18px 12px 36px; }
+      .card { padding: 14px; }
+      .heading { gap: 8px; }
+      .spark { width: 40px; height: 40px; }
+      .heading-copy strong { font-size: 13px; }
+      .rescan { padding: 0 10px; font-size: 12px; }
+      .period { padding: 10px; }
+      .period b { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="eyebrow">Lig Masası · Önizleme</div>
+  <h1>Gol Analizi düzeni</h1>
+  <p class="intro">
+    Maliyet satırı kaldırıldı. Maç başlangıcı ve 2. yarı başlangıcı aynı hizada;
+    “Uygula” ayrı ve tam genişlikte. Her gol satırında o ana kadarki skor gösteriliyor.
+  </p>
+
+  <div class="poster">MAÇ GÖRSELİ</div>
+
+  <section class="card" aria-label="Gol analizi kartı">
+    <div class="heading">
+      <div class="spark">✦</div>
+      <div class="heading-copy">
+        <strong>GOL ANALİZİ</strong>
+        <span>Başlangıç anlarını ve kesitleri yönet</span>
+      </div>
+      <button class="rescan">Yeniden Tara</button>
+    </div>
+
+    <div class="result">Son analizde <b>8 gol</b> bulundu.</div>
+
+    <div class="periods">
+      <button class="period">
+        <span>MAÇ BAŞLANGICI</span>
+        <b>02:42</b><i>✎</i>
+      </button>
+      <button class="period">
+        <span>2. YARI BAŞLANGICI</span>
+        <b>44:01</b><i>✎</i>
+      </button>
+    </div>
+    <button class="apply">↻ &nbsp; Kesitleri Uygula</button>
+    <p class="hint">Başlangıçları değiştirince onay bekleyen kesitleri yeni dakikalara göre hizalayın.</p>
+  </section>
+
+  <div class="section">YAYINDA (8)</div>
+  <article class="goal">
+    <div class="goal-title">
+      <span>⚽</span>
+      <span>8′ · Gol · Fenerbahçe</span>
+      <span class="score">1–0</span>
+    </div>
+    <p>Gol kesitinde dakika, takım ve skor bir bakışta görünür.</p>
+  </article>
+</body>
+</html>
