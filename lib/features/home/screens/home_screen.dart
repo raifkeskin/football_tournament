@@ -214,6 +214,8 @@ class _HomeScreenState extends State<HomeScreen> {
     GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
     // Turnuva teması değişince tarih şeridi yeni renkle çizilsin.
     ActiveTournament.theme.addListener(_onThemeChanged);
+    // Bantta turnuva değişince ana sayfa da onunla çizilsin.
+    ActiveTournament.currentLeagueId.addListener(_onThemeChanged);
   }
 
   void _onGlobalFilterChanged() {
@@ -264,6 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
     ActiveTournament.theme.removeListener(_onThemeChanged);
+    ActiveTournament.currentLeagueId.removeListener(_onThemeChanged);
     super.dispose();
   }
 
@@ -645,9 +648,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 };
 
                 if (kNewHomeDesign && !_calendar) {
+                  // Ana sayfa her zaman bantta görünen turnuvayı gösterir.
+                  // Ortak filtre (GlobalFilter) başka bir turnuvanın fikstür /
+                  // sayfasına bakarken değişebilir; giriş yapmış kişide bant
+                  // değişmediği için ana sayfa başka turnuvada kalıyordu.
+                  final bandId = ActiveTournament.currentLeagueId.value;
+                  final dashLeague = allLeagues.firstWhere(
+                    (l) => l.id == bandId,
+                    orElse: () => currentLeague,
+                  );
                   return HomeDashboard(
-                    key: ValueKey('dash_${currentLeague.id}'),
-                    league: currentLeague,
+                    key: ValueKey('dash_${dashLeague.id}'),
+                    league: dashLeague,
                     onOpenMenu: () => _openMenu(context),
                   );
                 }
