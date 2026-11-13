@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'active_tournament.dart';
 import 'app_settings.dart';
+import 'data_versions.dart';
 import 'league_access.dart';
 import 'league_scope.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -199,6 +201,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       _onAuthChanged(data.session?.user);
     });
     AppActivity.foreground.addListener(_onForegroundChanged);
+    DataVersions.accessEpoch.addListener(_onAccessChanged);
 
     // İlk açılışta mevcut kullanıcıyı kontrol et
     _onAuthChanged(_supabase.auth.currentUser);
@@ -228,6 +231,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       await prefs.remove(_kBackgroundAtKey);
     } catch (_) {}
     if (remember) return;
+    // Web'de "Beni Hatırla" işaretsiz giriş ortak bilgisayar sayılır:
+    // hesabın tarayıcıda saklanan kopyaları da silinir. Telefonda kalır
+    // (kişisel cihaz; yeniden girişte ekran beklemeden gelir).
+    if (kIsWeb) await VersionedCache.purgeAccount();
     try {
       await auth.signOut();
     } catch (_) {}
@@ -295,6 +302,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     await setBiometricSession(false);
     // Oturum kapanmadan (yetki varken) bu cihazın bildirim kaydı silinir.
     await PushService.onSignOut();
+    // Kullanıcı kendi çıkış yaptı: hesabın cihazda saklanan kopyaları
+    // (fikstür, haber, bitmiş maçlar) silinir; ortak cihazda / tarayıcıda
+    // kalmasın.
+    await VersionedCache.purgeAccount();
     try {
       await _supabase.auth.signOut();
     } catch (e) {
@@ -796,11 +807,24 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     LeagueAccess.bump();
   }
 
+  /// Sunucudaki yetki özeti değişti (ör. sorumlu atandı, gizli turnuvanın
+  /// kadrosuna eklendi): roller ve turnuva kapsamı yeniden okunur; çıkış
+  /// yapıp girmek gerekmez.
+  void _onAccessChanged() {
+    // Eski yetkiyle saklanan kişisel veri kopyaları cihazdan silinir.
+    VersionedCache.purgePersonal();
+    final user = _supabase.auth.currentUser;
+    if (user == null || user.id != _lastAuthId) return;
+    _onAuthChanged(user);
+    ActiveTournament.refresh();
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
     _profileSub?.cancel();
     AppActivity.foreground.removeListener(_onForegroundChanged);
+    DataVersions.accessEpoch.removeListener(_onAccessChanged);
     super.dispose();
   }
 }

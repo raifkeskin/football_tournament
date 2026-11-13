@@ -7,6 +7,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/utils/resilient_stream.dart';
 import '../../../tournament/models/league.dart';
 import '../../../match/models/match.dart';
+import '../../../match/services/match_detail_bundle.dart';
 import '../../../player/player_columns.dart';
 import '../../models/team.dart';
 
@@ -17,7 +18,14 @@ const kPlayerAlreadyRegistered =
 
 class SupabaseTeamService implements ITeamService {
   SupabaseTeamService({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client {
+    // Cihazdaki maç kopyası eskiymiş, taze paket geldi: o maçın oyuncu
+    // listeleri bellekten bırakılır (sonraki okuma taze paketten).
+    MatchDetailBundle.addRefreshListener(
+      (matchId, _) =>
+          _playersCache.removeWhere((k, _) => k.endsWith('|$matchId')),
+    );
+  }
 
   static const String _serviceName = 'SupabaseTeamService';
 
@@ -551,7 +559,105 @@ class SupabaseTeamService implements ITeamService {
     if (tId.isEmpty) return const Stream<List<PlayerModel>>.empty();
     final cacheKey = mId.isEmpty ? '$team|$tId' : '$team|$tId|$mId';
 
-    Future<List<PlayerModel>> fetch() async {
+    List<Map<String, dynamic>> rowsOf(Object? v) => [
+      if (v is List)
+        for (final r in v) Map<String, dynamic>.from(r as Map),
+    ];
+
+    // Sezon kadrosu ve maçın esamesindeki oyuncular (satır: jersey_number +
+    // players). Maç ekranında ilk okuma maç detayı paketinden (aynı satır
+    // biçimi), değilse sunucudan.
+    Future<(List<Map<String, dynamic>>, List<Map<String, dynamic>>)>
+    readRows() async {
+      final seed = mId.isEmpty
+          ? null
+          : await MatchDetailBundle.take(
+              mId,
+              'players',
+              key: team,
+              seasonId: tId,
+            );
+      final seedSquad = seed is Map && seed['squad'] is List
+          ? rowsOf(seed['squad'])
+          : null;
+      final seedPlayed = seed is Map && seed['played'] is List
+          ? rowsOf(seed['played'])
+          : null;
+      // Tek sorgu: sezon kaydı + oyuncu bilgisi (players FK join).
+      final squad =
+          seedSquad ??
+          rowsOf(
+            await _client
+                .from('season_team_players')
+                .select('jersey_number, players!inner($kPlayerColumns)')
+                .eq('team_id', team)
+                .eq('season_id', tId)
+                .eq('is_active', true),
+          );
+      // Maçta oynayıp sonradan takımdan ayrılan (transfer) oyuncular.
+      final played = mId.isEmpty
+          ? const <Map<String, dynamic>>[]
+          : seedPlayed ??
+                rowsOf(
+                  await _client
+                      .from('match_rosters')
+                      .select('jersey_number, players!inner($kPlayerColumns)')
+                      .eq('match_id', mId)
+                      .eq('team_id', team),
+                );
+      return (squad, played);
+    }
+
+    List<PlayerModel> build(
+      List<Map<String, dynamic>> squad,
+      List<Map<String, dynamic>> played,
+    ) {
+      final list = <PlayerModel>[];
+      for (final r in squad) {
+        final p = r['players'];
+        if (p is! Map) continue;
+        final row = _withDisplayName(Map<String, dynamic>.from(p));
+        final pid = (row['id'] ?? '').toString().trim();
+        if (pid.isEmpty) continue;
+        final merged = <String, dynamic>{
+          ...row,
+          'season_id': tId,
+          'team_id': team,
+          if (r['jersey_number'] != null) 'jersey_number': r['jersey_number'],
+        };
+        list.add(PlayerModel.fromMap(merged, pid));
+      }
+      final known = {for (final p in list) p.id};
+      for (final r in played) {
+        final p = r['players'];
+        if (p is! Map) continue;
+        final row = _withDisplayName(Map<String, dynamic>.from(p));
+        final pid = (row['id'] ?? '').toString().trim();
+        if (pid.isEmpty || !known.add(pid)) continue;
+        list.add(
+          PlayerModel.fromMap({
+            ...row,
+            'season_id': tId,
+            'team_id': team,
+            if (r['jersey_number'] != null) 'jersey_number': r['jersey_number'],
+          }, pid),
+        );
+      }
+      list.sort((a, b) {
+        final an = int.tryParse((a.number ?? '').trim()) ?? 9999;
+        final bn = int.tryParse((b.number ?? '').trim()) ?? 9999;
+        final cmp = an.compareTo(bn);
+        if (cmp != 0) return cmp;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+      _playersCache[cacheKey] = list;
+      return list;
+    }
+
+    Stream<List<PlayerModel>> feed() async* {
+      final cached = _playersCache[cacheKey];
+      if (cached != null) yield cached;
+      List<Map<String, dynamic>> squad, played;
       AppConfig.sqlLogStart(
         table: 'season_team_players',
         operation: 'SELECT',
@@ -561,65 +667,8 @@ class SupabaseTeamService implements ITeamService {
         filters: 'team_id=$team, season_id=$tId | select=jersey_number,players',
       );
       try {
-        // Tek sorgu: sezon kaydı + oyuncu bilgisi (players FK join).
-        final res = await _client
-            .from('season_team_players')
-            .select('jersey_number, players!inner($kPlayerColumns)')
-            .eq('team_id', team)
-            .eq('season_id', tId)
-            .eq('is_active', true);
-
-        final list = <PlayerModel>[];
-        for (final r in res.cast<Map<String, dynamic>>()) {
-          final p = r['players'];
-          if (p is! Map) continue;
-          final row = _withDisplayName(Map<String, dynamic>.from(p));
-          final pid = (row['id'] ?? '').toString().trim();
-          if (pid.isEmpty) continue;
-          final merged = <String, dynamic>{
-            ...row,
-            'season_id': tId,
-            'team_id': team,
-            if (r['jersey_number'] != null) 'jersey_number': r['jersey_number'],
-          };
-          list.add(PlayerModel.fromMap(merged, pid));
-        }
-
-        // Maçta oynayıp sonradan takımdan ayrılan (transfer) oyuncular.
-        if (mId.isNotEmpty) {
-          final known = {for (final p in list) p.id};
-          final gone = await _client
-              .from('match_rosters')
-              .select('jersey_number, players!inner($kPlayerColumns)')
-              .eq('match_id', mId)
-              .eq('team_id', team);
-          for (final r in gone.cast<Map<String, dynamic>>()) {
-            final p = r['players'];
-            if (p is! Map) continue;
-            final row = _withDisplayName(Map<String, dynamic>.from(p));
-            final pid = (row['id'] ?? '').toString().trim();
-            if (pid.isEmpty || !known.add(pid)) continue;
-            list.add(
-              PlayerModel.fromMap({
-                ...row,
-                'season_id': tId,
-                'team_id': team,
-                if (r['jersey_number'] != null)
-                  'jersey_number': r['jersey_number'],
-              }, pid),
-            );
-          }
-        }
-
-        list.sort((a, b) {
-          final an = int.tryParse((a.number ?? '').trim()) ?? 9999;
-          final bn = int.tryParse((b.number ?? '').trim()) ?? 9999;
-          final cmp = an.compareTo(bn);
-          if (cmp != 0) return cmp;
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        });
-        _playersCache[cacheKey] = list;
-        return list;
+        (squad, played) = await readRows();
+        yield build(squad, played);
       } catch (e) {
         AppConfig.sqlLogResult(
           table: 'season_team_players',
@@ -629,23 +678,56 @@ class SupabaseTeamService implements ITeamService {
           method: 'watchPlayers',
           error: e,
         );
-        rethrow;
-      }
-    }
-
-    Stream<List<PlayerModel>> feed() async* {
-      final cached = _playersCache[cacheKey];
-      if (cached != null) yield cached;
-      try {
-        yield await fetch();
-      } catch (e) {
         // Önbellekte veri varsa onu göstermeye devam et.
         if (cached == null) rethrow;
+        return;
+      }
+      // Cihazdaki maç kopyasında oyuncunun yalnız ekranda görünen alanları
+      // var: kalanlar (doğum tarihi vb.) tek istekle tamamlanır, cihaza
+      // yazılmaz. Kopya bu arada yenilendiyse satırlar baştan okunur.
+      if (!_partialRows(squad) && !_partialRows(played)) return;
+      try {
+        final details = await MatchDetailBundle.playerDetails(mId);
+        if (details != null) {
+          yield build(
+            _withPlayerDetails(squad, details),
+            _withPlayerDetails(played, details),
+          );
+        } else {
+          final (s, p) = await readRows();
+          yield build(s, p);
+        }
+      } catch (_) {
+        // Tamamlanamadı (ör. bağlantı yok): görünen alanlarla kalır.
       }
     }
 
     return feed().asBroadcastStream();
   }
+
+  /// Satırlar cihazdaki maç kopyasından mı geldi (oyuncunun yalnız görünen
+  /// alanları var; bkz. [MatchDetailBundle])?
+  static bool _partialRows(List<Map<String, dynamic>> rows) => rows.any((r) {
+    final p = r['players'];
+    return p is Map && !p.containsKey('birth_date');
+  });
+
+  static List<Map<String, dynamic>> _withPlayerDetails(
+    List<Map<String, dynamic>> rows,
+    Map<String, Map<String, dynamic>> details,
+  ) => [
+    for (final r in rows)
+      if (r['players'] is Map)
+        {
+          ...r,
+          'players': {
+            ...(r['players'] as Map),
+            ...?details[((r['players'] as Map)['id'] ?? '').toString()],
+          },
+        }
+      else
+        r,
+  ];
 
   Future<List<PlayerModel>> getAvailablePlayersForLeague(
     String leagueId,

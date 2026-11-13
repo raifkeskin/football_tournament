@@ -71,7 +71,11 @@ Stream<T> resilientStream<T>(
   void closeConnection() {
     scope?.cancel();
     scope = null;
-    sub?.cancel();
+    // İptal anında yolda olan hata (ör. arka plandan dönüşte kanalın zaman
+    // aşımı) iptal edilen gövdede fırlar ve iptalin sonucuna yazılır;
+    // bağlantı zaten bırakıldığı için önemsizdir, "yakalanmamış hata"
+    // sayılmasın.
+    sub?.cancel().ignore();
     sub = null;
   }
 

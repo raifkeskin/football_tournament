@@ -7,6 +7,7 @@ import '../../../../core/config/app_config.dart';
 import '../../models/fixture_import.dart';
 import '../../models/match.dart';
 import '../../models/match_media.dart';
+import '../match_detail_bundle.dart';
 import '../../../../core/utils/resilient_stream.dart';
 import '../../../../core/utils/realtime_signal.dart';
 import '../../../../core/utils/table_feed.dart';
@@ -14,7 +15,17 @@ import '../../../player/models/player_stats.dart';
 
 class SupabaseMatchService implements IMatchService {
   SupabaseMatchService({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client {
+    // Cihazdaki maç kopyası eskiymiş, taze paket geldi: bellekteki olay,
+    // esame ve medya listeleri bırakılır; açık akışlar yeniden okur (taze
+    // paketten, ek istek yok).
+    MatchDetailBundle.addRefreshListener((matchId, _) {
+      _eventsCache.remove(matchId);
+      _rosterCache.remove(matchId);
+      _mediaCache.remove(matchId);
+      _localChanges.add(matchId);
+    });
+  }
 
   final SupabaseClient _client;
 
@@ -230,6 +241,9 @@ class SupabaseMatchService implements IMatchService {
   /// Maçın veritabanındaki durumu ('scheduled', 'live', 'halftime',
   /// 'finished' ...). Önbellekte yoksa tek sütun okunur.
   Future<String> _matchStatus(String matchId) async {
+    // Maç detayı paketi yükleniyorsa durum oradan (ayrı istek yok).
+    final fromBundle = await MatchDetailBundle.status(matchId);
+    if (fromBundle != null && fromBundle.isNotEmpty) return fromBundle;
     try {
       final row = await _client
           .from('matches')
@@ -249,8 +263,10 @@ class SupabaseMatchService implements IMatchService {
   /// ekrana hemen yansısın.
   static final _localChanges = StreamController<String>.broadcast();
 
-  static void notifyLocalChange(String matchId) =>
-      _localChanges.add(matchId.trim());
+  static void notifyLocalChange(String matchId) {
+    MatchDetailBundle.forget(matchId);
+    _localChanges.add(matchId.trim());
+  }
 
   /// Bu cihazda değişen maçların id'leri (ana sayfa yenilensin diye).
   static Stream<String> get localChanges => _localChanges.stream;
@@ -319,6 +335,13 @@ class SupabaseMatchService implements IMatchService {
   final Map<String, List<Map<String, dynamic>>> _eventsCache = {};
 
   Future<List<Map<String, dynamic>>> _fetchInlineMatchEvents(String id) async {
+    // İlk okuma maç detayı paketinden (oyuncu adları ekli gelir).
+    final seed = await MatchDetailBundle.take(id, 'events');
+    if (seed is List) {
+      final list = [for (final r in seed) Map<String, dynamic>.from(r as Map)];
+      _eventsCache[id] = list;
+      return list;
+    }
     final rows = await _client
         .from('match_events')
         .select()
@@ -962,11 +985,14 @@ class SupabaseMatchService implements IMatchService {
   final Map<String, Stream<List<MatchMediaModel>>> _mediaFeeds = {};
 
   Future<List<MatchMediaModel>> _fetchMatchMedia(String id) async {
-    final rows = await _client
-        .from('match_media')
-        .select()
-        .eq('match_id', id)
-        .order('created_at', ascending: false);
+    final seed = await MatchDetailBundle.take(id, 'media');
+    final rows = seed is List
+        ? [for (final r in seed) Map<String, dynamic>.from(r as Map)]
+        : await _client
+              .from('match_media')
+              .select()
+              .eq('match_id', id)
+              .order('created_at', ascending: false);
     final list = rows
         .map(
           (r) => MatchMediaModel.fromMap(
@@ -1282,10 +1308,10 @@ class SupabaseMatchService implements IMatchService {
   final Map<String, Stream<List<MatchRosterModel>>> _rosterFeeds = {};
 
   Future<List<MatchRosterModel>> _fetchMatchRosters(String matchId) async {
-    final rows = await _client
-        .from('match_rosters')
-        .select()
-        .eq('match_id', matchId);
+    final seed = await MatchDetailBundle.take(matchId, 'rosters');
+    final rows = seed is List
+        ? [for (final r in seed) Map<String, dynamic>.from(r as Map)]
+        : await _client.from('match_rosters').select().eq('match_id', matchId);
     final list = rows
         .map((r) => MatchRosterModel.fromMap(r, (r['id'] ?? '').toString()))
         .toList();
