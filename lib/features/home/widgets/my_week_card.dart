@@ -15,6 +15,7 @@ import '../../referees/referee_widgets.dart';
 import '../../share/match_player_poster.dart';
 import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
+import '../../share/team_result_poster.dart';
 
 /// Ana sayfada "Bu hafta sen": giriş yapan futbolcunun son maçı (son 7 gün,
 /// bu turnuvada) için kart. Üstte gol/asist manşeti (yoksa doğrudan maç
@@ -665,16 +666,246 @@ class _MyWeekCardState extends State<MyWeekCard> {
 
   bool _posterBusy = false;
 
-  /// Kartın altında: afişin küçük hâli + "Paylaş".
+  /// Futbolcunun bu maçtaki takımı (bilinmiyorsa boş).
+  String _myTeamId(_Week d) => d.mineHome == null
+      ? ''
+      : d.mineHome!
+      ? d.homeId
+      : d.awayId;
+
+  /// Takım afişi seçeneği: takımın sorumlusuna (yeni özellik: admin her
+  /// zaman, diğerleri team_result_poster_enabled açıksa).
+  bool _teamPosterFor(_Week d) {
+    final team = _myTeamId(d);
+    if (team.isEmpty || d.id.isEmpty) return false;
+    final s = AppSession.of(context).value;
+    if (s.isAdmin) return true;
+    return AppSettings.teamPosterEnabled.value &&
+        s.managedTeams.any((t) => t.teamId == team);
+  }
+
+  /// Takım afişinin küçük görüntüsü: takım fotoğrafı + skor şeridi.
+  Widget _teamThumb(_Week d) {
+    final photo = d.photos.isNotEmpty ? d.photos.first : '';
+    return SizedBox(
+      width: 46,
+      height: 57.5,
+      child: ColoredBox(
+        color: const Color(0xFF0B1322),
+        child: Column(
+          children: [
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 28,
+              width: 46,
+              child: photo.isEmpty
+                  ? const Icon(
+                      Icons.groups_rounded,
+                      color: Colors.white38,
+                      size: 20,
+                    )
+                  : WebSafeImage(url: photo, fit: BoxFit.cover),
+            ),
+            const Spacer(),
+            Container(
+              height: 1.5,
+              color: _gold,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            Container(
+              height: 7,
+              margin: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: Container(color: const Color(0xFFF4F6FA)),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Container(color: const Color(0xFF0B1322)),
+                  ),
+                  Expanded(
+                    flex: 4,
+                    child: Container(color: const Color(0xFFF4F6FA)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Takım sorumlusunda tek PAYLAŞ: hangi afiş olduğu sorulur.
+  Future<void> _choosePoster(_Week d) async {
+    final session = AppSession.of(context).value;
+    final name = (session.displayName ?? '').trim().split(RegExp(r'\s+'));
+    final thumbPhoto = d.photos.isNotEmpty
+        ? d.photos.first
+        : (session.photoUrl ?? '').trim();
+    Widget option(
+      BuildContext ctx,
+      Widget thumb,
+      String label,
+      String value,
+    ) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.04),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.pop(ctx, value),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ClipRRect(borderRadius: BorderRadius.circular(5), child: thumb),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Hangi afişi paylaşacaksın?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 14),
+              option(
+                ctx,
+                SizedBox(
+                  width: 46,
+                  height: 57.5,
+                  child: FittedBox(
+                    child: PosterOptions(
+                      style: const PosterStyle(format: PosterFormat.post),
+                      child: MatchPlayerPoster(
+                        data: _posterData(
+                          d,
+                          first: name.length > 1
+                              ? name
+                                    .sublist(0, name.length - 1)
+                                    .join(' ')
+                                    .trUpper
+                              : '',
+                          last: name.last.trUpper,
+                        ),
+                        photo: thumbPhoto.isEmpty
+                            ? null
+                            : NetworkImage(thumbPhoto),
+                      ),
+                    ),
+                  ),
+                ),
+                'Kendi afişim',
+                'me',
+              ),
+              option(ctx, _teamThumb(d), 'Takım afişi', 'team'),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    if (picked == 'me') {
+      await _openPoster(d);
+    } else {
+      await _openTeamPoster(d);
+    }
+  }
+
+  Future<void> _openTeamPoster(_Week d) async {
+    if (_posterBusy) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _posterBusy = true);
+    try {
+      await openTeamResultPoster(
+        context,
+        leagueId: widget.leagueId,
+        matchId: d.id,
+        teamId: _myTeamId(d),
+        week: d.week,
+        homeId: d.homeId,
+        awayId: d.awayId,
+        homeName: d.homeFull.isNotEmpty ? d.homeFull : d.homeName,
+        awayName: d.awayFull.isNotEmpty ? d.awayFull : d.awayName,
+        homeLogo: d.homeLogo,
+        awayLogo: d.awayLogo,
+        homeScore: d.hs,
+        awayScore: d.as,
+        onLoaded: () {
+          if (mounted) setState(() => _posterBusy = false);
+        },
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Afiş açılamadı, tekrar dene.')),
+      );
+    } finally {
+      if (mounted) setState(() => _posterBusy = false);
+    }
+  }
+
+  /// Kartın altında: afişin küçük hâli + "Paylaş". Takım sorumlusunda iki
+  /// küçük görüntü (kendi + takım) ve tek PAYLAŞ; basınca seçim sorulur.
   Widget _posterStrip(_Week d) {
     final session = AppSession.of(context).value;
     final thumbPhoto = d.photos.isNotEmpty
         ? d.photos.first
         : (session.photoUrl ?? '').trim();
     final name = (session.displayName ?? '').trim().split(RegExp(r'\s+'));
+    final team = _teamPosterFor(d);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _posterBusy ? null : () => _openPoster(d),
+      onTap: _posterBusy
+          ? null
+          : () => team ? _choosePoster(d) : _openPoster(d),
       child: Container(
         margin: const EdgeInsets.fromLTRB(14, 12, 14, 0),
         padding: const EdgeInsets.all(10),
@@ -709,23 +940,30 @@ class _MyWeekCardState extends State<MyWeekCard> {
                 ),
               ),
             ),
+            if (team) ...[
+              const SizedBox(width: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: _teamThumb(d),
+              ),
+            ],
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Maç afişin hazır',
+                    team ? 'Afişler hazır' : 'Maç afişin hazır',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  SizedBox(height: 2),
+                  const SizedBox(height: 2),
                   Text(
-                    'Fotoğrafını seç, paylaş',
+                    team ? 'Kendi ve takım afişin' : 'Fotoğrafını seç, paylaş',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: Colors.white60, fontSize: 12),
