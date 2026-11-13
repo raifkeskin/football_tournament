@@ -18,6 +18,7 @@ import '../utils/match_clock.dart';
 import '../widgets/quick_score_dialog.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart';
 import '../../share/poster_background.dart';
 import '../../share/fixture_poster.dart';
 import '../../share/poster_share.dart';
@@ -925,23 +926,16 @@ class _MatchCard extends StatelessWidget {
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     if (confirm != null) {
-      final ok = await showDialog<bool>(
+      // Standart onay penceresi: Vazgeç + kırmızı İPTAL ET.
+      final ok = await showAdminConfirmDialog(
         context: context,
-        builder: (c) => AlertDialog(
-          content: Text(confirm),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Vazgeç'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('Evet'),
-            ),
-          ],
-        ),
+        title: 'Maçı İptal Et',
+        message: confirm,
+        confirmLabel: 'İPTAL ET',
+        cancelLabel: 'VAZGEÇ',
+        icon: Icons.block_rounded,
       );
-      if (ok != true) return;
+      if (!ok) return;
     }
     try {
       await ServiceLocator.matchService.setMatchSchedulingStatus(
