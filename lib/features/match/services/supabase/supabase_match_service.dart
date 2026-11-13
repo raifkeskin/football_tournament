@@ -15,7 +15,17 @@ import '../../../player/models/player_stats.dart';
 
 class SupabaseMatchService implements IMatchService {
   SupabaseMatchService({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client {
+    // Cihazdaki maç kopyası eskiymiş, taze paket geldi: bellekteki olay,
+    // esame ve medya listeleri bırakılır; açık akışlar yeniden okur (taze
+    // paketten, ek istek yok).
+    MatchDetailBundle.addRefreshListener((matchId, _) {
+      _eventsCache.remove(matchId);
+      _rosterCache.remove(matchId);
+      _mediaCache.remove(matchId);
+      _localChanges.add(matchId);
+    });
+  }
 
   final SupabaseClient _client;
 

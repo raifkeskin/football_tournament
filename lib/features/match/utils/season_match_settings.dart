@@ -38,7 +38,15 @@ class SeasonMatchSettings {
   static SeasonMatchSettings? cached(String seasonId) =>
       _cache[seasonId.trim()];
 
+  static bool _bundleHooked = false;
+
   static Future<SeasonMatchSettings> of(String seasonId) {
+    // Cihazdaki maç kopyası eskiymiş, taze paket geldi: sezon ayarları
+    // sonraki okumada taze paketten alınır.
+    if (!_bundleHooked) {
+      _bundleHooked = true;
+      MatchDetailBundle.addRefreshListener((_, season) => invalidate(season));
+    }
     final sid = seasonId.trim();
     if (sid.isEmpty) return Future.value(const SeasonMatchSettings());
     return _futures.putIfAbsent(sid, () async {
