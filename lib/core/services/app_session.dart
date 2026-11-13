@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'active_tournament.dart';
@@ -230,6 +231,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       await prefs.remove(_kBackgroundAtKey);
     } catch (_) {}
     if (remember) return;
+    // Web'de "Beni Hatırla" işaretsiz giriş ortak bilgisayar sayılır:
+    // hesabın tarayıcıda saklanan kopyaları da silinir. Telefonda kalır
+    // (kişisel cihaz; yeniden girişte ekran beklemeden gelir).
+    if (kIsWeb) await VersionedCache.purgeAccount();
     try {
       await auth.signOut();
     } catch (_) {}
@@ -297,9 +302,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     await setBiometricSession(false);
     // Oturum kapanmadan (yetki varken) bu cihazın bildirim kaydı silinir.
     await PushService.onSignOut();
-    // Hesabın cihazdaki kişisel veri içeren kopyaları (bitmiş maçlardaki
-    // oyuncu adları vb.) silinir: ortak cihazda / tarayıcıda kalmasın.
-    await VersionedCache.purgePersonal();
+    // Kullanıcı kendi çıkış yaptı: hesabın cihazda saklanan kopyaları
+    // (fikstür, haber, bitmiş maçlar) silinir; ortak cihazda / tarayıcıda
+    // kalmasın.
+    await VersionedCache.purgeAccount();
     try {
       await _supabase.auth.signOut();
     } catch (e) {

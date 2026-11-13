@@ -48,151 +48,158 @@ class AppNameBand extends StatelessWidget {
           // Kişinin turnuvası temalıysa bant o turnuvanın kimliğiyle.
           KeyedSubtree(
             key: _bandKey,
-            child: ListenableBuilder(
-              listenable: Listenable.merge([
-                ActiveTournament.theme,
-                genericScreens,
-                panelActions,
-                LeagueSwitchScope.panel,
-                LeagueSwitchScope.homeTab,
-                LeagueSwitchScope.calendarTab,
-                LeagueSwitchScope.genericTab,
-                LeagueSwitchScope.bandHidden,
-                LeagueSwitchScope.pageBand,
-                LeagueSwitchScope.tabAction,
-              ]),
-              builder: (context, _) {
-                // Uygulama bandı da (yönetim paneli, takvim) seçili
-                // turnuvanın renklerini alır; turnuva yoksa yeşil.
-                // Turnuvadan bağımsız bantta (yönetim paneli, profil, bildirim
-                // ekranları) logo ile uygulama adı; sağında sekme düğmesi
-                // olan bantta (Yayın Rehberi takvimi) yer yok, yalnız logo.
-                final tvlBand = _tvlBand(
-                  top,
-                  ActiveTournament.theme.value,
-                  showName: LeagueSwitchScope.tabAction.value == null,
-                );
-                // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
-                // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
-                if (genericScreens.value > 0) return _loginBand(top);
-                if (LeagueSwitchScope.bandHidden.value) {
-                  return SizedBox(height: top);
-                }
-                // Sayfa banda kendi içeriğini verdiyse (ör. Turnuva Sayfası).
-                final page = LeagueSwitchScope.pageBand.value;
-                // Temasız sayfa bandı (ör. Bildirim ayarları): uygulama
-                // logosu ve adı (renk seçili turnuvanın), solda geri.
-                final pageTheme = page?.theme;
-                if (page != null && pageTheme == null) {
-                  return Stack(
-                    children: [
-                      _tvlBand(
-                        top,
-                        ActiveTournament.theme.value,
-                        showName: true,
-                        subtitle: page.subtitle,
-                      ),
-                      Positioned(
-                        left: 4,
-                        bottom: 3,
-                        child: _BandBackButton(
-                          onTap: page.onBack,
-                          home: page.home,
-                        ),
-                      ),
-                      // Geri düğmesiyle (48) aynı yükseklikte ortalı: alt
-                      // çizgiye taşmaz.
-                      if (page.trailing != null)
-                        Positioned(
-                          right: 4,
-                          bottom: 3,
-                          child: SizedBox(
-                            height: 48,
-                            child: Center(child: page.trailing!),
-                          ),
-                        ),
-                    ],
+            // Bant gezginin (Overlay) dışında: Tooltip açılamaz, uzun basınca
+            // "No Overlay widget found" hatası verir. Banttaki bütün
+            // düğmelerde (sayfaların verdiği düğmeler dahil) ipucu balonu
+            // kapalıdır; adlar ekran okuyucu etiketinde kalır.
+            child: TooltipVisibility(
+              visible: false,
+              child: ListenableBuilder(
+                listenable: Listenable.merge([
+                  ActiveTournament.theme,
+                  genericScreens,
+                  panelActions,
+                  LeagueSwitchScope.panel,
+                  LeagueSwitchScope.homeTab,
+                  LeagueSwitchScope.calendarTab,
+                  LeagueSwitchScope.genericTab,
+                  LeagueSwitchScope.bandHidden,
+                  LeagueSwitchScope.pageBand,
+                  LeagueSwitchScope.tabAction,
+                ]),
+                builder: (context, _) {
+                  // Uygulama bandı da (yönetim paneli, takvim) seçili
+                  // turnuvanın renklerini alır; turnuva yoksa yeşil.
+                  // Turnuvadan bağımsız bantta (yönetim paneli, profil, bildirim
+                  // ekranları) logo ile uygulama adı; sağında sekme düğmesi
+                  // olan bantta (Yayın Rehberi takvimi) yer yok, yalnız logo.
+                  final tvlBand = _tvlBand(
+                    top,
+                    ActiveTournament.theme.value,
+                    showName: LeagueSwitchScope.tabAction.value == null,
                   );
-                }
-                if (page != null && page.homeRight) {
-                  return _PanelBand(theme: pageTheme!, top: top, page: page);
-                }
-                if (page != null) {
-                  return _TournamentBand(
-                    theme: pageTheme!,
-                    top: top,
-                    leading: _BandBackButton(
-                      onTap: page.onBack,
-                      home: page.home,
-                    ),
-                    trailing: page.trailing,
-                    subtitle: page.subtitle,
-                  );
-                }
-                final t =
-                    LeagueSwitchScope.panel.value ||
-                        LeagueSwitchScope.genericTab.value
-                    ? null
-                    : ActiveTournament.theme.value;
-                final actions = genericScreens.value > 0
-                    ? null
-                    : panelActions.value;
-                if (t == null || genericScreens.value > 0) {
-                  // Turnuva seçilmemişse de kişinin turnuvaları arasında
-                  // geçiş yapılabilsin (giriş ekranında değil).
-                  final switcher = genericScreens.value > 0
-                      ? null
-                      : Positioned(
-                          right: 4,
-                          bottom: 6,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const LeagueSwitchButton(),
-                              ?LeagueSwitchScope.tabAction.value,
-                              const NotificationBell(),
-                            ],
-                          ),
-                        );
-                  if (actions == null) {
+                  // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
+                  // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
+                  if (genericScreens.value > 0) return _loginBand(top);
+                  if (LeagueSwitchScope.bandHidden.value) {
+                    return SizedBox(height: top);
+                  }
+                  // Sayfa banda kendi içeriğini verdiyse (ör. Turnuva Sayfası).
+                  final page = LeagueSwitchScope.pageBand.value;
+                  // Temasız sayfa bandı (ör. Bildirim ayarları): uygulama
+                  // logosu ve adı (renk seçili turnuvanın), solda geri.
+                  final pageTheme = page?.theme;
+                  if (page != null && pageTheme == null) {
                     return Stack(
                       children: [
-                        tvlBand,
-                        ?switcher,
-                        if (LeagueSwitchScope.homeTab.value)
-                          const Positioned(
-                            left: 6,
-                            bottom: 6,
-                            child: BandMenuButton(),
+                        _tvlBand(
+                          top,
+                          ActiveTournament.theme.value,
+                          showName: true,
+                          subtitle: page.subtitle,
+                        ),
+                        Positioned(
+                          left: 4,
+                          bottom: 3,
+                          child: _BandBackButton(
+                            onTap: page.onBack,
+                            home: page.home,
+                          ),
+                        ),
+                        // Geri düğmesiyle (48) aynı yükseklikte ortalı: alt
+                        // çizgiye taşmaz.
+                        if (page.trailing != null)
+                          Positioned(
+                            right: 4,
+                            bottom: 3,
+                            child: SizedBox(
+                              height: 48,
+                              child: Center(child: page.trailing!),
+                            ),
                           ),
                       ],
                     );
                   }
-                  return Stack(
-                    children: [
-                      tvlBand,
-                      Positioned(
-                        left: 4,
-                        bottom: 3,
-                        child: actions.menuButton(Colors.white),
+                  if (page != null && page.homeRight) {
+                    return _PanelBand(theme: pageTheme!, top: top, page: page);
+                  }
+                  if (page != null) {
+                    return _TournamentBand(
+                      theme: pageTheme!,
+                      top: top,
+                      leading: _BandBackButton(
+                        onTap: page.onBack,
+                        home: page.home,
                       ),
-                      Positioned(
-                        right: 4,
-                        bottom: 3,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const NotificationBell(),
-                            if (actions.onLogout != null)
-                              actions.logoutButton(),
-                          ],
+                      trailing: page.trailing,
+                      subtitle: page.subtitle,
+                    );
+                  }
+                  final t =
+                      LeagueSwitchScope.panel.value ||
+                          LeagueSwitchScope.genericTab.value
+                      ? null
+                      : ActiveTournament.theme.value;
+                  final actions = genericScreens.value > 0
+                      ? null
+                      : panelActions.value;
+                  if (t == null || genericScreens.value > 0) {
+                    // Turnuva seçilmemişse de kişinin turnuvaları arasında
+                    // geçiş yapılabilsin (giriş ekranında değil).
+                    final switcher = genericScreens.value > 0
+                        ? null
+                        : Positioned(
+                            right: 4,
+                            bottom: 6,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const LeagueSwitchButton(),
+                                ?LeagueSwitchScope.tabAction.value,
+                                const NotificationBell(),
+                              ],
+                            ),
+                          );
+                    if (actions == null) {
+                      return Stack(
+                        children: [
+                          tvlBand,
+                          ?switcher,
+                          if (LeagueSwitchScope.homeTab.value)
+                            const Positioned(
+                              left: 6,
+                              bottom: 6,
+                              child: BandMenuButton(),
+                            ),
+                        ],
+                      );
+                    }
+                    return Stack(
+                      children: [
+                        tvlBand,
+                        Positioned(
+                          left: 4,
+                          bottom: 3,
+                          child: actions.menuButton(Colors.white),
                         ),
-                      ),
-                    ],
-                  );
-                }
-                return _TournamentBand(theme: t, top: top, actions: actions);
-              },
+                        Positioned(
+                          right: 4,
+                          bottom: 3,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const NotificationBell(),
+                              if (actions.onLogout != null)
+                                actions.logoutButton(),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return _TournamentBand(theme: t, top: top, actions: actions);
+                },
+              ),
             ),
           ),
           Expanded(
@@ -685,8 +692,9 @@ class _BandBackButton extends StatelessWidget {
     return Material(
       type: MaterialType.transparency,
       child: IconButton(
+        // Tooltip yok: bant Overlay'in dışında (uzun basınca "No Overlay
+        // widget found" hatası veriyordu); ad, ikonun etiketinde.
         onPressed: onTap,
-        tooltip: home ? 'Ana Sayfa' : null,
         icon: Icon(
           home ? Icons.home_rounded : Icons.arrow_back_ios_new_rounded,
           color: Colors.white,
@@ -1536,7 +1544,13 @@ class BandIconButton extends StatelessWidget {
         ),
       ),
     );
-    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
+    final label = tooltip;
+    if (label == null) return button;
+    // Bantta (gezginin üstünde) Overlay yoktur: Tooltip uzun basınca hata
+    // verir; orada ad yalnız ekran okuyucuya verilir.
+    return Overlay.maybeOf(context) == null
+        ? Semantics(label: label, button: true, child: button)
+        : Tooltip(message: label, child: button);
   }
 }
 

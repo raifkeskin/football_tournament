@@ -79,7 +79,10 @@ class _LoginScreenState extends State<LoginScreen> {
   // Telefon alanında klavyenin "ileri" tuşu doğrudan şifreye geçer; odak
   // sıralamasına bırakılırsa arkadaki sekmelere atlayabiliyor.
   final _passwordFocus = FocusNode();
-  bool _rememberMe = false;
+  // Telefon kişisel cihazdır: "Beni Hatırla" işaretli gelir (çoğu kullanıcı
+  // kutuyu fark etmeyip her açılışta yeniden giriş yapıyordu). Web'de ortak
+  // bilgisayar olabileceği için işaretsiz gelir; kullanıcı kendi seçer.
+  bool _rememberMe = !kIsWeb;
   bool _loading = false;
   bool _roleSelected = false;
   int _adminTapCount = 0;
