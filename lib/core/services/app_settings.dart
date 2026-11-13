@@ -39,6 +39,7 @@ class AppSettings {
   static const _kSearch = 'search_enabled';
   static const _kMatchBundle = 'match_bundle_enabled';
   static const _kMyWeekPoster = 'my_week_poster_enabled';
+  static const _kTeamPoster = 'team_result_poster_enabled';
   static const _kLivePitch = 'live_pitch_enabled';
   static const _kAdminPanel = 'admin_panel_enabled';
   static const _kIbraz = 'ibraz_enabled';
@@ -172,6 +173,10 @@ class AppSettings {
   /// her zaman görür).
   static final myWeekPosterEnabled = ValueNotifier<bool>(false);
 
+  /// "Bu hafta sen" kartında takım sorumlusuna takım afişi herkese açık mı
+  /// (admin her zaman görür).
+  static final teamPosterEnabled = ValueNotifier<bool>(false);
+
   /// Kadro sekmesinde tam ekran yatay saha (hızlı olay girişi) olay
   /// girebilen herkese açık mı (admin her zaman görür).
   static final livePitchEnabled = ValueNotifier<bool>(false);
@@ -293,6 +298,8 @@ class AppSettings {
           matchBundleEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMyWeekPoster) {
           myWeekPosterEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kTeamPoster) {
+          teamPosterEnabled.value = r['value'] == true;
         } else if (r['key'] == _kLivePitch) {
           livePitchEnabled.value = r['value'] == true;
         } else if (r['key'] == _kAdminPanel) {
